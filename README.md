@@ -20,6 +20,7 @@ See the table below for a list of supported file types and types of data extract
 | PPTX           | X            | X               | X               | X        |                  |                   |
 | XLS            | X            |                 |                 |          |                  |                   |
 | XLSX           | X            | X               | X               | X        | X                | X                 |
+| XML            | X            |                 |                 |          |                  |                   |
 | ZIP            | X            | X               | X               |          |                  |                   |
 
 # Dependencies
