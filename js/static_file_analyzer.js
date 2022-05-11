@@ -287,11 +287,11 @@ class Static_File_Analyzer {
     // Identify Objects and Streams
     var metadata_objs = ["/author", "/creationdate", "/creator", "/moddate", "/producer", "/title"];
     var metadata_obj_found = false;
-    var objects_regex = /\d+\s+\d+\s+obj\s+\<\<(.+)\>\>\s+(endobj|stream)/gmi;
+    var objects_regex = /\d+\s+\d+\s+obj\s+\<\<([^\>]+)\>\>\s*(endobj|stream|trailer)/gmi;
     var objects_matches = objects_regex.exec(file_text);
 
     while (objects_matches != null) {
-      if (objects_matches[2] == "endobj") {
+      if (objects_matches[2] == "endobj" || objects_matches[2] == "trailer") {
         if (metadata_objs.some(v => objects_matches[1].toLowerCase().includes(v))) {
           // Found an object with metadata.
           metadata_obj_found = true;
@@ -335,14 +335,37 @@ class Static_File_Analyzer {
             metadata_matches = metadata_regex.exec(objects_matches[1]);
           }
         }
-
-        console.log(objects_matches[1]);
+        //console.log(objects_matches[1]); // DEBUG
       } else if (objects_matches[2] == "stream") {
         var start_index = objects_matches.index + objects_matches[0].length;
         var end_index = file_text.indexOf("endstream", start_index);
         var stream_text = file_text.substring(start_index, end_index);
       }
 
+      // Look for embedded scripts
+      var script_regex = /\/(S|JavaScript|JS)\s+\(/gmi;
+      var script_matches = script_regex.exec(objects_matches[0]);
+
+      while (script_matches != null) {
+        var script_start = script_matches.index + script_matches[0].length;
+        var script_end = objects_matches[0].indexOf(">>", script_start);
+        var script_text = objects_matches[0].substring(script_start, script_end).trim();
+        var script_type = "unknown";
+
+        if (script_text.slice(-1) == ")") {
+          script_text = script_text.slice(0,-1);
+        }
+
+        file_info.scripts.extracted_script += script_text + "\n\n";
+
+        if (script_matches[1].toLowerCase() == "js" || script_matches[1].toLowerCase() == "javascript") {
+          file_info.scripts.script_type = "JavaScript";
+        }
+
+        script_matches = script_regex.exec(objects_matches[1]);
+      }
+
+      // TODO push streams to file_components
       //file_info.file_components.push({});
       objects_matches = objects_regex.exec(file_text);
     }
