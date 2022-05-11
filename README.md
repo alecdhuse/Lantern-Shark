@@ -2,6 +2,8 @@
 Lantern Shark is an HTML and Javascript file analyzer.
 It can extract metadata and embedded script code from multiple file types. It also attempts to identify suspicious and malicious attributes of the given file.
 
+A live demo of this project can be viewed [here](https://alecdhuse.github.io/Lantern-Shark/Lantern-Shark.html).
+
 # Notes
 This project is under heavy development, and currently only supports a small number of file types.
 See the table below for a list of supported file types and types of data extracted from each.
