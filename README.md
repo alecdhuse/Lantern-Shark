@@ -1,6 +1,26 @@
-# Lantern-Shark
+# Lantern Shark
 Lantern Shark is an HTML and Javascript file analyzer.
 It can extract metadata and embedded script code from multiple file types. It also attempts to identify suspicious and malicious attributes of the given file.
+
+# Notes
+This project is under heavy development, and currently only supports a small number of file types.
+See the table below for a list of supported file types and types of data extracted from each.
+
+| File Extension | File Type ID | File Attributes | Components List | Metadata | Script Detection | Script Extraction |
+| -------------- | ------------ | --------------- | --------------- | -------- | ---------------- | ----------------- |
+| ACE            | X            | X               |                 |          |                  |                   |
+| DOCX           | X            | X               | X               | X        |                  |                   |
+| EXE            | X            | X               |                 |          |                  |                   |
+| GZ             | X            | X               |                 |          |                  |                   |
+| ISO            | X            | X               |                 |          |                  |                   |
+| JPEG           | X            | X               |                 |          |                  |                   |
+| PDF            | X            | X               |                 | X        |                  |                   |
+| RAR            | X            | X               |                 |          |                  |                   |
+| PNG            | X            | X               |                 | X        |                  |                   |
+| PPTX           | X            | X               | X               | X        |                  |                   |
+| XLS            | X            |                 |                 |          |                  |                   |
+| XLSX           | X            | X               | X               | X        | X                | X                 |
+| ZIP            | X            | X               | X               |          |                  |                   |
 
 # Dependencies
 Lantern Shark uses the following libraries:
