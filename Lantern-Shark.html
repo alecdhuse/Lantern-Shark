@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Lantern Shark File Analyzer</title>
+      <link rel="stylesheet" href="css/lantern_shark.css">
+    </head>
+
+    <body>
+      <div id="main_div">
+        <div id="left_col_div">
+          <div><input type="file" id="open_file" value="Open File"/></div>
+          <ul id="file_tree">
+          </ul>
+        </div>
+
+        <div id="right_col_div">
+          <div id="tab_row">
+            <div id="tab_summary" class="tab_item tab_selected">Summary</div>
+            <div id="tab_text" class="tab_item">Text</div>
+          </div>
+
+          <div id="tab_body">
+
+            <div id="tab_body_summary">
+              <table>
+                <tr>
+                  <td class="tab_summary_label">File Format</td>
+                  <td id="summary_file_format" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">File Type</td>
+                  <td id="summary_file_type" class="tab_summary_value capitalize"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">File Format Version</td>
+                  <td id="summary_file_format_ver" class="tab_summary_value capitalize"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">File Encrypted</td>
+                  <td id="summary_file_encrypted" class="tab_summary_value capitalize"></td>
+                </tr>
+
+                <tr>
+                  <td class="tab_summary_label">Title</td>
+                  <td id="summary_metadata_title" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Author</td>
+                  <td id="summary_metadata_author" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Description</td>
+                  <td id="summary_metadata_description" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Created By</td>
+                  <td id="summary_metadata_creation_application" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Creation OS</td>
+                  <td id="summary_metadata_creation_os" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Creation Date</td>
+                  <td id="summary_metadata_creation_date" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Modified Date</td>
+                  <td id="summary_metadata_last_modified_date" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Last Saved Location</td>
+                  <td id="summary_metadata_last_saved_location" class="tab_summary_value"></td>
+                </tr>
+                <tr>
+                  <td class="tab_summary_label">Detected Script</td>
+                  <td id="summary_detected_script" class="tab_summary_value capitalize"></td>
+                </tr>
+              </table>
+
+              <div class="table_align">
+                <div class="tab_summary_label">Extracted Script</div>
+                <div class="top_space">
+                  <textarea rows="12" cols="80" id="script_code" class="monospace_text" autocomplete="off"></textarea>
+                </div>
+              </div>
+
+              <div class="table_align">
+                <div class="tab_summary_label top_space">Analytic Findings</div>
+                <div class="top_space">
+                  <textarea rows="12" cols="80" id="analytic_findings" class="monospace_text" autocomplete="off"></textarea>
+                </div>
+              </div>
+
+            <div>
+          </div>
+        </div>
+
+        <div id="tab_body_text">
+          <textarea rows="40" cols="80" id="file_text" class="monospace_text" autocomplete="off"></textarea>
+        </div>
+      </div>
+
+    </body>
+
+    <script type="text/javascript" src="js/jquery-3.4.1.min.js"></script>
+    <script type="text/javascript" src="js/lantern_shark.js"></script>
+    <script type="text/javascript" src="js/static_file_analyzer.js"></script>
+    <script type="text/javascript" src="js/zip-full.js"></script>
+
+</html>

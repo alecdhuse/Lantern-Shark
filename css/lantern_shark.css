@@ -1,0 +1,104 @@
+body {
+  font-family: "Verdana";
+  height: 100%;
+  width: 100%;
+}
+
+.capitalize {
+  text-transform: capitalize;
+}
+
+#file_components_list {
+  font-weight: normal;
+}
+
+#file_text {
+  height: 96%;
+  width: 99%;
+}
+
+#file_tree {
+  cursor: pointer;
+  list-style-type: none;
+  padding: 0;
+  margin: 4px;
+}
+
+.file_tree_item_selected {
+  font-weight: bold;
+}
+
+#left_col_div {
+  border: 1px solid #ccc;
+  flex: 1;
+  margin-right: 6px;
+  max-width: 400px;
+  overflow-x: scroll;
+  overflow-y: scroll;
+}
+
+#open_file {
+
+}
+
+#main_div {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+.monospace_text {
+  font-family: monospace;
+}
+
+.nested_item {
+  padding-inline-start: 24px;
+}
+
+#right_col_div {
+  flex: 2;
+}
+
+#tab_body_text {
+  display: none;
+}
+
+.tab_item {
+  border: 1px solid #ccc;
+  cursor: pointer;
+  display: inline-block;
+  padding: 4px;
+  text-align: center;
+  width: 120px
+}
+
+#tab_row {
+  margin-bottom: 8px;
+}
+
+.tab_selected {
+  background-color: #4285f4;
+  color: white;
+}
+
+#tab_summary {
+
+}
+
+.tab_summary_label {
+  font-size: 14px;
+  font-weight: bold;
+  min-width: 175px;
+}
+
+.tab_summary_value {
+  font-size: 14px;
+}
+
+.table_align {
+  padding-left: 3px;
+}
+
+.top_space {
+  margin-top: 6px;
+}
