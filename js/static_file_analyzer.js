@@ -275,7 +275,9 @@ class Static_File_Analyzer {
 
     file_info.file_format = "pdf";
     file_info.file_generic_type = "Document";
-    file_info.file_format_ver = Static_File_Analyzer.get_ascii(file_bytes.slice(5,16)).split("%")[0].trim();
+
+    var pdf_version_str = Static_File_Analyzer.get_ascii(file_bytes.slice(5,16));
+    file_info.file_format_ver = (pdf_version_str.indexOf("%") > 0) ? pdf_version_str.split("%")[0].trim() : pdf_version_str.split("\n")[0].trim();
 
     // If the file text is not given, generate it from the bytes
     if (file_text.length == 0) {
