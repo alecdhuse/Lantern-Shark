@@ -361,7 +361,7 @@ class Static_File_Analyzer {
       }
 
       // Look for embedded scripts
-      var script_regex = /\/(S|JavaScript|JS)\s+\(/gmi;
+      var script_regex = /\/(S|JavaScript|JS)\s*\(/gmi;
       var script_matches = script_regex.exec(objects_matches[0]);
 
       while (script_matches != null) {
