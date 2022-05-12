@@ -16,7 +16,7 @@ See the table below for a list of supported file types and types of data extract
 | GZ             | X            | X               |                 |          |                  |                   |
 | ISO            | X            | X               |                 |          |                  |                   |
 | JPEG           | X            | X               |                 |          |                  |                   |
-| PDF            | X            | X               |                 | X        |                  |                   |
+| PDF            | X            | X               |                 | X        |X                 |X                  |
 | RAR            | X            | X               |                 |          |                  |                   |
 | PNG            | X            | X               |                 | X        |                  |                   |
 | PPTX           | X            | X               | X               | X        |                  |                   |
@@ -24,6 +24,13 @@ See the table below for a list of supported file types and types of data extract
 | XLSX           | X            | X               | X               | X        | X                | X                 |
 | XML            | X            |                 |                 |          |                  |                   |
 | ZIP            | X            | X               | X               |          |                  |                   |
+
+# CVE Detection
+Lantern Shark should be able to detect the following CVEs:
+
+- PDF
+  - CVE-2019-7089
+  - CVE-2018-4993
 
 # Dependencies
 Lantern Shark uses the following libraries:
