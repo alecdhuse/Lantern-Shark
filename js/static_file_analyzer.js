@@ -1231,7 +1231,8 @@ class Static_File_Analyzer {
         script_type: "none",
         extracted_script: "",
       },
-      analytic_findings: []
+      analytic_findings: [],
+      iocs: []
     };
   }
 
