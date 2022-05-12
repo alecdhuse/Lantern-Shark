@@ -287,7 +287,7 @@ class Static_File_Analyzer {
     // Identify Objects and Streams
     var metadata_objs = ["/author", "/creationdate", "/creator", "/moddate", "/producer", "/title"];
     var metadata_obj_found = false;
-    var objects_regex = /\d+\s+\d+\s+obj\s+\<\<([^\>]*)\>\>\s*(endobj|stream|trailer)/gmi;
+    var objects_regex = /\d+\s+\d+\s+obj\s+\<\<\s*([^\>]*)\>\>\s*(endobj|stream|trailer|\>\>)/gmi;
     var objects_matches = objects_regex.exec(file_text);
 
     while (objects_matches != null) {
@@ -341,15 +341,22 @@ class Static_File_Analyzer {
         var end_index = file_text.indexOf("endstream", start_index);
         var stream_text = file_text.substring(start_index, end_index);
 
-        // Check for CVE-2019-7089
+        // Check for CVE-2019-7089 Ref: https://insert-script.blogspot.com/2019/01/adobe-reader-pdf-callback-via-xslt.html
         var cve_match = stream_text.match(/\<\?\s*xml\-stylesheet\s*([^\>]+)\?\>/gmi);
         if (cve_match !== null) {
           var href_unc_match = /href\s*\=\s*[\"\'](\\\\[^\'\"]+)[\"\']/gmi.exec(cve_match[0]);
-
           if (href_unc_match !== null) {
             file_info.analytic_findings.push("MALICIOUS - CVE-2019-7089 Exploit Found");
             file_info.iocs.push(href_unc_match[1]);
           }
+        }
+      } else if (objects_matches[2] == ">>") {
+        // Nested OBJ
+        // Check for CVE-2018-4993 Ref: https://github.com/deepzec/Bad-Pdf/blob/master/badpdf.py
+        var cve_match = /\/AA\s*\<\<\s*\/O\s*\<\<\s*\/F\s*\(\s*((?:\\{2,4}|https?\:\/\/)(?:[a-zA-Z0-9]+[\.\:]?)+\\*\s*)\s*\)\s*\/D\s*[^\n\r]+\s+\/S\s*\/GoToE/gmi.exec(objects_matches[1]);
+        if (cve_match !== null) {
+          file_info.analytic_findings.push("MALICIOUS - CVE-2018-4993 Exploit Found");
+          file_info.iocs.push(cve_match[1]);
         }
       }
 
