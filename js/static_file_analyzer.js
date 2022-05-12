@@ -360,32 +360,32 @@ class Static_File_Analyzer {
         }
       }
 
-      // Look for embedded scripts
-      var script_regex = /\/(S|JavaScript|JS)\s*\(/gmi;
-      var script_matches = script_regex.exec(objects_matches[0]);
-
-      while (script_matches != null) {
-        var script_start = script_matches.index + script_matches[0].length;
-        var script_end = objects_matches[0].indexOf(">>", script_start);
-        var script_text = objects_matches[0].substring(script_start, script_end).trim();
-        var script_type = "unknown";
-
-        if (script_text.slice(-1) == ")") {
-          script_text = script_text.slice(0,-1);
-        }
-
-        file_info.scripts.extracted_script += script_text + "\n\n";
-
-        if (script_matches[1].toLowerCase() == "js" || script_matches[1].toLowerCase() == "javascript") {
-          file_info.scripts.script_type = "JavaScript";
-        }
-
-        script_matches = script_regex.exec(objects_matches[1]);
-      }
-
       // TODO push streams to file_components
       //file_info.file_components.push({});
       objects_matches = objects_regex.exec(file_text);
+    }
+
+    // Look for embedded scripts
+    var script_regex = /\/(S|JavaScript|JS)\s*\(/gmi;
+    var script_matches = script_regex.exec(file_text);
+
+    while (script_matches != null) {
+      var script_start = script_matches.index + script_matches[0].length;
+      var script_end = file_text.indexOf(">>", script_start);
+      var script_text = file_text.substring(script_start, script_end).trim();
+      var script_type = "unknown";
+
+      if (script_text.slice(-1) == ")") {
+        script_text = script_text.slice(0,-1);
+      }
+
+      file_info.scripts.extracted_script += script_text + "\n\n";
+
+      if (script_matches[1].toLowerCase() == "js" || script_matches[1].toLowerCase() == "javascript") {
+        file_info.scripts.script_type = "JavaScript";
+      }
+
+      script_matches = script_regex.exec(file_text);
     }
 
     if (metadata_obj_found == false) {
