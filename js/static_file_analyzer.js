@@ -390,6 +390,7 @@ class Static_File_Analyzer {
 
     if (metadata_obj_found == false) {
       // Backup method to extract meta data, this need refining.
+
       // RDF Meta data
       file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "xmp:CreatorTool", 0);
       if (file_info.metadata.creation_application == "unknown") {
@@ -603,6 +604,8 @@ class Static_File_Analyzer {
    * Extracts meta data and other information from Excel Binary File Format (.xls) files.
    *
    * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cd03cb5f-ca02-4934-a391-bb674cb8aa06
+   * @see https://www.loc.gov/preservation/digital/formats/fdd/fdd000510.shtml
+   * @see https://blog.reversinglabs.com/blog/excel-4.0-macros
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
@@ -612,6 +615,35 @@ class Static_File_Analyzer {
 
     file_info.file_format = "xls";
     file_info.file_generic_type = "Spreadsheet";
+
+    var current_byte = 0;
+    var compound_file_binary_minor_ver_bytes = file_bytes.slice(24,26);
+    var compound_file_binary_major_ver_bytes = file_bytes.slice(26,28);
+
+    if (this.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
+      file_info.file_format_ver = "3";
+    } else if (this.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
+      file_info.file_format_ver = "4";
+    }
+
+    var byte_order_bytes = file_bytes.slice(28,30);
+    var sector_size_bytes = file_bytes.slice(30,32);
+    var sector_size = 512; // Size in bytes
+
+    //Sector size will indicate where the beginning of file record starts.
+    if (this.array_equals(sector_size_bytes, [9,0])) {
+      sector_size = 512;
+    } else if (this.array_equals(sector_size_bytes, [12,0])) {
+      sector_size = 4096;
+    }
+
+    if (file_bytes[sector_size] == 9) {
+      // Beginning of file record found.
+      var biff_version = file_bytes[sector_size+1];
+      current_byte = sector_size+8;
+    } else {
+      // File format error.
+    }
 
     return file_info;
   }
