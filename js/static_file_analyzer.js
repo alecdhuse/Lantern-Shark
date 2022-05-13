@@ -613,6 +613,8 @@ class Static_File_Analyzer {
    * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cd03cb5f-ca02-4934-a391-bb674cb8aa06
    * @see https://www.loc.gov/preservation/digital/formats/fdd/fdd000510.shtml
    * @see https://blog.reversinglabs.com/blog/excel-4.0-macros
+   * @see http://www.openoffice.org/sc/compdocfileformat.pdf
+   * @see https://inquest.net/blog/2019/01/29/Carving-Sneaky-XLM-Files
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
@@ -633,7 +635,10 @@ class Static_File_Analyzer {
       file_info.file_format_ver = "4";
     }
 
+    // Byte order LITTLE_ENDIAN or BIG_ENDIAN
     var byte_order_bytes = file_bytes.slice(28,30);
+    var byte_order = (byte_order_bytes[1] == 255) ? this.LITTLE_ENDIAN : this.BIG_ENDIAN;
+
     var sector_size_bytes = file_bytes.slice(30,32);
     var sector_size = 512; // Size in bytes
 
@@ -644,12 +649,24 @@ class Static_File_Analyzer {
       sector_size = 4096;
     }
 
+    var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), byte_order);
+    var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), byte_order);
+    var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), byte_order);
+    var short_sec_id_1 = this.get_four_byte_int(file_bytes.slice(60,64), byte_order);
+    var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), byte_order);
+    var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), byte_order);
+    var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), byte_order);
+
+    var sec_1_pos = 512 + (sec_id_1 * sector_size); // Should be Root Entry
+    var workbook_pos = sec_1_pos + 128;
+    var summary_info_pos = workbook_pos + 128;
+    var doc_summary_info_pos = summary_info_pos + 128;
+
     if (file_bytes[sector_size] == 9) {
       // Beginning of file record found.
-      var spreadsheet_sheet_names = {};
 
       // BIFF 5 and 7 has a length of 8 bytes. For BIFF 8, the length of the BOF record can be either 8 or 16 bytes.
-      var biff_record_length = this.get_two_byte_int(file_bytes.slice(sector_size+2,sector_size+4), this.LITTLE_ENDIAN);
+      var biff_record_length = this.get_two_byte_int(file_bytes.slice(sector_size+2,sector_size+4), byte_order);
 
       // Byte value of 5 representing BIFF 5/7 and 6 representing BIFF 8.
       var biff_version = file_bytes[sector_size+5];
@@ -661,15 +678,17 @@ class Static_File_Analyzer {
 
       current_byte = sector_size+8;
 
-      var rup_build = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), this.LITTLE_ENDIAN);
-      var rup_year = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), this.LITTLE_ENDIAN);
+      var rup_build = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
+      var rup_year = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
+
+      var spreadsheet_sheet_names = {};
 
       // Find boundsheets
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 133 && file_bytes[i+1] == 0 && file_bytes[i+3] == 0 && file_bytes[i+2] > 0 && file_bytes[i+2] < 137) {
           // Found boundsheet
           var boundsheet_length = file_bytes[i+2];
-
+          var stream_pos = this.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
 
           // 0 - visible, 1 - hidden, 2 - very hidden.
           var sheet_state_val = file_bytes[i+8];
