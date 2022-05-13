@@ -646,8 +646,63 @@ class Static_File_Analyzer {
 
     if (file_bytes[sector_size] == 9) {
       // Beginning of file record found.
-      var biff_version = file_bytes[sector_size+1];
+      var spreadsheet_sheet_names = {};
+
+      // BIFF 5 and 7 has a length of 8 bytes. For BIFF 8, the length of the BOF record can be either 8 or 16 bytes.
+      var biff_record_length = this.get_two_byte_int(file_bytes.slice(sector_size+2,sector_size+4), this.LITTLE_ENDIAN);
+
+      // Byte value of 5 representing BIFF 5/7 and 6 representing BIFF 8.
+      var biff_version = file_bytes[sector_size+5];
+      var xlm_val = file_bytes.slice(sector_size+6,sector_size+8);
+
+      if (this.array_equals(xlm_val, [40,0])) {
+        // Excel 4.0 macro sheet
+      }
+
       current_byte = sector_size+8;
+
+      var rup_build = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), this.LITTLE_ENDIAN);
+      var rup_year = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), this.LITTLE_ENDIAN);
+
+      // Find boundsheets
+      for (var i=current_byte; i<file_bytes.length; i++) {
+        if (file_bytes[i] == 133 && file_bytes[i+1] == 0 && file_bytes[i+3] == 0 && file_bytes[i+2] > 0 && file_bytes[i+2] < 137) {
+          // Found boundsheet
+          var boundsheet_length = file_bytes[i+2];
+
+
+          // 0 - visible, 1 - hidden, 2 - very hidden.
+          var sheet_state_val = file_bytes[i+8];
+
+          // Some malicious Excel files will have unused bits set that are part of this byte.
+          sheet_state_val = this.get_int_from_bin(this.get_binary_array([sheet_state_val]).slice(-2));
+          var sheet_state = (sheet_state_val == 1) ? "hidden" : ((sheet_state_val == 1) ? "very hidden": "visible");
+
+          // 0 - Worksheet or dialog sheet, 1 - Macro sheet, 2 - Chart sheet, 6 - VBA module
+          var sheet_type = file_bytes[i+8];
+          var sheet_name = Static_File_Analyzer.get_string_from_array(file_bytes.slice(i+12, i+boundsheet_length+4));
+
+          spreadsheet_sheet_names[sheet_name] = {
+            'name': sheet_name,
+            'state': sheet_state,
+            'sheet_type': sheet_type,
+            'data': {}
+          };
+
+          //BRAI record
+
+          // id - 1 byte
+          // rt - 1 byte
+          // fUnlinkedIfmt - 1 bit
+          // reserved - 15 bits
+          // ifmt  - 2 bytes
+          // formula
+
+          i += boundsheet_length+3;
+        }
+      }
+
+
     } else {
       // File format error.
     }
