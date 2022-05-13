@@ -312,7 +312,9 @@ class Static_File_Analyzer {
                   file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
               }
             } else if (metadata_matches[1].toLowerCase() == "creator") {
-                file_info.metadata.author = (file_info.metadata.author == "unknown") ? meta_value : file_info.metadata.author;
+              if (file_info.metadata.author == "unknown") {
+                file_info.metadata.author = meta_value.replaceAll("\\(", "(").replaceAll("\\)", ")");
+              }
             } else if (metadata_matches[1].toLowerCase() == "moddate") {
               var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(meta_value);
               if (date_parts != null) {
@@ -458,6 +460,11 @@ class Static_File_Analyzer {
           file_info.metadata.creation_application = file_info.metadata.creation_application.replace(/\)$/gm, "");
         }
       }
+    }
+
+    // Extract more meta data from what we have already collected.
+    if (file_info.metadata.creation_application.indexOf("Macintosh") > 0 || file_info.metadata.author.indexOf("Macintosh") > 0 ) {
+      file_info.metadata.creation_os = "macOS";
     }
 
     return file_info;
