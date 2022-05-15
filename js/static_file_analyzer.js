@@ -674,12 +674,15 @@ class Static_File_Analyzer {
 
       if (this.array_equals(xlm_val, [40,0])) {
         // Excel 4.0 macro sheet
+        file_info.scripts.script_type = "Excel 4.0 Macro";
       }
 
       current_byte = sector_size+8;
 
       var rup_build = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
       var rup_year = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
+
+      // Workbook Index
 
       var spreadsheet_sheet_names = {};
 
@@ -708,19 +711,32 @@ class Static_File_Analyzer {
             'data': {}
           };
 
-          //BRAI record
-
-          // id - 1 byte
-          // rt - 1 byte
-          // fUnlinkedIfmt - 1 bit
-          // reserved - 15 bits
-          // ifmt  - 2 bytes
-          // formula
-
           i += boundsheet_length+3;
         }
       }
 
+      // Find index records
+      // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67c20922-0427-4c2d-96cc-2267d3f09e8c
+      //The Index record specifies row information and the file locations for all DBCell records corresponding to each row block in the sheet
+      for (var i=current_byte; i<file_bytes.length; i++) {
+        if (file_bytes[i] == 0x0b && file_bytes[i+1] == 0x02 && file_bytes[i+4] == 0 && file_bytes[i+5] == 0 && file_bytes[i+6] == 0 && file_bytes[i+7] == 0) {
+          var index_record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+
+          // The first row that has at least one cell with data in current sheet; zero-based index.
+          var rw_mic = this.get_four_byte_int(file_bytes.slice(i+8,i+12), byte_order);
+
+          // The last row that has at least one cell with data in the sheet, MUST be 0 if there are no rows with data.
+          var rw_mac = this.get_four_byte_int(file_bytes.slice(i+12,i+16), byte_order);
+          var ib_xf = this.get_four_byte_int(file_bytes.slice(i+18,i+22), byte_order);
+          var rgib_rw_bytes = file_bytes.slice(i+22,i+index_record_size-2);
+
+          if (rgib_rw_bytes.length > 0) {
+            // These bytes are an array of FilePointers giving the file position of each referenced DBCell record.
+          }
+        }
+
+        i += index_record_size + 2;
+      }
 
     } else {
       // File format error.
