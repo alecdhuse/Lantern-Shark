@@ -615,6 +615,7 @@ class Static_File_Analyzer {
    * @see https://blog.reversinglabs.com/blog/excel-4.0-macros
    * @see http://www.openoffice.org/sc/compdocfileformat.pdf
    * @see https://inquest.net/blog/2019/01/29/Carving-Sneaky-XLM-Files
+   * @see https://docs.microsoft.com/en-us/previous-versions/office/developer/office-2010/gg615597(v=office.14)
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
@@ -685,6 +686,7 @@ class Static_File_Analyzer {
       // Workbook Index
 
       var spreadsheet_sheet_names = {};
+      var string_constants = Array();
 
       // Find boundsheets
       for (var i=current_byte; i<file_bytes.length; i++) {
@@ -715,9 +717,61 @@ class Static_File_Analyzer {
         }
       }
 
+      // Find SST - string constants.
+      for (var i=current_byte; i<file_bytes.length; i++) {
+        if (file_bytes[i] == 0xFC && file_bytes[i+1] == 0x00) {
+          var sst_record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+          var cst_total = this.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
+          var cst_unique = this.get_four_byte_int(file_bytes.slice(i+8,i+12), byte_order);
+          var rgb_bytes = file_bytes.slice(i+12, i+sst_record_size+4);
+          var current_unique_offset = 0;
+
+          // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/173d9f51-e5d3-43da-8de2-be7f22e119b9
+          for (var u=0; u < cst_unique; u++) {
+            var char_count = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
+            var char_prop_bits = this.get_bin_from_int(rgb_bytes[current_unique_offset+2]);
+            var double_byte_chars = (char_prop_bits[0] == 1) ? true : false;
+            var rgb_len = (double_byte_chars) ? char_count * 2 : char_count;
+            var phonetic_string = (char_prop_bits[2] == 1) ? true : false;
+            var rich_string = (char_prop_bits[3] == 1) ? true : false;
+
+            var varable_offset = 3;
+            var c_run;
+            var cb_ext_rst;
+
+            if (rich_string) {
+              c_run = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
+              varable_offset += 2;
+            }
+
+            if (phonetic_string) {
+              cb_ext_rst = this.get_four_byte_int(rgb_bytes.slice(current_unique_offset+varable_offset, current_unique_offset+varable_offset+2), byte_order);
+              varable_offset += 2;
+            }
+
+            var rgb = Static_File_Analyzer.get_string_from_array(rgb_bytes.slice(current_unique_offset+varable_offset, rgb_len+current_unique_offset+varable_offset));
+            current_unique_offset += rgb_len + varable_offset;
+
+            if (rich_string) {
+              var rg_run_bytes = rgb_bytes.slice(current_unique_offset, current_unique_offset+c_run+1);
+              current_unique_offset += +c_run;
+            }
+
+            if (phonetic_string) {
+              var ext_rst_bytes = rgb_bytes.slice(current_unique_offset, current_unique_offset+cb_ext_rst+1);
+              current_unique_offset += cb_ext_rst;
+            }
+
+            string_constants.push(rgb);
+            console.log(rgb); // debug
+          }
+
+        }
+      }
+
       // Find index records
       // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67c20922-0427-4c2d-96cc-2267d3f09e8c
-      //The Index record specifies row information and the file locations for all DBCell records corresponding to each row block in the sheet
+      // The Index record specifies row information and the file locations for all DBCell records corresponding to each row block in the sheet
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0x0b && file_bytes[i+1] == 0x02 && file_bytes[i+4] == 0 && file_bytes[i+5] == 0 && file_bytes[i+6] == 0 && file_bytes[i+7] == 0) {
           var index_record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
@@ -728,10 +782,10 @@ class Static_File_Analyzer {
           // The last row that has at least one cell with data in the sheet, MUST be 0 if there are no rows with data.
           var rw_mac = this.get_four_byte_int(file_bytes.slice(i+12,i+16), byte_order);
           var ib_xf = this.get_four_byte_int(file_bytes.slice(i+18,i+22), byte_order);
-          var rgib_rw_bytes = file_bytes.slice(i+22,i+index_record_size-2);
+          var rgib_rw_bytes = file_bytes.slice(i+22,i+index_record_size+4);
 
           if (rgib_rw_bytes.length > 0) {
-            // These bytes are an array of FilePointers giving the file position of each referenced DBCell record.
+            // These bytes are an array of FilePointers giving the file position of each referenced DBCell record as specified in [MS-OSHARED] section 2.2.1.5.
           }
         }
 
