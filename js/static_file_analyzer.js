@@ -784,29 +784,41 @@ class Static_File_Analyzer {
         if (file_bytes[index_start] == 0x0b && file_bytes[index_start+1] == 0x02) {
           var index_record_size = this.get_two_byte_int(file_bytes.slice(index_start+2,index_start+4), byte_order);
 
+          //Skip over reserved 4 bytes
+          var reserved_bytes = file_bytes.slice(index_start+4,index_start+8);
+
           // The first row that has at least one cell with data in current sheet; zero-based index.
           var rw_mic = this.get_four_byte_int(file_bytes.slice(index_start+8,index_start+12), byte_order);
 
           // The last row that has at least one cell with data in the sheet, MUST be 0 if there are no rows with data.
           var rw_mac = this.get_four_byte_int(file_bytes.slice(index_start+12,index_start+16), byte_order);
+
+          // Specifies the file position of the DefColWidth record, but we don't use this.
           var ib_xf = this.get_four_byte_int(file_bytes.slice(index_start+18,index_start+22), byte_order);
-          var rgib_rw_bytes = file_bytes.slice(index_start+22,index_start+index_record_size+4);
 
-          if (rgib_rw_bytes.length > 0) {
-            // These bytes are an array of FilePointers giving the file position of each referenced DBCell record as specified in [MS-OSHARED] section 2.2.1.5.
-            for (var ai=0; ai<rgib_rw_bytes.length;) {
-              var file_pointer = this.get_two_byte_int(file_bytes.slice(ai,ai+2), byte_order) + stream_start;
-              var first_row_record = this.get_four_byte_int(file_bytes.slice(file_pointer, file_pointer+4), byte_order);
+          if (rw_mac > 0) {
+            // Read bytes for DBCell file pointers.
+            var rgib_rw_bytes = file_bytes.slice(index_start+22,index_start+4+index_record_size+2);
 
-              // I don't know where the maximum number comes from yet. The doc says it has to be less than 32.
-              for (var b=0; b<=32; b++) {
-                var rgdb = this.get_two_byte_int(file_bytes.slice(file_pointer+(b*2)+4, file_pointer+(b*2)+2), byte_order);
+            if (rgib_rw_bytes.length > 0) {
+              // These bytes are an array of FilePointers giving the file position of each referenced DBCell record as specified in [MS-OSHARED] section 2.2.1.5.
+              for (var ai=0; ai<rgib_rw_bytes.length;) {
+                var file_pointer = this.get_four_byte_int(rgib_rw_bytes.slice(ai,ai+4), this.BIG_ENDIAN);
+                var first_row_record = this.get_four_byte_int(file_bytes.slice(file_pointer, file_pointer+4), byte_order);
 
+                // I don't know where the maximum number comes from yet. The doc says it has to be less than 32.
+                for (var b=0; b<=32; b++) {
+                  var rgdb = this.get_two_byte_int(file_bytes.slice(file_pointer+(b*4)+4, file_pointer+(b*4)+2), byte_order);
+
+                }
+
+                ai+=4;
               }
-
-              ai+=2;
             }
+          } else {
+            // There are no DBCell records for this sheet.
           }
+
         }
       }
 
@@ -1490,7 +1502,7 @@ class Static_File_Analyzer {
   get_four_byte_int(bytes, endianness = this.BIG_ENDIAN) {
     var int_bits = "";
 
-    if (endianness = this.LITTLE_ENDIAN) {
+    if (endianness == this.LITTLE_ENDIAN) {
       for (var byte_index = (bytes.length-1); byte_index >= 0; byte_index--) {
         int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
       }
@@ -1513,7 +1525,7 @@ class Static_File_Analyzer {
   get_two_byte_int(bytes, endianness = this.BIG_ENDIAN) {
     var int_bits = "";
 
-    if (endianness = this.LITTLE_ENDIAN) {
+    if (endianness == this.LITTLE_ENDIAN) {
       for (var byte_index = (bytes.length-1); byte_index >= 0; byte_index--) {
         int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
       }
