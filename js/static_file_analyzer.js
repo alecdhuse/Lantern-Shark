@@ -683,8 +683,14 @@ class Static_File_Analyzer {
       var rup_build = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
       var rup_year = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
 
-      // Workbook Index
+      // Other meta data we are skipping for now.
+      // See: https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/91ebafbe-ccc0-41a4-839d-15bbec175b9f
+      current_byte += 8;
 
+      // stream_start is the offset within the whole file for lbPlyPos / sheet stream_pos.
+      var stream_start = current_byte;
+
+      // Variables to load spreadsheet into mem.
       var spreadsheet_sheet_names = {};
       var string_constants = Array();
 
@@ -710,6 +716,7 @@ class Static_File_Analyzer {
             'name': sheet_name,
             'state': sheet_state,
             'sheet_type': sheet_type,
+            'file_pos': stream_pos + stream_start,
             'data': {}
           };
 
@@ -763,33 +770,44 @@ class Static_File_Analyzer {
             }
 
             string_constants.push(rgb);
-            console.log(rgb); // debug
           }
 
         }
       }
 
-      // Find index records
+      // Read sheet indexes
       // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67c20922-0427-4c2d-96cc-2267d3f09e8c
       // The Index record specifies row information and the file locations for all DBCell records corresponding to each row block in the sheet
-      for (var i=current_byte; i<file_bytes.length; i++) {
-        if (file_bytes[i] == 0x0b && file_bytes[i+1] == 0x02 && file_bytes[i+4] == 0 && file_bytes[i+5] == 0 && file_bytes[i+6] == 0 && file_bytes[i+7] == 0) {
-          var index_record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+      for (const [key, value] of Object.entries(spreadsheet_sheet_names)) {
+        var index_start = value.file_pos;
+
+        if (file_bytes[index_start] == 0x0b && file_bytes[index_start+1] == 0x02) {
+          var index_record_size = this.get_two_byte_int(file_bytes.slice(index_start+2,index_start+4), byte_order);
 
           // The first row that has at least one cell with data in current sheet; zero-based index.
-          var rw_mic = this.get_four_byte_int(file_bytes.slice(i+8,i+12), byte_order);
+          var rw_mic = this.get_four_byte_int(file_bytes.slice(index_start+8,index_start+12), byte_order);
 
           // The last row that has at least one cell with data in the sheet, MUST be 0 if there are no rows with data.
-          var rw_mac = this.get_four_byte_int(file_bytes.slice(i+12,i+16), byte_order);
-          var ib_xf = this.get_four_byte_int(file_bytes.slice(i+18,i+22), byte_order);
-          var rgib_rw_bytes = file_bytes.slice(i+22,i+index_record_size+4);
+          var rw_mac = this.get_four_byte_int(file_bytes.slice(index_start+12,index_start+16), byte_order);
+          var ib_xf = this.get_four_byte_int(file_bytes.slice(index_start+18,index_start+22), byte_order);
+          var rgib_rw_bytes = file_bytes.slice(index_start+22,index_start+index_record_size+4);
 
           if (rgib_rw_bytes.length > 0) {
             // These bytes are an array of FilePointers giving the file position of each referenced DBCell record as specified in [MS-OSHARED] section 2.2.1.5.
+            for (var ai=0; ai<rgib_rw_bytes.length;) {
+              var file_pointer = this.get_two_byte_int(file_bytes.slice(ai,ai+2), byte_order) + stream_start;
+              var first_row_record = this.get_four_byte_int(file_bytes.slice(file_pointer, file_pointer+4), byte_order);
+
+              // I don't know where the maximum number comes from yet. The doc says it has to be less than 32.
+              for (var b=0; b<=32; b++) {
+                var rgdb = this.get_two_byte_int(file_bytes.slice(file_pointer+(b*2)+4, file_pointer+(b*2)+2), byte_order);
+
+              }
+
+              ai+=2;
+            }
           }
         }
-
-        i += index_record_size + 2;
       }
 
     } else {
