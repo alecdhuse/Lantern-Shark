@@ -818,27 +818,24 @@ class Static_File_Analyzer {
                 */
               } else if (object_id[0] == 0xFD && object_id[1] == 0x00) {
                 // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
-                // Get label set size, it should be 10
-                var label_set_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
-                cell_record_pos2 += 4;
+                var label_set_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+0,cell_record_pos2+2), byte_order); // should be 10
 
-                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2, cell_record_pos2+2), byte_order);
-                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order);
-                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
+                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order);
+                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
+                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
 
-                var isst = this.get_four_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+10), byte_order);
+                var isst = this.get_four_byte_int(file_bytes.slice(cell_record_pos2+8, cell_record_pos2+12), byte_order);
                 var cell_val = string_constants[isst];
 
-                cell_record_pos2 += 10;
+                cell_record_pos2 += label_set_size + 2;
 
-                /*
                 console.log({
                   'row': cell_row,
                   'col': cell_col,
                   'formula': "",
                   'value': cell_val
                 });
-                */
+
               } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
                 // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
                 var formula_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
@@ -898,17 +895,22 @@ class Static_File_Analyzer {
                 var formula_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+16]);
                 var reserved3 = file_bytes[cell_record_pos2+17];
                 var cache = file_bytes.slice(cell_record_pos2+18, cell_record_pos2+22);
-                var cell_formula = Static_File_Analyzer.get_string_from_array(file_bytes.slice(cell_record_pos2+22, cell_record_pos2+formula_size+2));
 
-                /*
+                // CellParsedFormula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/7dd67f0a-671d-4905-b87b-4cc07295e442
+                var rgce_byte_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+22, cell_record_pos2+24), byte_order);
+                var rgce_bytes = file_bytes.slice(cell_record_pos2+24, cell_record_pos2+24+rgce_byte_size);
+
+                // Rgce - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6cdf7d38-d08c-4e56-bd2f-6c82b8da752e
+                var cell_formula = Static_File_Analyzer.get_string_from_array(rgce_bytes);
+
+
                 console.log({
                   'row': cell_row,
                   'col': cell_col,
                   'formula': cell_formula,
                   'value': cell_value
                 });
-                */
-                // CellParsedFormula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/7dd67f0a-671d-4905-b87b-4cc07295e442
+
                 cell_record_pos2 += formula_size + 2;
               } else {
                 // error
