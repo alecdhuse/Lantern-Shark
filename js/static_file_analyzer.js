@@ -693,6 +693,8 @@ class Static_File_Analyzer {
       // Variables to load spreadsheet into mem.
       var spreadsheet_sheet_names = {};
       var string_constants = Array();
+      var spreadsheet_defined_vars = {};
+      var spreadsheet_var_names = [];
 
       // Find boundsheets
       for (var i=current_byte; i<file_bytes.length; i++) {
@@ -775,6 +777,61 @@ class Static_File_Analyzer {
         }
       }
 
+      // Find Lbl (defined name) records - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d148e898-4504-4841-a793-ee85f3ea9eef
+      for (var i=current_byte; i<file_bytes.length; i++) {
+        if (file_bytes[i] == 0x18 && file_bytes[i+1] == 0x00) {
+          var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+          var prop_bits = this.get_bin_from_int(file_bytes[4]).concat(this.get_bin_from_int(file_bytes[5]));
+          var is_hidden = (prop_bits[0] == 1) ? true : false;
+          var is_function = (prop_bits[1] == 1) ? true : false;
+          var is_vba_macro = (prop_bits[2] == 1) ? true : false;
+          var is_macro = (prop_bits[3] == 1) ? true : false;
+          var is_function_calc = (prop_bits[4] == 1) ? true : false;
+          var is_built_in = (prop_bits[5] == 1) ? true : false;
+          var function_category = this.get_int_from_bin(prop_bits.slice(6,12));
+
+          // function_category must be less than 32, if it's not this is not an Lbl record
+          if (function_category >= 32) continue;
+          if (prop_bits[12] != 0) continue;
+
+          var published_name = (prop_bits[13] == 1) ? true : false;
+          var is_workbook_param  = (prop_bits[14] == 1) ? true : false;
+          //if (prop_bits[15] != 0) continue;
+
+          var shortcut_key = file_bytes[i+6];
+          var name_char_count = file_bytes[i+7];
+          var rgce = this.get_two_byte_int(file_bytes.slice(i+8,i+10), byte_order);
+          var reserved3 = this.get_two_byte_int(file_bytes.slice(i+10,i+12), byte_order);
+          if (reserved3 != 0) continue;
+
+          var itab = this.get_two_byte_int(file_bytes.slice(i+12,i+14), byte_order);
+          var reserved4 = file_bytes[i+14];
+          var reserved5 = file_bytes[i+15];
+          var reserved6 = file_bytes[i+16];
+          var reserved7 = file_bytes[i+17];
+
+          var byte_option_bits = this.get_bin_from_int(file_bytes[i+18]);
+          var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
+          var string_end;
+
+          if (double_byte_chars) {
+            // Characters are two bytes each.
+            string_end = i+19 + (name_char_count * 2);
+          } else {
+            // Characters are one byte each.
+            string_end = i+19 + name_char_count;
+          }
+
+          var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(i+19, string_end));
+
+          if (string_val !== null && string_val.length > 0) {
+            spreadsheet_var_names.push({
+              'name': string_val
+            });
+          }
+        }
+      }
+
       // Test / Debug for DBCell positions
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
@@ -829,13 +886,14 @@ class Static_File_Analyzer {
 
                 cell_record_pos2 += label_set_size + 2;
 
+                /*
                 console.log({
                   'row': cell_row,
                   'col': cell_col,
                   'formula': "",
                   'value': cell_val
                 });
-
+                */
               } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
                 // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
                 var formula_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
@@ -904,6 +962,7 @@ class Static_File_Analyzer {
                 var current_rgce_byte = 0;
                 var formula_type = 0;
                 var cell_formula = null;
+                var formula_calc_stack = [];
 
                 while (current_rgce_byte < rgce_bytes.length) {
                   cell_formula = Static_File_Analyzer.get_string_from_array(rgce_bytes); // temp / debug
@@ -914,8 +973,22 @@ class Static_File_Analyzer {
 
                   if (formula_type == 0x17) {
                     // String
-                    cell_formula = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte));
-                    break; // not sure this is correct.
+                    var string_size = rgce_bytes[current_rgce_byte];
+                    var byte_option_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte+1]);
+                    var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
+                    var string_end;
+                    var string_bytes;
+
+                    if (double_byte_chars) {
+                      // Characters are two bytes each.
+                      string_end = current_rgce_byte + 2 + (string_size * 2);
+                    } else {
+                      // Characters are one byte each.
+                      string_end = current_rgce_byte + 2 + string_size;
+                    }
+
+                    var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));
+                    formula_calc_stack.push(string_val);
                   } else if (formula_type == 0x18) {
                     if (rgce_bytes[current_rgce_byte] == 0x01) {
                       // PtgElfLel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67784d96-e87d-4f97-b643-f8f2176a6148
@@ -950,16 +1023,16 @@ class Static_File_Analyzer {
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x02) {
                       // PtgAttrIf - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d81e5fb4-3004-409a-9a31-1a60662d9e59
-                      var offset = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      var offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x04) {
                       // PtgAttrChoose - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/24fb579c-c65d-4771-94a8-4380cecdc8c8
-                      var c_offset = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order) + 1;
-                      var rgOffset_bytes = file_bytes.slice(current_rgce_byte+3,current_rgce_byte+3+c_offset);
+                      var c_offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order) + 1;
+                      var rgOffset_bytes = rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+3+c_offset);
                       current_rgce_byte += 3 + c_offset;
                     } else if (rgce_bytes[current_rgce_byte] == 0x08) {
                       // PtgAttrGoto - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/081e17b9-02a6-4e78-ad28-09538f35a312
-                      var offset = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      var offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x10) {
                       // PtgAttrSum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/79ef57f6-27ab-4fec-b893-7dd727e771d1
@@ -967,20 +1040,67 @@ class Static_File_Analyzer {
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x20 || rgce_bytes[current_rgce_byte] == 0x21) {
                       // PtgAttrBaxcel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fcd76e10-6072-4dcf-b591-47edc8822792
+                      formula_calc_stack.push("="); // This is my implementaiton, not based on MS / Excel.
                       // next two bytes unused, should be zero
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x40) {
                       // PtgAttrSpace - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/38a4d7be-040b-4206-b078-62f5aeec72f3
-                      var ptg_attr_space_type = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      var ptg_attr_space_type = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x41) {
                       // PtgAttrSpaceSemi - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d8c3df5-9be5-46d9-8105-a1a19ceca3d4
-                      var type = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      var type = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
                       current_rgce_byte += 3;
                     } else {
                       // error
                       current_rgce_byte += 1;
                     }
+                  } else if (formula_type == 0x42) {
+                    // PtgFuncVar - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d105171-6b73-4f40-a7cd-6bf2aae15e83
+                    var param_count = rgce_bytes[current_rgce_byte];
+                    var tab_bits = this.get_bin_from_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
+                    current_rgce_byte += 3;
+
+                    // Execute formula_calc_stack
+                    for (var c=0; c<formula_calc_stack.length; c++) {
+                      if (param_count == 1) {
+                        // A single varable with the 0x42 formula is the EXEC macro.
+                        cell_formula = "=EXEC(" + formula_calc_stack[c] + ")";\
+
+                        // TODO: Add finding for EXEC
+                      } else if (param_count >= 2) {
+                        if (formula_calc_stack[c] == "=") {
+                          // c + 1 is the varable name, c + 2 is the value.
+                          spreadsheet_defined_vars[formula_calc_stack[c+1]] = formula_calc_stack[c+2];
+
+                          //Set a human readable value for this cell
+                          cell_formula = formula_calc_stack[c+1] + "=" + "\"" + formula_calc_stack[c+2]  + "\"";
+
+                          formula_calc_stack = formula_calc_stack.slice(3);
+                        }
+                      }
+                    }
+                  } else if (formula_type == 0x43) {
+                    // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
+                    var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
+
+                    // PtgDataType - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/80d504ba-eb5d-4a0f-a5da-3dcc792dd78e
+                    var data_type_int = this.get_int_from_bin(ptg_bits.slice(5,7));
+                    var name_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
+
+                    if (name_index <= spreadsheet_var_names.length) {
+                      var ref_var_name = spreadsheet_var_names[name_index-1];
+
+                      if (spreadsheet_defined_vars.hasOwnProperty(ref_var_name.name)) {
+                        formula_calc_stack.push(spreadsheet_defined_vars[ref_var_name.name]);
+                      } else {
+                        // Varable ref error.
+                      }
+                    } else {
+                      // error looking up varable.
+                    }
+
+                    current_rgce_byte += 4;
                   }
                 }
 
