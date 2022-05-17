@@ -809,11 +809,13 @@ class Static_File_Analyzer {
                 var row_prop2_bits = this.get_bin_from_int(file_bytes.slice(cell_record_pos2+16,cell_record_pos2+18));
                 cell_record_pos2 += row_record_size + 2;
 
-                //console.log({
+                /*
+                console.log({
                   'row_index': row_index,
                   'col_min': col_min,
                   'col_max': col_max
                 });
+                */
               } else if (object_id[0] == 0xFD && object_id[1] == 0x00) {
                 // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
                 // Get label set size, it should be 10
@@ -829,12 +831,14 @@ class Static_File_Analyzer {
 
                 cell_record_pos2 += 10;
 
-                //console.log({
+                /*
+                console.log({
                   'row': cell_row,
                   'col': cell_col,
                   'formula': "",
                   'value': cell_val
                 });
+                */
               } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
                 // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
                 var formula_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
@@ -896,13 +900,14 @@ class Static_File_Analyzer {
                 var cache = file_bytes.slice(cell_record_pos2+18, cell_record_pos2+22);
                 var cell_formula = Static_File_Analyzer.get_string_from_array(file_bytes.slice(cell_record_pos2+22, cell_record_pos2+formula_size+2));
 
-                //console.log({
+                /*
+                console.log({
                   'row': cell_row,
                   'col': cell_col,
                   'formula': cell_formula,
                   'value': cell_value
                 });
-
+                */
                 // CellParsedFormula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/7dd67f0a-671d-4905-b87b-4cc07295e442
                 cell_record_pos2 += formula_size + 2;
               } else {
