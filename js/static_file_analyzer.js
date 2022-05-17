@@ -775,6 +775,154 @@ class Static_File_Analyzer {
         }
       }
 
+      // Test / Debug for DBCell positions
+      for (var i=current_byte; i<file_bytes.length; i++) {
+        if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
+          //console.log(i); // debug
+          var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+          var first_row_record = this.get_four_byte_int(file_bytes.slice(i+4, i+8), byte_order);
+          var cell_record_pos = i - first_row_record;
+
+          if (record_size > 4) {
+            var current_dbcell_byte = 8;
+            var cell_record_pos2 = cell_record_pos;
+
+            while (cell_record_pos2 < i) {
+              var object_id = file_bytes.slice(cell_record_pos2, cell_record_pos2+2);
+              cell_record_pos2 += 2;
+
+              if (object_id[0] == 0x00 && object_id[1] == 0x02) {
+                // Unknown record 0x00 0x02
+                var u_record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
+                var u_record_bytes = file_bytes.slice(cell_record_pos2+2, cell_record_pos2+2+u_record_size);
+                cell_record_pos2 += u_record_size + 2;
+              } else if (object_id[0] == 0x08 && object_id[1] == 0x02) {
+                // Row Record - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4aab09eb-49ed-4d01-a3b1-1d726247d3c2
+                var row_record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
+                var row_index = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
+                var col_min = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4,cell_record_pos2+6), byte_order);
+                var col_max = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6,cell_record_pos2+8), byte_order);
+                var row_height = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+8,cell_record_pos2+10), byte_order);
+                var reserved1 = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+10,cell_record_pos2+12), byte_order);
+                var unused1 = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+12,cell_record_pos2+14), byte_order);
+                var row_prop1_bits = this.get_bin_from_int(file_bytes.slice(cell_record_pos2+14,cell_record_pos2+16));
+                var row_prop2_bits = this.get_bin_from_int(file_bytes.slice(cell_record_pos2+16,cell_record_pos2+18));
+                cell_record_pos2 += row_record_size + 2;
+
+                //console.log({
+                  'row_index': row_index,
+                  'col_min': col_min,
+                  'col_max': col_max
+                });
+              } else if (object_id[0] == 0xFD && object_id[1] == 0x00) {
+                // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
+                // Get label set size, it should be 10
+                var label_set_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
+                cell_record_pos2 += 4;
+
+                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2, cell_record_pos2+2), byte_order);
+                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order);
+                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
+
+                var isst = this.get_four_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+10), byte_order);
+                var cell_val = string_constants[isst];
+
+                cell_record_pos2 += 10;
+
+                //console.log({
+                  'row': cell_row,
+                  'col': cell_col,
+                  'formula': "",
+                  'value': cell_val
+                });
+              } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
+                // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
+                var formula_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
+
+                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order);
+                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
+                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
+
+                // FormulaValue - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/39a0757a-c7bb-4e85-b144-3e7837b059d7
+                var formula_byte1 = file_bytes[cell_record_pos2+8];
+                var formula_byte2 = file_bytes[cell_record_pos2+9];
+                var formula_byte3 = file_bytes[cell_record_pos2+10];
+                var formula_byte4 = file_bytes[cell_record_pos2+11];
+                var formula_byte5 = file_bytes[cell_record_pos2+12];
+                var formula_byte6 = file_bytes[cell_record_pos2+13];
+                var formula_expr  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+14, cell_record_pos2+16), byte_order);
+
+                var cell_value = null;
+
+                if (formula_expr == 65535) {
+                  if (formula_byte1 == 0) {
+                    // String Value
+                    // Ignore byte3
+                  } else if (formula_byte1 == 1) {
+                    // Boolean Value
+                    cell_value = (formula_byte3 == 0) ? false : true;
+                  } else if (formula_byte1 == 2) {
+                    // Error value
+                    // BErr - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/91beb411-d175-4c4e-b65f-e3bfbc53064c
+                    if (formula_byte3 == 0x00) {
+                      cell_value = "#NULL!";
+                    } else if (formula_byte3 == 0x07) {
+                      cell_value = "#DIV/0!";
+                    } else if (formula_byte3 == 0x0F) {
+                      cell_value = "#VALUE!";
+                    } else if (formula_byte3 == 0x17) {
+                      cell_value = "#REF!";
+                    } else if (formula_byte3 == 0x1D) {
+                      cell_value = "#NAME?";
+                    } else if (formula_byte3 == 0x24) {
+                      cell_value = "#NUM!";
+                    } else if (formula_byte3 == 0x2A) {
+                      cell_value = "#N/A";
+                    }
+                  } else if (formula_byte1 == 3) {
+                    // Blank String
+                    cell_value = "";
+                  } else {
+                    // Error
+                  }
+                } else {
+                  // Xnum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f4aa5725-5bb8-46a9-9fb5-7f0393070a4c
+                  var xnum_bytes = [formula_byte1,formula_byte2,formula_byte3,formula_byte4,formula_byte5,formula_byte6];
+                  // decode not currently implemented.
+                }
+
+                var formula_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+16]);
+                var reserved3 = file_bytes[cell_record_pos2+17];
+                var cache = file_bytes.slice(cell_record_pos2+18, cell_record_pos2+22);
+                var cell_formula = Static_File_Analyzer.get_string_from_array(file_bytes.slice(cell_record_pos2+22, cell_record_pos2+formula_size+2));
+
+                //console.log({
+                  'row': cell_row,
+                  'col': cell_col,
+                  'formula': cell_formula,
+                  'value': cell_value
+                });
+
+                // CellParsedFormula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/7dd67f0a-671d-4905-b87b-4cc07295e442
+                cell_record_pos2 += formula_size + 2;
+              } else {
+                // error
+                cell_record_pos2++;
+              }
+            }
+
+            while (current_dbcell_byte < record_size) {
+              var rgdb = this.get_two_byte_int(file_bytes.slice(i+current_dbcell_byte, i+current_dbcell_byte+2), byte_order);
+              cell_record_pos += rgdb;
+
+              current_dbcell_byte += 2;
+            }
+
+          }
+
+        }
+      }
+
       // Read sheet indexes
       // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67c20922-0427-4c2d-96cc-2267d3f09e8c
       // The Index record specifies row information and the file locations for all DBCell records corresponding to each row block in the sheet
@@ -794,22 +942,34 @@ class Static_File_Analyzer {
           var rw_mac = this.get_four_byte_int(file_bytes.slice(index_start+12,index_start+16), byte_order);
 
           // Specifies the file position of the DefColWidth record, but we don't use this.
-          var ib_xf = this.get_four_byte_int(file_bytes.slice(index_start+18,index_start+22), byte_order);
+          var ib_xf = this.get_four_byte_int(file_bytes.slice(index_start+16,index_start+20), byte_order);
 
           if (rw_mac > 0) {
             // Read bytes for DBCell file pointers.
-            var rgib_rw_bytes = file_bytes.slice(index_start+22,index_start+4+index_record_size+2);
+            var rgib_rw_bytes = file_bytes.slice(index_start+20,index_start+4+index_record_size);
 
             if (rgib_rw_bytes.length > 0) {
               // These bytes are an array of FilePointers giving the file position of each referenced DBCell record as specified in [MS-OSHARED] section 2.2.1.5.
               for (var ai=0; ai<rgib_rw_bytes.length;) {
-                var file_pointer = this.get_four_byte_int(rgib_rw_bytes.slice(ai,ai+4), this.BIG_ENDIAN);
+                var file_pointer = this.get_four_byte_int(rgib_rw_bytes.slice(ai,ai+4), byte_order);
+                //console.log(file_pointer); // debug
+
                 var first_row_record = this.get_four_byte_int(file_bytes.slice(file_pointer, file_pointer+4), byte_order);
+                var first_row_pos = file_pointer + first_row_record;
 
-                // I don't know where the maximum number comes from yet. The doc says it has to be less than 32.
-                for (var b=0; b<=32; b++) {
-                  var rgdb = this.get_two_byte_int(file_bytes.slice(file_pointer+(b*4)+4, file_pointer+(b*4)+2), byte_order);
+                var row_block_count = ((rw_mac - rw_mic) % 32 == 0) ? Math.ceil((rw_mac - rw_mic) / 32) : Math.ceil((rw_mac - rw_mic) / 32 + 1);
 
+                // I don't know where the maximum number comes from yet.
+                // Open office says it is the number of ROW records in this Row Block
+                //The MS doc says it has to be less than 32.
+                for (var b=0; b<=row_block_count;) {
+                  // Specifies the file offset in bytes to the first record that specifies a CELL in each row that is a part of this row block.
+                  var rgdb = this.get_two_byte_int(file_bytes.slice(file_pointer+(b*2)+4, file_pointer+(b*2)+6), byte_order);
+                  var row_start = first_row_pos + rgdb;
+
+
+                  b+=2;
+                  //console.log(rgdb); // debug
                 }
 
                 ai+=4;
