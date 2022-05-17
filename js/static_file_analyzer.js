@@ -901,8 +901,88 @@ class Static_File_Analyzer {
                 var rgce_bytes = file_bytes.slice(cell_record_pos2+24, cell_record_pos2+24+rgce_byte_size);
 
                 // Rgce - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6cdf7d38-d08c-4e56-bd2f-6c82b8da752e
-                var cell_formula = Static_File_Analyzer.get_string_from_array(rgce_bytes);
+                var current_rgce_byte = 0;
+                var formula_type = 0;
+                var cell_formula = null;
 
+                while (current_rgce_byte < rgce_bytes.length) {
+                  cell_formula = Static_File_Analyzer.get_string_from_array(rgce_bytes); // temp / debug
+
+                  // Ptg / formula_type - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/9310c3bb-d73f-4db0-8342-28e1e0fcb68f
+                  formula_type = rgce_bytes[current_rgce_byte];
+                  current_rgce_byte += 1;
+
+                  if (formula_type == 0x17) {
+                    // String
+                    cell_formula = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte));
+                    break; // not sure this is correct.
+                  } else if (formula_type == 0x18) {
+                    if (rgce_bytes[current_rgce_byte] == 0x01) {
+                      // PtgElfLel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67784d96-e87d-4f97-b643-f8f2176a6148
+                    } else if (rgce_bytes[current_rgce_byte] == 0x02) {
+                      // PtgElfRw - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/20348be6-68c6-4506-b744-fd38ec0aa675
+                    } else if (rgce_bytes[current_rgce_byte] == 0x03) {
+                      // PtgElfCol - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/c76517f7-6a4e-47e8-8087-6e927758bbed
+                    } else if (rgce_bytes[current_rgce_byte] == 0x06) {
+                      // PtgElfRwV - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/42e28815-da53-45ba-80f2-2a68ddbbfcf9
+                    } else if (rgce_bytes[current_rgce_byte] == 0x07) {
+                      // PtgElfColV - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/167409e7-9363-4b61-9434-47e559e80f2d
+                    } else if (rgce_bytes[current_rgce_byte] == 0x0A) {
+                      // PtgElfRadical - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/dc352cde-62fc-4c68-99fd-186d6bc4d610
+                    } else if (rgce_bytes[current_rgce_byte] == 0x0B) {
+                      // PtgElfRadicalS - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e3112a89-f771-4043-82a9-18b3d4c1e137
+                    } else if (rgce_bytes[current_rgce_byte] == 0x0D) {
+                      // PtgElfColS - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cc02acdf-f404-4318-9847-8d4cbf523966
+                    } else if (rgce_bytes[current_rgce_byte] == 0x0F) {
+                      // PtgElfColSV - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6ed51fe3-4baf-4163-8851-888de8477525
+                    } else if (rgce_bytes[current_rgce_byte] == 0x10) {
+                      // PtgElfRadicalLel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/304191e6-2c82-4542-8477-a1ffd548442e
+                    } else if (rgce_bytes[current_rgce_byte] == 0x1D) {
+                      // PtgSxName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/aa0ebf5c-29d2-4ec5-8639-46f844e7647d
+                    }
+
+                    // All the above records are the same size.
+                    current_rgce_byte += 5;
+                  } else if (formula_type == 0x19) {
+                    if (rgce_bytes[current_rgce_byte] == 0x01) {
+                      // PtgAttrSemi - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/615c5518-010a-4268-b71b-b60074bdb11b
+                      // next two bytes unused, should be zero
+                      current_rgce_byte += 3;
+                    } else if (rgce_bytes[current_rgce_byte] == 0x02) {
+                      // PtgAttrIf - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d81e5fb4-3004-409a-9a31-1a60662d9e59
+                      var offset = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      current_rgce_byte += 3;
+                    } else if (rgce_bytes[current_rgce_byte] == 0x04) {
+                      // PtgAttrChoose - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/24fb579c-c65d-4771-94a8-4380cecdc8c8
+                      var c_offset = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order) + 1;
+                      var rgOffset_bytes = file_bytes.slice(current_rgce_byte+3,current_rgce_byte+3+c_offset);
+                      current_rgce_byte += 3 + c_offset;
+                    } else if (rgce_bytes[current_rgce_byte] == 0x08) {
+                      // PtgAttrGoto - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/081e17b9-02a6-4e78-ad28-09538f35a312
+                      var offset = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      current_rgce_byte += 3;
+                    } else if (rgce_bytes[current_rgce_byte] == 0x10) {
+                      // PtgAttrSum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/79ef57f6-27ab-4fec-b893-7dd727e771d1
+                      // next two bytes unused, should be zero
+                      current_rgce_byte += 3;
+                    } else if (rgce_bytes[current_rgce_byte] == 0x20 || rgce_bytes[current_rgce_byte] == 0x21) {
+                      // PtgAttrBaxcel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fcd76e10-6072-4dcf-b591-47edc8822792
+                      // next two bytes unused, should be zero
+                      current_rgce_byte += 3;
+                    } else if (rgce_bytes[current_rgce_byte] == 0x40) {
+                      // PtgAttrSpace - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/38a4d7be-040b-4206-b078-62f5aeec72f3
+                      var ptg_attr_space_type = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      current_rgce_byte += 3;
+                    } else if (rgce_bytes[current_rgce_byte] == 0x41) {
+                      // PtgAttrSpaceSemi - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d8c3df5-9be5-46d9-8105-a1a19ceca3d4
+                      var type = this.get_two_byte_int(file_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+                      current_rgce_byte += 3;
+                    } else {
+                      // error
+                      current_rgce_byte += 1;
+                    }
+                  }
+                }
 
                 console.log({
                   'row': cell_row,
