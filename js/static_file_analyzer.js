@@ -608,6 +608,25 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Converts a column index to a letter value.
+   *
+   * @param {int}     col_index An integer representing the column index.
+   * @return {String} col_name  A String giving the letter or multiletter column name.
+   */
+  convert_xls_column(col_index) {
+    var col_conversion = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+    var char_count = (col_index == 0) ? 1 : Math.ceil(col_index / 25);
+    var col_name = "";
+
+    for (var i=0; i<char_count; i++) {
+      col_name += col_conversion[col_index % 25]
+    }
+
+    return col_name;
+  }
+
+
+  /**
    * Extracts meta data and other information from Excel Binary File Format (.xls) files.
    *
    * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cd03cb5f-ca02-4934-a391-bb674cb8aa06
@@ -622,6 +641,7 @@ class Static_File_Analyzer {
    */
   analyze_xls(file_bytes) {
     var file_info = this.get_default_file_json();
+    var col_conversion = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
 
     file_info.file_format = "xls";
     file_info.file_generic_type = "Spreadsheet";
@@ -886,14 +906,23 @@ class Static_File_Analyzer {
 
                 cell_record_pos2 += label_set_size + 2;
 
-                /*
-                console.log({
-                  'row': cell_row,
-                  'col': cell_col,
-                  'formula': "",
-                  'value': cell_val
-                });
-                */
+                // Derive sheetname
+                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
+                var sheet_name = "";
+                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
+                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
+                    sheet_name = spreadsheet_sheet_indexes[si][1].name;
+                    break;
+                  }
+                }
+
+                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
+                if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
+                  spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
+                    'formula': "",
+                    'value': cell_val
+                  };
+                }
               } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
                 // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
                 var formula_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
@@ -1127,12 +1156,30 @@ class Static_File_Analyzer {
                   }
                 }
 
-                console.log({
-                  'row': cell_row,
-                  'col': cell_col,
-                  'formula': cell_formula,
-                  'value': cell_value
-                });
+                var cell_ref;
+                if (cell_col < 26) {
+                  cell_ref = col_conversion[cell_col] + cell_row;
+                } else {
+                  cell_ref = "A" + col_conversion[cell_col-26] + cell_row;
+                }
+
+                // Derive sheetname
+                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
+                var sheet_name = "";
+                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
+                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
+                    sheet_name = spreadsheet_sheet_indexes[si][1].name;
+                    break;
+                  }
+                }
+
+                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
+                if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
+                  spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
+                    'formula': "",
+                    'value': cell_val
+                  };
+                }
 
                 cell_record_pos2 += formula_size + 2;
               } else {
@@ -1141,6 +1188,7 @@ class Static_File_Analyzer {
               }
             }
 
+            // TODO this probably isn't needed anymore
             while (current_dbcell_byte < record_size) {
               var rgdb = this.get_two_byte_int(file_bytes.slice(i+current_dbcell_byte, i+current_dbcell_byte+2), byte_order);
               cell_record_pos += rgdb;
