@@ -113,6 +113,7 @@ class Static_File_Analyzer {
    */
   analyze_embedded_script(script_text) {
     var findings = [];
+    var iocs = [];
 
     var rules = [
       {
@@ -131,7 +132,32 @@ class Static_File_Analyzer {
       }
     }
 
-    return findings;
+    // Check for IoCs
+    var url_regex = /((?:https?\:\/\/|\\\\)[^\s\)\"\']+)/gmi;
+    var url_match = url_regex.exec(script_text);
+    while (url_match !== null) {
+      // Check for hex IP
+      var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
+      if (hex_ip_match !== null) {
+        findings.push("SUSPICIOUS - Hex Obfuscated IP Address");
+
+        try {
+          var str_ip = Static_File_Analyzer.get_ip_from_hex(hex_ip_match[1]);
+          iocs.push(url_match[1].replace(hex_ip_match[1], str_ip));
+        } catch(err) {
+          iocs.push(url_match[1]);
+        }
+      } else {
+        iocs.push(url_match[1]);
+      }
+
+      url_match = url_regex.exec(script_text);
+    }
+
+    return {
+      'findings': findings,
+      'iocs':     iocs
+    };
   }
 
   /**
@@ -1493,10 +1519,14 @@ class Static_File_Analyzer {
 
             if (sub_match != null) {
               var vba_code = vba_data.attributes[s].substring(sub_match.index).trim();
-              var findings = this.analyze_embedded_script(vba_code);
+              var analyzed_results = this.analyze_embedded_script(vba_code);
 
-              for (var f=0; f<findings.length; f++) {
-                file_info.analytic_findings.push(findings[f]);
+              for (var f=0; f<analyzed_results.findings.length; f++) {
+                file_info.analytic_findings.push(analyzed_results.findings[f]);
+              }
+
+              for (var f=0; f<analyzed_results.iocs.length; f++) {
+                file_info.iocs.push(analyzed_results.iocs[f]);
               }
 
               file_info.scripts.extracted_script += vba_code + "\n\n";
@@ -1557,7 +1587,6 @@ class Static_File_Analyzer {
           */
           for (const [key, value] of Object.entries(auto_open_sheet_obj.data)) {
             var formula_output = this.calculate_cell_formula(value.formula, spreadsheet_sheet_names, auto_open_sheet_obj.name, file_info);
-
           }
 
         }
@@ -1649,7 +1678,6 @@ class Static_File_Analyzer {
                 while (length_diff > 0) {
                   var overflow_bytes = bytes_to_copy.slice(0,length_diff);
                   bytes_to_copy.push(...overflow_bytes);
-                  //length_diff = end_index - ((decompressed_buffer.length-1) + (bytes_to_copy.length-original_copy_bytes_len));
                   length_diff -= overflow_bytes.length;
                 }
               }
