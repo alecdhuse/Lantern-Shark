@@ -667,7 +667,6 @@ class Static_File_Analyzer {
    */
   analyze_xls(file_bytes) {
     var file_info = this.get_default_file_json();
-    var col_conversion = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
 
     file_info.file_format = "xls";
     file_info.file_generic_type = "Spreadsheet";
@@ -1041,6 +1040,9 @@ class Static_File_Analyzer {
                   } else if (formula_type == 0x04) {
                     // PtgSub - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ee15a1fa-77bb-45e1-8c8c-0e7bef7f7552
                     formula_calc_stack.push("-");
+                  } else if (formula_type == 0x05) {
+                    // PtgMul - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/52863fc5-3d3c-4874-90e6-a7961902849f
+                    formula_calc_stack.push("*");
                   } else if (formula_type == 0x17) {
                     // String
                     var string_size = rgce_bytes[current_rgce_byte];
@@ -1130,6 +1132,14 @@ class Static_File_Analyzer {
                     var ptg_int_val = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
                     formula_calc_stack.push(ptg_int_val);
                     current_rgce_byte += 2;
+                  } else if (formula_type == 0x23) {
+                    // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
+                    // reference to a defined name
+                    var var_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
+                    var var_name = spreadsheet_var_names[var_index-1];
+                    formula_calc_stack.push(var_name);
+
+                    current_rgce_byte += 4;
                   } else if (formula_type == 0x41) {
                     // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
                     var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
@@ -1145,7 +1155,11 @@ class Static_File_Analyzer {
                       var stack_result = this.execute_excel_stack(formula_calc_stack);
                       cell_formula += "CHAR(" + stack_result + ")";
                       formula_calc_stack.splice(-1, 1, String.fromCharCode(stack_result));
+                    } else {
+                      // Non implemented function
+                      console.log("Unknown function " + ifta); // DEBUG
                     }
+
                     current_rgce_byte += 3;
                   } else if (formula_type == 0x42) {
                     // PtgFuncVar - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d105171-6b73-4f40-a7cd-6bf2aae15e83
@@ -1223,6 +1237,9 @@ class Static_File_Analyzer {
                     }
 
                     current_rgce_byte += 4;
+                  } else {
+                    // Non implemented formula_type
+                    console.log("Unknown formula_type " + formula_type); // DEBUG
                   }
                 }
 
@@ -1879,6 +1896,11 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index] == "+") {
           var sub_result = stack[c_index-2] + stack[c_index-1];
+          stack.splice(0, 3);
+          stack.unshift(sub_result);
+          c_index--;
+        } else if (stack[c_index] == "*") {
+          var sub_result = stack[c_index-2] * stack[c_index-1];
           stack.splice(0, 3);
           stack.unshift(sub_result);
           c_index--;
