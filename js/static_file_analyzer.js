@@ -1157,7 +1157,7 @@ class Static_File_Analyzer {
                       formula_calc_stack.splice(-1, 1, String.fromCharCode(stack_result));
                     } else {
                       // Non implemented function
-                      console.log("Unknown function " + ifta); // DEBUG
+                      console.log("Unknown function " + iftab); // DEBUG
                     }
 
                     current_rgce_byte += 3;
