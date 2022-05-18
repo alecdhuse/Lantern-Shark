@@ -1028,13 +1028,20 @@ class Static_File_Analyzer {
                 var formula_calc_stack = [];
 
                 while (current_rgce_byte < rgce_bytes.length) {
-                  cell_formula = Static_File_Analyzer.get_string_from_array(rgce_bytes); // temp / debug
+                  var cell_formula_debug = Static_File_Analyzer.get_string_from_array(rgce_bytes); // temp / debug
+                  cell_formula = "";
 
                   // Ptg / formula_type - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/9310c3bb-d73f-4db0-8342-28e1e0fcb68f
                   formula_type = rgce_bytes[current_rgce_byte];
                   current_rgce_byte += 1;
 
-                  if (formula_type == 0x17) {
+                  if (formula_type == 0x03) {
+                    // PtgAdd - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/27db2f45-11e8-4238-94ed-92fd9c5721fb
+                    formula_calc_stack.push("+");
+                  } else if (formula_type == 0x04) {
+                    // PtgSub - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ee15a1fa-77bb-45e1-8c8c-0e7bef7f7552
+                    formula_calc_stack.push("-");
+                  } else if (formula_type == 0x17) {
                     // String
                     var string_size = rgce_bytes[current_rgce_byte];
                     var byte_option_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte+1]);
@@ -1118,6 +1125,28 @@ class Static_File_Analyzer {
                       // error
                       current_rgce_byte += 1;
                     }
+                  } else if (formula_type == 0x1E) {
+                    // PtgInt - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/508ecf18-3b81-4628-95b3-7a9d2a295bca
+                    var ptg_int_val = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+                    formula_calc_stack.push(ptg_int_val);
+                    current_rgce_byte += 2;
+                  } else if (formula_type == 0x41) {
+                    // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
+                    var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
+                    var iftab = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+
+                    // Execute a function - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00b5dd7d-51ca-4938-b7b7-483fe0e5933b
+                    if (iftab == 0x0000) {
+                      // COUNT
+                    } else if (iftab == 0x0001) {
+                      // IF
+                    } else if (iftab == 0x006F) {
+                      // CHAR
+                      var stack_result = this.execute_excel_stack(formula_calc_stack);
+                      cell_formula += "CHAR(" + stack_result + ")";
+                      formula_calc_stack.splice(-1, 1, String.fromCharCode(stack_result));
+                    }
+                    current_rgce_byte += 3;
                   } else if (formula_type == 0x42) {
                     // PtgFuncVar - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d105171-6b73-4f40-a7cd-6bf2aae15e83
                     var param_count = rgce_bytes[current_rgce_byte];
@@ -1197,13 +1226,6 @@ class Static_File_Analyzer {
                   }
                 }
 
-                var cell_ref;
-                if (cell_col < 26) {
-                  cell_ref = col_conversion[cell_col] + cell_row;
-                } else {
-                  cell_ref = "A" + col_conversion[cell_col-26] + cell_row;
-                }
-
                 // Derive sheetname
                 var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
                 var sheet_name = "";
@@ -1218,7 +1240,7 @@ class Static_File_Analyzer {
                 if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
                   spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
                     'formula': "",
-                    'value': cell_val
+                    'value': cell_formula
                   };
                 }
 
@@ -1834,6 +1856,37 @@ class Static_File_Analyzer {
         }
       }
     }
+  }
+
+  /**
+   * Executes the XLS / Excel 4.0 calculation stack.
+   *
+   * @param {array}    stack The list of operations to execute.
+   * @return {boolean} The result of the execution / calculation.
+   */
+  execute_excel_stack(stack) {
+    var c_index = 0;
+
+    while (c_index < stack.length) {
+      if (stack[c_index] === parseInt(stack[c_index], 10)) {
+        // Number, skip for now
+        c_index++
+      } else {
+        if (stack[c_index] == "-") {
+          var sub_result = stack[c_index-2] - stack[c_index-1];
+          stack.splice(0, 3);
+          stack.unshift(sub_result);
+          c_index--;
+        } else if (stack[c_index] == "+") {
+          var sub_result = stack[c_index-2] + stack[c_index-1];
+          stack.splice(0, 3);
+          stack.unshift(sub_result);
+          c_index--;
+        }
+      }
+    }
+
+    return stack[0];
   }
 
   /**
