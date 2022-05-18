@@ -1061,6 +1061,8 @@ class Static_File_Analyzer {
 
                     var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));
                     formula_calc_stack.push(string_val);
+
+                    current_rgce_byte = string_end;
                   } else if (formula_type == 0x18) {
                     if (rgce_bytes[current_rgce_byte] == 0x01) {
                       // PtgElfLel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67784d96-e87d-4f97-b643-f8f2176a6148
