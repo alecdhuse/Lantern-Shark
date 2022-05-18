@@ -112,6 +112,7 @@ function read_file(e) {
       $("#summary_metadata_last_saved_location").html(analyzer_results.metadata.last_saved_location);
 
       $("#script_code").val(analyzer_results.scripts.extracted_script);
+      $("#extracted_iocs").val(analyzer_results.iocs);      
       $("#analytic_findings").val(analyzer_results.analytic_findings.join("\n"));
 
       $("#file_text").val(get_file_text(array));
