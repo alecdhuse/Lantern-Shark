@@ -1065,9 +1065,17 @@ class Static_File_Analyzer {
                     for (var c=0; c<formula_calc_stack.length; c++) {
                       if (param_count == 1) {
                         // A single varable with the 0x42 formula is the EXEC macro.
-                        cell_formula = "=EXEC(" + formula_calc_stack[c] + ")";\
+
+                        // When executing a command ^ is a special, escape charater that will be ignored.
+                        // It is ofen used to obfusticate cmd codes.
+                        formula_calc_stack[c] = formula_calc_stack[c].replaceAll("^", "");
+                        cell_formula = "=EXEC(" + formula_calc_stack[c] + ")";
+
+                        file_info.scripts.script_type = "Excel 4.0 Macro";
+                        file_info.scripts.extracted_script += cell_formula + "\n\n";
 
                         // TODO: Add finding for EXEC
+                        // TODO: pull out iocs
                       } else if (param_count >= 2) {
                         if (formula_calc_stack[c] == "=") {
                           // c + 1 is the varable name, c + 2 is the value.
