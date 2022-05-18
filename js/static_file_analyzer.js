@@ -1106,8 +1106,6 @@ class Static_File_Analyzer {
                         var cmd_match = /cmd\s+(?:\/\w\s+)?([a-z0-9]+)\s+/gmi.exec(cell_formula);
                         var url_match = /((?:https?\:\/\/|\\\\)[^\s\)]+)/gmi.exec(cell_formula);
                         if (url_match !== null) {
-                          file_info.iocs.push(url_match[1]);
-
                           if (cmd_match !== null) {
                             if (cmd_match[1] == "mshta") {
                               file_info.analytic_findings.push("SUSPICIOUS - Mshta Command Used to Load Internet Hosted Resource");
@@ -1115,9 +1113,18 @@ class Static_File_Analyzer {
                           }
 
                           // Check for hex IP
-                          var hex_ip_match = /(?:\/|\\)0x([0-9a-f]+)\//gmi.exec(url_match[1]);
+                          var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
                           if (hex_ip_match !== null) {
                             file_info.analytic_findings.push("SUSPICIOUS - Hex Obfuscated IP Address");
+
+                            try {
+                              var str_ip = Static_File_Analyzer.get_ip_from_hex(hex_ip_match[1]);
+                              file_info.iocs.push(url_match[1].replace(hex_ip_match[1], str_ip));
+                            } catch(err) {
+                              file_info.iocs.push(url_match[1]);
+                            }
+                          } else {
+                            file_info.iocs.push(url_match[1]);
                           }
                         }
                       } else if (param_count >= 2) {
@@ -1928,6 +1935,29 @@ class Static_File_Analyzer {
     }
 
     return int_val;
+  }
+
+  /**
+   * Converts a Hex encoded IP into the standard format; only does IPv4.
+   *
+   * @throws An error if hex_ip is not in the correct format.
+   *
+   * @param {String}  hex_ip IP in the format of 0xXXXXXXXX
+   * @return {String} IP address in standard notation
+   */
+  static get_ip_from_hex(hex_ip) {
+    if (/0x[0-9a-f]{8}/gmi.test(hex_ip)) {
+      var str_ip = "";
+
+      for (var i=0; i<hex_ip.length; i+=2) {
+        if (i==0) continue;
+        str_ip += parseInt(hex_ip.substr(i,2), 16) + ".";
+      }
+
+      return str_ip.slice(0, -1);
+    } else {
+      throw "The provided hex IP is not formatted correctly.";
+    }
   }
 
   /**
