@@ -1074,8 +1074,23 @@ class Static_File_Analyzer {
                         file_info.scripts.script_type = "Excel 4.0 Macro";
                         file_info.scripts.extracted_script += cell_formula + "\n\n";
 
-                        // TODO: Add finding for EXEC
-                        // TODO: pull out iocs
+                        var cmd_match = /cmd\s+(?:\/\w\s+)?([a-z0-9]+)\s+/gmi.exec(cell_formula);
+                        var url_match = /((?:https?\:\/\/|\\\\)[^\s\)]+)/gmi.exec(cell_formula);
+                        if (url_match !== null) {
+                          file_info.iocs.push(url_match[1]);
+
+                          if (cmd_match !== null) {
+                            if (cmd_match[1] == "mshta") {
+                              file_info.analytic_findings.push("SUSPICIOUS - Mshta Command Used to Load Internet Hosted Resource");
+                            }
+                          }
+
+                          // Check for hex IP
+                          var hex_ip_match = /(?:\/|\\)0x([0-9a-f]+)\//gmi.exec(url_match[1]);
+                          if (hex_ip_match !== null) {
+                            file_info.analytic_findings.push("SUSPICIOUS - Hex Obfuscated IP Address");
+                          }
+                        }
                       } else if (param_count >= 2) {
                         if (formula_calc_stack[c] == "=") {
                           // c + 1 is the varable name, c + 2 is the value.
