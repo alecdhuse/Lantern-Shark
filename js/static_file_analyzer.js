@@ -772,54 +772,62 @@ class Static_File_Analyzer {
         }
       }
 
-      // Find SST - string constants.
+      // Find SST - string constants - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b6231b92-d32e-4626-badd-c3310a672bab
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0xFC && file_bytes[i+1] == 0x00) {
           var sst_record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
-          var cst_total = this.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
-          var cst_unique = this.get_four_byte_int(file_bytes.slice(i+8,i+12), byte_order);
-          var rgb_bytes = file_bytes.slice(i+12, i+sst_record_size+4);
-          var current_unique_offset = 0;
 
-          // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/173d9f51-e5d3-43da-8de2-be7f22e119b9
-          for (var u=0; u < cst_unique; u++) {
-            var char_count = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
-            var char_prop_bits = this.get_bin_from_int(rgb_bytes[current_unique_offset+2]);
-            var double_byte_chars = (char_prop_bits[0] == 1) ? true : false;
-            var rgb_len = (double_byte_chars) ? char_count * 2 : char_count;
-            var phonetic_string = (char_prop_bits[2] == 1) ? true : false;
-            var rich_string = (char_prop_bits[3] == 1) ? true : false;
+          if (sst_record_size > 0) {
+            var cst_total = this.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
+            var cst_unique = this.get_four_byte_int(file_bytes.slice(i+8,i+12), byte_order);
 
-            var varable_offset = 3;
-            var c_run;
-            var cb_ext_rst;
+            if (cst_unique > cst_total) continue;
 
-            if (rich_string) {
-              c_run = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
-              varable_offset += 2;
+            var rgb_bytes = file_bytes.slice(i+12, i+sst_record_size+4);
+            var current_unique_offset = 0;
+
+            // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/173d9f51-e5d3-43da-8de2-be7f22e119b9
+            for (var u=0; u < cst_unique; u++) {
+              var char_count = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
+              var char_prop_bits = this.get_bin_from_int(rgb_bytes[current_unique_offset+2]);
+              var double_byte_chars = (char_prop_bits[0] == 1) ? true : false;
+              var rgb_len = (double_byte_chars) ? char_count * 2 : char_count;
+              var phonetic_string = (char_prop_bits[2] == 1) ? true : false;
+              var rich_string = (char_prop_bits[3] == 1) ? true : false;
+              var reserved2 = this.get_int_from_bin(char_prop_bits.slice(4,8));
+
+              if (reserved2 != 0) break;
+
+              var varable_offset = 3;
+              var c_run;
+              var cb_ext_rst;
+
+              if (rich_string) {
+                c_run = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
+                varable_offset += 2;
+              }
+
+              if (phonetic_string) {
+                cb_ext_rst = this.get_four_byte_int(rgb_bytes.slice(current_unique_offset+varable_offset, current_unique_offset+varable_offset+2), byte_order);
+                varable_offset += 2;
+              }
+
+              var rgb = Static_File_Analyzer.get_string_from_array(rgb_bytes.slice(current_unique_offset+varable_offset, rgb_len+current_unique_offset+varable_offset));
+              current_unique_offset += rgb_len + varable_offset;
+
+              if (rich_string) {
+                var rg_run_bytes = rgb_bytes.slice(current_unique_offset, current_unique_offset+c_run+1);
+                current_unique_offset += +c_run;
+              }
+
+              if (phonetic_string) {
+                var ext_rst_bytes = rgb_bytes.slice(current_unique_offset, current_unique_offset+cb_ext_rst+1);
+                current_unique_offset += cb_ext_rst;
+              }
+
+              string_constants.push(rgb);
             }
-
-            if (phonetic_string) {
-              cb_ext_rst = this.get_four_byte_int(rgb_bytes.slice(current_unique_offset+varable_offset, current_unique_offset+varable_offset+2), byte_order);
-              varable_offset += 2;
-            }
-
-            var rgb = Static_File_Analyzer.get_string_from_array(rgb_bytes.slice(current_unique_offset+varable_offset, rgb_len+current_unique_offset+varable_offset));
-            current_unique_offset += rgb_len + varable_offset;
-
-            if (rich_string) {
-              var rg_run_bytes = rgb_bytes.slice(current_unique_offset, current_unique_offset+c_run+1);
-              current_unique_offset += +c_run;
-            }
-
-            if (phonetic_string) {
-              var ext_rst_bytes = rgb_bytes.slice(current_unique_offset, current_unique_offset+cb_ext_rst+1);
-              current_unique_offset += cb_ext_rst;
-            }
-
-            string_constants.push(rgb);
           }
-
         }
       }
 
