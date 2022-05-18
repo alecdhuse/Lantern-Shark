@@ -1295,10 +1295,10 @@ class Static_File_Analyzer {
 
       file_entry.file_mod_date = this.get_msdos_timestamp(file_bytes.slice(current_file_start+10,current_file_start+14));
       file_entry.crc32 = file_bytes.slice(current_file_start+14,current_file_start+18);
-      file_entry.compressed_size = this.get_four_byte_int(file_bytes.slice(current_file_start+18,current_file_start+22));
-      file_entry.uncompressed_size = this.get_four_byte_int(file_bytes.slice(current_file_start+22,current_file_start+26));
-      file_entry.file_name_length = this.get_two_byte_int(file_bytes.slice(current_file_start+26,current_file_start+28));
-      file_entry.extra_field_length = this.get_two_byte_int(file_bytes.slice(current_file_start+28,current_file_start+30));
+      file_entry.compressed_size = this.get_four_byte_int(file_bytes.slice(current_file_start+18,current_file_start+22), this.LITTLE_ENDIAN);
+      file_entry.uncompressed_size = this.get_four_byte_int(file_bytes.slice(current_file_start+22,current_file_start+26), this.LITTLE_ENDIAN);
+      file_entry.file_name_length = this.get_two_byte_int(file_bytes.slice(current_file_start+26,current_file_start+28), this.LITTLE_ENDIAN);
+      file_entry.extra_field_length = this.get_two_byte_int(file_bytes.slice(current_file_start+28,current_file_start+30), this.LITTLE_ENDIAN);
 
       file_entry.file_name = Static_File_Analyzer.get_ascii(file_bytes.slice(current_file_start+30,current_file_start+30+file_entry.file_name_length));
       file_entry.extra_field_start = current_file_start + 30 + file_entry.file_name_length;
