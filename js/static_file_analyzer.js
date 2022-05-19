@@ -634,25 +634,6 @@ class Static_File_Analyzer {
   }
 
   /**
-   * Converts a column index to a letter value.
-   *
-   * @param {int}     col_index An integer representing the column index.
-   * @return {String} col_name  A String giving the letter or multiletter column name.
-   */
-  convert_xls_column(col_index) {
-    var col_conversion = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
-    var char_count = (col_index == 0) ? 1 : Math.ceil(col_index / 25);
-    var col_name = "";
-
-    for (var i=0; i<char_count; i++) {
-      col_name += col_conversion[col_index % 25]
-    }
-
-    return col_name;
-  }
-
-
-  /**
    * Extracts meta data and other information from Excel Binary File Format (.xls) files.
    *
    * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cd03cb5f-ca02-4934-a391-bb674cb8aa06
@@ -1023,12 +1004,11 @@ class Static_File_Analyzer {
                 // Rgce - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6cdf7d38-d08c-4e56-bd2f-6c82b8da752e
                 var current_rgce_byte = 0;
                 var formula_type = 0;
-                var cell_formula = null;
+                var cell_formula = "";
                 var formula_calc_stack = [];
 
                 while (current_rgce_byte < rgce_bytes.length) {
                   var cell_formula_debug = Static_File_Analyzer.get_string_from_array(rgce_bytes); // temp / debug
-                  cell_formula = "";
 
                   // Ptg / formula_type - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/9310c3bb-d73f-4db0-8342-28e1e0fcb68f
                   formula_type = rgce_bytes[current_rgce_byte];
@@ -1043,6 +1023,9 @@ class Static_File_Analyzer {
                   } else if (formula_type == 0x05) {
                     // PtgMul - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/52863fc5-3d3c-4874-90e6-a7961902849f
                     formula_calc_stack.push("*");
+                  } else if (formula_type == 0x08) {
+                    // PtgConcat - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/054d699a-4383-4bbf-9df2-6a4020119c1e
+                    formula_calc_stack.push("&");
                   } else if (formula_type == 0x17) {
                     // String
                     var string_size = rgce_bytes[current_rgce_byte];
@@ -1139,7 +1122,7 @@ class Static_File_Analyzer {
                     // reference to a defined name
                     var var_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
                     var var_name = spreadsheet_var_names[var_index-1];
-                    formula_calc_stack.push(var_name);
+                    formula_calc_stack.push(var_name.name);
 
                     current_rgce_byte += 4;
                   } else if (formula_type == 0x41) {
@@ -1215,6 +1198,11 @@ class Static_File_Analyzer {
                           cell_formula = formula_calc_stack[c+1] + "=" + "\"" + formula_calc_stack[c+2]  + "\"";
 
                           formula_calc_stack = formula_calc_stack.slice(3);
+                        } else if (formula_calc_stack[c].substring(0, 6).toLowerCase() == "_xlfn.") {
+                          // Execute an Excel function.
+                          var function_name = formula_calc_stack[c].substring(6);
+                          cell_formula = function_name + "(" + formula_calc_stack[c+1] + ")";
+                          var cal_result = this.execute_excel_stack(formula_calc_stack);
                         }
                       }
                     }
@@ -1239,6 +1227,25 @@ class Static_File_Analyzer {
                     }
 
                     current_rgce_byte += 4;
+                  } else if (formula_type == 0x5A) {
+                    // PtgRef3d - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1ca817be-8df3-4b80-8d35-46b5eb753577
+                    // The PtgRef3d operand specifies a reference to a single cell on one or more sheets.
+                    var ixti = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+                    var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
+                    var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+4,current_rgce_byte+6), byte_order);
+                    var col_rel_bits = this.get_bin_from_int(col_rel);
+                    var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
+                    var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
+                    var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
+
+                    var spreadsheet_obj = Object.entries(spreadsheet_sheet_names)[ixti][1];
+                    var cell_ref = this.convert_xls_column(loc_col) + loc_row;
+                    if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
+                      formula_calc_stack.push(spreadsheet_obj.data[cell_ref]);
+                      cell_formula += spreadsheet_obj.data[cell_ref];
+                    }
+
+                    current_rgce_byte += 6;
                   } else {
                     // Non implemented formula_type
                     console.log("Unknown formula_type " + formula_type); // DEBUG
@@ -1258,8 +1265,8 @@ class Static_File_Analyzer {
                 var cell_ref = this.convert_xls_column(cell_col) + cell_row;
                 if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
                   spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
-                    'formula': "",
-                    'value': cell_formula
+                    'formula': cell_formula,
+                    'value': formula_calc_stack[0]
                   };
                 }
 
@@ -1646,6 +1653,57 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Converts a number in Roman Numerals to an arabic numerals integer.
+   *
+   * @param {String} roman_numeral A string representation of a Roman Numeral.
+   * @return {int}   The integer value if the provided Roman Numeral.
+   */
+  static convert_roman_numeral_to_int(roman_numeral) {
+    var roman = {'M':1000, 'D':500, 'C':100, 'L':50, 'X':10, 'V':5, 'I':1};
+    var return_val = 0;
+
+    roman_numeral = roman_numeral.toUpperCase();
+    var roman_digits = roman_numeral.split("");
+    var current_val, next_val;
+
+    for (var i=0; i<roman_digits.length; i++) {
+      if (i+1<roman_digits.length) {
+        current_val = roman[roman_digits[i]];
+        next_val = roman[roman_digits[i+1]];
+
+        if (current_val < next_val) {
+          return_val -= roman[roman_digits[i]];
+        } else {
+          return_val += roman[roman_digits[i]];
+        }
+      } else {
+        return_val += roman[roman_digits[i]];
+      }
+    }
+
+    return return_val;
+  }
+
+  /**
+   * Converts a column index to a letter value.
+   *
+   * @param {int}     col_index An integer representing the column index.
+   * @return {String} col_name  A String giving the letter or multiletter column name.
+   */
+  convert_xls_column(col_index) {
+    var col_conversion = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+    var char_count = (col_index == 0) ? 1 : Math.ceil(col_index / 25);
+    var col_name = "";
+
+    for (var i=0; i<char_count; i++) {
+      col_name += col_conversion[col_index % 25]
+    }
+
+    return col_name;
+  }
+
+
+  /**
    * Decompress Visual Basic for Applicaitons (VBA) files within Microsoft OOXML Documents.
    *
    * @see https://www.wordarticles.com/Articles/Formats/StreamCompression.php
@@ -1828,7 +1886,9 @@ class Static_File_Analyzer {
    * @param {object}  file_info               The working file info object, passed so we can add analytic_findings and extracted_script code.
    */
   execute_excel_formula(formula_name, formula_matches, formula_params, spreadsheet_sheet_names, active_sheet, file_info) {
-    if (formula_name.toUpperCase() == "CALL") {
+    if (formula_name.toUpperCase() == "ARABIC") {
+
+    } else if (formula_name.toUpperCase() == "CALL") {
       file_info.analytic_findings.push("SUSPICIOUS - Use of CALL function");
       file_info.scripts.extracted_script += formula_matches.input + "\n\n";
     } else if (formula_name.toUpperCase() == "CHAR") {
@@ -1906,6 +1966,24 @@ class Static_File_Analyzer {
           stack.splice(0, 3);
           stack.unshift(sub_result);
           c_index--;
+        } else if (stack[c_index] == "&") {
+          // Concat
+          var sub_result = String(stack[c_index-2]) + String(stack[c_index-1]);
+          stack.splice(0, 3);
+          stack.unshift(sub_result);
+          c_index--;
+        } else if (stack[c_index].substring(0, 6).toLowerCase() == "_xlfn.") {
+          // Execute an Excel function.
+          var function_name = stack[c_index].substring(6);
+
+          if (function_name == "ARABIC") {
+            var sub_result = Static_File_Analyzer.convert_roman_numeral_to_int(stack[c_index+1]);
+            stack.splice(0, 2);
+            stack.unshift(sub_result);
+            c_index++;
+          } else {
+            // Unknown function
+          }
         }
       }
     }
