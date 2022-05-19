@@ -1239,7 +1239,7 @@ class Static_File_Analyzer {
                     var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
 
                     var spreadsheet_obj = Object.entries(spreadsheet_sheet_names)[ixti][1];
-                    var cell_ref = this.convert_xls_column(loc_col) + loc_row;
+                    var cell_ref = this.convert_xls_column(loc_col) + loc_row+1;
                     if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
                       formula_calc_stack.push(spreadsheet_obj.data[cell_ref]);
                       cell_formula += spreadsheet_obj.data[cell_ref];
