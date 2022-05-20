@@ -1164,9 +1164,11 @@ class Static_File_Analyzer {
                         'value': var_name.name,
                         'type':  "string"
                       });
-                    }
 
-                    current_rgce_byte += 4;
+                      current_rgce_byte += 4;
+                    } else {
+                      current_rgce_byte += 1;
+                    }
                   } else if (formula_type == 0x24) {
                     // PtgRef - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc7c380b-d793-4219-a897-e47e13c4e055
                     // The PtgRef operand specifies a reference to a single cell in this sheet.
@@ -1290,7 +1292,7 @@ class Static_File_Analyzer {
                         cell_formula += function_name + "(" + cell_formula + ")";
                         break;
                       } else if (param_count >= 2) {
-                        if (formula_calc_stack[c].type == "string" && formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
+                        if (formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
                           if (formula_calc_stack[c].value == "=") {
                             // c + 1 is the varable name, c + 2 is the value.
                             spreadsheet_defined_vars[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
