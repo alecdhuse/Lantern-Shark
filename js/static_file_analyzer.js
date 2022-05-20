@@ -1045,6 +1045,13 @@ class Static_File_Analyzer {
                       'type':  "operator"
                     });
                     cell_formula += "&";
+                  } else if (formula_type == 0x0B) {
+                    // PtgEq - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d197275e-cb7f-455c-b9b5-7e968412d470
+                    formula_calc_stack.push({
+                      'value': "==",
+                      'type':  "operator"
+                    });
+                    cell_formula += "==";
                   } else if (formula_type == 0x17) {
                     // String
                     var string_size = rgce_bytes[current_rgce_byte];
@@ -1156,6 +1163,43 @@ class Static_File_Analyzer {
                       'type':  "string"
                     });
                     current_rgce_byte += 4;
+                  } else if (formula_type == 0x24) {
+                    // PtgRef - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc7c380b-d793-4219-a897-e47e13c4e055
+                    // The PtgRef operand specifies a reference to a single cell in this sheet.
+                    var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+                    var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
+                    var col_rel_bits = this.get_bin_from_int(col_rel);
+                    var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
+                    var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
+                    var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
+
+                    var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
+                    var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
+
+                    while (ixti < spreadsheet_sheet_list.length) {
+                      var spreadsheet_obj = spreadsheet_sheet_list[ixti][1];
+                      if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
+                        if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
+                          // Cell has a value we can use this.
+                          formula_calc_stack.push({
+                            'value': spreadsheet_obj.data[cell_ref].value,
+                            'type':  "string"
+                          });
+
+                          cell_formula += spreadsheet_obj.name + "!" + cell_ref;
+                        } else {
+                          // No cell value, calculate formula
+                          // TODO: not yet implemented
+                        }
+
+                        break;
+                      } else {
+                        // This loop is a hack, TODO make sure the spreadsheet indexes line up.
+                        ixti++;
+                      }
+                    }
+
+                    current_rgce_byte += 6;
                   } else if (formula_type == 0x41) {
                     // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
                     var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
@@ -1313,6 +1357,10 @@ class Static_File_Analyzer {
                     }
 
                     current_rgce_byte += 6;
+                  } else if (formula_type == 0x60) {
+                    // PtgArray - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/61167ac8-b0ca-42e5-b82c-41a25d12324c
+                    // 7 unused bytes or maybe just one?
+                    current_rgce_byte += 1;
                   } else {
                     // Non implemented formula_type
                     console.log("Unknown formula_type " + formula_type); // DEBUG
@@ -2138,6 +2186,14 @@ class Static_File_Analyzer {
           // Concat
           var sub_result = String(stack[c_index-2].value) + String(stack[c_index-1].value);
           stack.splice(0, 3);
+          stack.unshift({
+            'value': sub_result,
+            'type': "string"
+          });
+          c_index--;
+        } else if (stack[c_index].value == "==") {
+          // comparison
+          var sub_result = (String(stack[c_index-2].value) == String(stack[c_index-1].value));
           stack.unshift({
             'value': sub_result,
             'type': "string"
