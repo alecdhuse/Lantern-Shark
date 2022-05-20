@@ -1226,7 +1226,6 @@ class Static_File_Analyzer {
                       if (formula_calc_stack.length > 1) {
                         var stack_result = this.execute_excel_stack(formula_calc_stack).value;
                         cell_formula = "T(" + cell_formula + ")";
-                        var t = 0;
                       }
                     } else {
                       // Non implemented function
@@ -1242,11 +1241,10 @@ class Static_File_Analyzer {
 
                     // Execute formula_calc_stack
                     for (var c=0; c<formula_calc_stack.length; c++) {
-                      if (param_count == 1) {
+                      if (param_count == 1 && formula_calc_stack.length <= 1) {
                         // A single varable with the 0x42 formula is the EXEC macro.
-
                         // When executing a command ^ is a special, escape charater that will be ignored.
-                        // It is ofen used to obfusticate cmd codes.
+                        // It is often used to obfusticate cmd codes.
                         formula_calc_stack[c].value = formula_calc_stack[c].value.replaceAll("^", "");
                         cell_formula = "=EXEC(" + formula_calc_stack[c].value + ")";
 
@@ -1277,6 +1275,16 @@ class Static_File_Analyzer {
                             file_info.iocs.push(url_match[1]);
                           }
                         }
+                      } else if (param_count == 1 && formula_calc_stack.length > 1) {
+                        function_name = "";
+
+                        // Execute the stack, if it's length is greater than 1.
+                        if (formula_calc_stack.length > 1) {
+                          var stack_result = this.execute_excel_stack(formula_calc_stack).value;
+                        }
+
+                        cell_formula += function_name + "(" + cell_formula + ")";
+                        break;
                       } else if (param_count >= 2) {
                         if (formula_calc_stack[c].value == "=") {
                           // c + 1 is the varable name, c + 2 is the value.
