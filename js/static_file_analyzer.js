@@ -642,6 +642,7 @@ class Static_File_Analyzer {
    * @see http://www.openoffice.org/sc/compdocfileformat.pdf
    * @see https://inquest.net/blog/2019/01/29/Carving-Sneaky-XLM-Files
    * @see https://docs.microsoft.com/en-us/previous-versions/office/developer/office-2010/gg615597(v=office.14)
+   * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/43684742-8fcd-4fcd-92df-157d8d7241f9
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
@@ -869,10 +870,9 @@ class Static_File_Analyzer {
       // Test / Debug for DBCell positions
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
-          //console.log(i); // debug
           var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
           var first_row_record = this.get_four_byte_int(file_bytes.slice(i+4, i+8), byte_order);
-          var cell_record_pos = i - first_row_record;
+          var cell_record_pos = i - first_row_record; // DEBUG - double check this
 
           if (record_size > 4) {
             var current_dbcell_byte = 8;
@@ -883,7 +883,7 @@ class Static_File_Analyzer {
               cell_record_pos2 += 2;
 
               if (object_id[0] == 0x00 && object_id[1] == 0x02) {
-                // Unknown record 0x00 0x02
+                // Unknown record 0x00 0x02 - Dimensions? - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5fd3837c-9f3d-4952-8a85-ad93ddb37ced
                 var u_record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
                 var u_record_bytes = file_bytes.slice(cell_record_pos2+2, cell_record_pos2+2+u_record_size);
                 cell_record_pos2 += u_record_size + 2;
@@ -911,7 +911,7 @@ class Static_File_Analyzer {
                 // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
                 var label_set_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+0,cell_record_pos2+2), byte_order); // should be 10
 
-                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order);
+                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
                 var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
                 var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
 
@@ -936,12 +936,18 @@ class Static_File_Analyzer {
                     'formula': "",
                     'value': cell_val
                   };
+
+                  console.log(cell_ref + " - No Formula - " + cell_val); // DEBUG
                 }
+              } else if (object_id[0] == 0x07 && object_id[1] == 0x02) {
+                // String?
+                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
+                cell_record_pos2 += record_size + 2;
               } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
                 // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
                 var formula_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
 
-                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order);
+                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
                 var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
                 var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
 
@@ -1135,17 +1141,24 @@ class Static_File_Analyzer {
                       // COUNT
                     } else if (iftab == 0x0001) {
                       // IF
+                    } else if (iftab == 0x005A) {
+                      // DEREF - Reference another cell
                     } else if (iftab == 0x006F) {
                       // CHAR
                       var stack_result = this.execute_excel_stack(formula_calc_stack);
                       cell_formula += "CHAR(" + stack_result + ")";
                       formula_calc_stack.splice(-1, 1, String.fromCharCode(stack_result));
+                    } else if (iftab == 0x0082) {
+                      // t-params = (ref / val)
+                      if (formula_calc_stack.length > 1) {
+                        var stack_result = this.execute_excel_stack(formula_calc_stack);
+                      }
                     } else {
                       // Non implemented function
                       console.log("Unknown function " + iftab); // DEBUG
                     }
 
-                    current_rgce_byte += 3;
+                    current_rgce_byte += 2;
                   } else if (formula_type == 0x42) {
                     // PtgFuncVar - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d105171-6b73-4f40-a7cd-6bf2aae15e83
                     var param_count = rgce_bytes[current_rgce_byte];
@@ -1238,11 +1251,26 @@ class Static_File_Analyzer {
                     var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
                     var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
 
-                    var spreadsheet_obj = Object.entries(spreadsheet_sheet_names)[ixti][1];
-                    var cell_ref = this.convert_xls_column(loc_col) + loc_row+1;
-                    if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
-                      formula_calc_stack.push(spreadsheet_obj.data[cell_ref]);
-                      cell_formula += spreadsheet_obj.data[cell_ref];
+                    var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
+                    var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
+
+                    while (ixti < spreadsheet_sheet_list.length) {
+                      var spreadsheet_obj = spreadsheet_sheet_list[ixti][1];
+                      if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
+                        if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
+                          // Cell has a value we can use this.
+                          formula_calc_stack.push(spreadsheet_obj.data[cell_ref].value);
+                          cell_formula += spreadsheet_obj.name + "!" + cell_ref;
+                        } else {
+                          // No cell value, calculate formula
+                          // TODO: not yet implemented
+                        }
+
+                        break;
+                      } else {
+                        // This loop is a hack, TODO make sure the spreadsheet indexes line up.
+                        ixti++;
+                      }
                     }
 
                     current_rgce_byte += 6;
@@ -1268,23 +1296,110 @@ class Static_File_Analyzer {
                     'formula': cell_formula,
                     'value': formula_calc_stack[0]
                   };
+
+                  console.log(cell_ref + " - " + cell_formula + " - " + formula_calc_stack[0]); // DEBUG
                 }
 
                 cell_record_pos2 += formula_size + 2;
+              } else if (object_id[0] == 0x7E && object_id[1] == 0x02) {
+                // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
+                // The RK record specifies the numeric data contained in a single cell.
+                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
+
+                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
+                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
+                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
+
+                // RkNumber - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/04fa5340-122f-49db-93ea-00cc75501efc
+                var rk_number_bits = this.get_binary_array(file_bytes.slice(cell_record_pos2+8, cell_record_pos2+12), byte_order);
+                var cell_value = 0;
+
+                if (rk_number_bits[1] == 0) {
+                  // rk_number is the 30 most significant bits of a 64-bit binary floating-point number as defined in [IEEE754]. The remaining 34-bits of the floating-point number MUST be 0.
+                  var bits = rk_number_bits.slice(2).reverse();
+                  //var sign = (bits[0] == 1) ? -1.0 : 1.0;
+                  //var ext = bits.slice(1,12);
+                  //var m = bits.slice(12).concat([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+
+                  var test1 = bits.concat([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+                  var bytes = [
+                    this.get_int_from_bin(test1.slice(0,7)),
+                    this.get_int_from_bin(test1.slice(8,16)),
+                    this.get_int_from_bin(test1.slice(16,24)),
+                    this.get_int_from_bin(test1.slice(24,32)),
+                    this.get_int_from_bin(test1.slice(32,40)),
+                    this.get_int_from_bin(test1.slice(41,48)),
+                    this.get_int_from_bin(test1.slice(48,56)),
+                    this.get_int_from_bin(test1.slice(56,64))
+                  ];
+
+                  var buf = new ArrayBuffer(4);
+                  var view = new DataView(buf);
+
+                  view.setUint8(0, bytes[0]);
+                  view.setUint8(1, bytes[1]);
+                  view.setUint8(2, bytes[2]);
+                  view.setUint8(3, bytes[3]);
+                  cell_value = view.getFloat32(0, false);
+
+                  /*
+                  var bits = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | (bytes[3]);
+                  var sign = ((bits >>> 31) == 0) ? 1.0 : -1.0;
+                  var e = ((bits >>> 23) & 0xff);
+                  var m = (e == 0) ? (bits & 0x7fffff) << 1 : (bits & 0x7fffff) | 0x800000;
+                  cell_value = sign * m * Math.pow(2, (e - 150));
+                  var t=0;
+                  */
+                } else {
+                  // rk_number is a signed integer.
+                  var rk_number = this.get_int_from_bin(rk_number_bits.slice(3));
+                  cell_value = (rk_number_bits[2] == 1) ? rk_number * -1 : rk_number;
+                }
+
+                if (rk_number_bits[0] == 1) {
+                  // The value of RkNumber is the value of rk_number divided by 100.
+                  cell_value = cell_value / 100;
+                }
+
+                // Derive sheetname
+                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
+                var sheet_name = "";
+                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
+                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
+                    sheet_name = spreadsheet_sheet_indexes[si][1].name;
+                    break;
+                  }
+                }
+
+                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
+                if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
+                  spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
+                    'formula': null,
+                    'value': cell_value
+                  };
+
+                  console.log(cell_ref + " - null - " + cell_value); // DEBUG
+                }
+
+                cell_record_pos2 += record_size + 2;
               } else {
                 // error
+                var cell_id = this.get_two_byte_int([object_id[0],object_id[1]], byte_order);
+                console.log("Err: " + cell_id + " - " + object_id[0] + " " + object_id[1]);
+
                 cell_record_pos2++;
               }
             }
 
             // TODO this probably isn't needed anymore
+            /*
             while (current_dbcell_byte < record_size) {
               var rgdb = this.get_two_byte_int(file_bytes.slice(i+current_dbcell_byte, i+current_dbcell_byte+2), byte_order);
               cell_record_pos += rgdb;
 
               current_dbcell_byte += 2;
             }
-
+            */
           }
 
         }
