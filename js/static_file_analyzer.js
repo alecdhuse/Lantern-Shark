@@ -1044,6 +1044,7 @@ class Static_File_Analyzer {
                       'value': "&",
                       'type':  "operator"
                     });
+                    cell_formula += "&";
                   } else if (formula_type == 0x17) {
                     // String
                     var string_size = rgce_bytes[current_rgce_byte];
@@ -1167,6 +1168,7 @@ class Static_File_Analyzer {
                       // IF
                     } else if (iftab == 0x005A) {
                       // DEREF - Reference another cell
+                      cell_formula += "=";
                     } else if (iftab == 0x006F) {
                       // CHAR
                       var stack_result = this.execute_excel_stack(formula_calc_stack).value;
@@ -1179,6 +1181,8 @@ class Static_File_Analyzer {
                       // t-params = (ref / val)
                       if (formula_calc_stack.length > 1) {
                         var stack_result = this.execute_excel_stack(formula_calc_stack).value;
+                        cell_formula = "T(" + cell_formula + ")";
+                        var t = 0;
                       }
                     } else {
                       // Non implemented function
@@ -1235,13 +1239,13 @@ class Static_File_Analyzer {
                           spreadsheet_defined_vars[formula_calc_stack[c+1]] = formula_calc_stack[c+2];
 
                           //Set a human readable value for this cell
-                          cell_formula = formula_calc_stack[c+1] + "=" + "\"" + formula_calc_stack[c+2]  + "\"";
+                          cell_formula += formula_calc_stack[c+1] + "=" + "\"" + formula_calc_stack[c+2]  + "\"";
 
                           formula_calc_stack = formula_calc_stack.slice(3);
                         } else if (formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
                           // Execute an Excel function.
                           var function_name = formula_calc_stack[c].value.substring(6);
-                          cell_formula = function_name + "(" + formula_calc_stack[c+1] + ")";
+                          cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
                           var cal_result = this.execute_excel_stack(formula_calc_stack);
                         }
                       }
@@ -2142,26 +2146,36 @@ class Static_File_Analyzer {
         }
       } else {
         if (stack[c_index].type == "string") {
-          if (stack[c_index].value.substring(0, 6).toLowerCase() == "_xlfn.") {
-            // Execute an Excel function.
-            var function_name = stack[c_index].value.substring(6);
+          if (stack[c_index].value !== null && stack[c_index].value !== undefined) {
+            try {
+              if (String(stack[c_index].value).substring(0, 6).toLowerCase() == "_xlfn.") {
+                // Execute an Excel function.
+                var function_name = stack[c_index].value.substring(6);
 
-            if (function_name == "ARABIC") {
-              var sub_result = Static_File_Analyzer.convert_roman_numeral_to_int(stack[c_index+1].value);
-              stack.splice(0, 2);
-              stack.unshift({
-                'value': sub_result,
-                'type': "number"
-              });
-              c_index++;
-            } else {
-              // Unknown function
-              c_index++;
+                if (function_name == "ARABIC") {
+                  var sub_result = Static_File_Analyzer.convert_roman_numeral_to_int(stack[c_index+1].value);
+                  stack.splice(0, 2);
+                  stack.unshift({
+                    'value': sub_result,
+                    'type': "number"
+                  });
+                  c_index++;
+                } else {
+                  // Unknown function
+                  c_index++;
+                }
+              } else {
+                // Skip other stirngs for now
+                c_index++;
+              }
+            } catch(err) {
+              console.log(err);
             }
           } else {
-            // Skip other stirngs for now
+            // Program error somewhere :(
             c_index++;
           }
+
         } else {
           // Skip numbers and strings
           c_index++
