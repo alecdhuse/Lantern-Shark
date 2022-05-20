@@ -1022,16 +1022,28 @@ class Static_File_Analyzer {
 
                   if (formula_type == 0x03) {
                     // PtgAdd - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/27db2f45-11e8-4238-94ed-92fd9c5721fb
-                    formula_calc_stack.push("+");
+                    formula_calc_stack.push({
+                      'value': "+",
+                      'type':  "operator"
+                    });
                   } else if (formula_type == 0x04) {
                     // PtgSub - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ee15a1fa-77bb-45e1-8c8c-0e7bef7f7552
-                    formula_calc_stack.push("-");
+                    formula_calc_stack.push({
+                      'value': "-",
+                      'type':  "operator"
+                    });
                   } else if (formula_type == 0x05) {
                     // PtgMul - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/52863fc5-3d3c-4874-90e6-a7961902849f
-                    formula_calc_stack.push("*");
+                    formula_calc_stack.push({
+                      'value': "*",
+                      'type':  "operator"
+                    });
                   } else if (formula_type == 0x08) {
                     // PtgConcat - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/054d699a-4383-4bbf-9df2-6a4020119c1e
-                    formula_calc_stack.push("&");
+                    formula_calc_stack.push({
+                      'value': "&",
+                      'type':  "operator"
+                    });
                   } else if (formula_type == 0x17) {
                     // String
                     var string_size = rgce_bytes[current_rgce_byte];
@@ -1048,8 +1060,11 @@ class Static_File_Analyzer {
                       string_end = current_rgce_byte + 2 + string_size;
                     }
 
-                    var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));
-                    formula_calc_stack.push(string_val);
+                    var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));;
+                    formula_calc_stack.push({
+                      'value': string_val,
+                      'type':  "string"
+                    });
 
                     current_rgce_byte = string_end;
                   } else if (formula_type == 0x18) {
@@ -1103,7 +1118,11 @@ class Static_File_Analyzer {
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x20 || rgce_bytes[current_rgce_byte] == 0x21) {
                       // PtgAttrBaxcel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fcd76e10-6072-4dcf-b591-47edc8822792
-                      formula_calc_stack.push("="); // This is my implementaiton, not based on MS / Excel.
+                      // This is my implementaiton, not based on MS / Excel.
+                      formula_calc_stack.push({
+                        'value': "=",
+                        'type':  "operator"
+                      });
                       // next two bytes unused, should be zero
                       current_rgce_byte += 3;
                     } else if (rgce_bytes[current_rgce_byte] == 0x40) {
@@ -1121,15 +1140,20 @@ class Static_File_Analyzer {
                   } else if (formula_type == 0x1E) {
                     // PtgInt - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/508ecf18-3b81-4628-95b3-7a9d2a295bca
                     var ptg_int_val = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
-                    formula_calc_stack.push(ptg_int_val);
+                    formula_calc_stack.push({
+                      'value': ptg_int_val,
+                      'type':  "number"
+                    });
                     current_rgce_byte += 2;
                   } else if (formula_type == 0x23) {
                     // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
                     // reference to a defined name
                     var var_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
                     var var_name = spreadsheet_var_names[var_index-1];
-                    formula_calc_stack.push(var_name.name);
-
+                    formula_calc_stack.push({
+                      'value': var_name.name,
+                      'type':  "string"
+                    });
                     current_rgce_byte += 4;
                   } else if (formula_type == 0x41) {
                     // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
@@ -1145,13 +1169,16 @@ class Static_File_Analyzer {
                       // DEREF - Reference another cell
                     } else if (iftab == 0x006F) {
                       // CHAR
-                      var stack_result = this.execute_excel_stack(formula_calc_stack);
+                      var stack_result = this.execute_excel_stack(formula_calc_stack).value;
                       cell_formula += "CHAR(" + stack_result + ")";
-                      formula_calc_stack.splice(-1, 1, String.fromCharCode(stack_result));
+                      formula_calc_stack.splice(-1, 1, {
+                        'value': String.fromCharCode(stack_result),
+                        'type':  "string"
+                      });
                     } else if (iftab == 0x0082) {
                       // t-params = (ref / val)
                       if (formula_calc_stack.length > 1) {
-                        var stack_result = this.execute_excel_stack(formula_calc_stack);
+                        var stack_result = this.execute_excel_stack(formula_calc_stack).value;
                       }
                     } else {
                       // Non implemented function
@@ -1172,8 +1199,8 @@ class Static_File_Analyzer {
 
                         // When executing a command ^ is a special, escape charater that will be ignored.
                         // It is ofen used to obfusticate cmd codes.
-                        formula_calc_stack[c] = formula_calc_stack[c].replaceAll("^", "");
-                        cell_formula = "=EXEC(" + formula_calc_stack[c] + ")";
+                        formula_calc_stack[c].value = formula_calc_stack[c].value.replaceAll("^", "");
+                        cell_formula = "=EXEC(" + formula_calc_stack[c].value + ")";
 
                         file_info.scripts.script_type = "Excel 4.0 Macro";
                         file_info.scripts.extracted_script += cell_formula + "\n\n";
@@ -1203,7 +1230,7 @@ class Static_File_Analyzer {
                           }
                         }
                       } else if (param_count >= 2) {
-                        if (formula_calc_stack[c] == "=") {
+                        if (formula_calc_stack[c].value == "=") {
                           // c + 1 is the varable name, c + 2 is the value.
                           spreadsheet_defined_vars[formula_calc_stack[c+1]] = formula_calc_stack[c+2];
 
@@ -1211,9 +1238,9 @@ class Static_File_Analyzer {
                           cell_formula = formula_calc_stack[c+1] + "=" + "\"" + formula_calc_stack[c+2]  + "\"";
 
                           formula_calc_stack = formula_calc_stack.slice(3);
-                        } else if (formula_calc_stack[c].substring(0, 6).toLowerCase() == "_xlfn.") {
+                        } else if (formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
                           // Execute an Excel function.
-                          var function_name = formula_calc_stack[c].substring(6);
+                          var function_name = formula_calc_stack[c].value.substring(6);
                           cell_formula = function_name + "(" + formula_calc_stack[c+1] + ")";
                           var cal_result = this.execute_excel_stack(formula_calc_stack);
                         }
@@ -1231,7 +1258,11 @@ class Static_File_Analyzer {
                       var ref_var_name = spreadsheet_var_names[name_index-1];
 
                       if (spreadsheet_defined_vars.hasOwnProperty(ref_var_name.name)) {
-                        formula_calc_stack.push(spreadsheet_defined_vars[ref_var_name.name]);
+                        formula_calc_stack.push({
+                          'value': spreadsheet_defined_vars[ref_var_name.name],
+                          'type':  "string"
+                        });
+
                       } else {
                         // Varable ref error.
                       }
@@ -1259,7 +1290,11 @@ class Static_File_Analyzer {
                       if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
                         if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
                           // Cell has a value we can use this.
-                          formula_calc_stack.push(spreadsheet_obj.data[cell_ref].value);
+                          formula_calc_stack.push({
+                            'value': spreadsheet_obj.data[cell_ref].value,
+                            'type':  "string"
+                          });
+
                           cell_formula += spreadsheet_obj.name + "!" + cell_ref;
                         } else {
                           // No cell value, calculate formula
@@ -1294,10 +1329,10 @@ class Static_File_Analyzer {
                 if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
                   spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
                     'formula': cell_formula,
-                    'value': formula_calc_stack[0]
+                    'value': formula_calc_stack[0].value
                   };
 
-                  console.log(cell_ref + " - " + cell_formula + " - " + formula_calc_stack[0]); // DEBUG
+                  console.log(cell_ref + " - " + cell_formula + " - " + formula_calc_stack[0].value); // DEBUG
                 }
 
                 cell_record_pos2 += formula_size + 2;
@@ -2058,47 +2093,78 @@ class Static_File_Analyzer {
    * @param {array}    stack The list of operations to execute.
    * @return {boolean} The result of the execution / calculation.
    */
-  execute_excel_stack(stack) {
+    execute_excel_stack(stack) {
     var c_index = 0;
 
     while (c_index < stack.length) {
-      if (stack[c_index] === parseInt(stack[c_index], 10)) {
-        // Number, skip for now
-        c_index++
-      } else {
-        if (stack[c_index] == "-") {
-          var sub_result = stack[c_index-2] - stack[c_index-1];
+      if (stack[c_index].type == "operator") {
+        if (stack[c_index].value == "-") {
+          var sub_result = stack[c_index-2].value - stack[c_index-1].value;
           stack.splice(0, 3);
-          stack.unshift(sub_result);
+          stack.unshift({
+            'value': sub_result,
+            'type': "number"
+          });
           c_index--;
-        } else if (stack[c_index] == "+") {
-          var sub_result = stack[c_index-2] + stack[c_index-1];
+        } else if (stack[c_index].value == "+") {
+          var sub_result = stack[c_index-2].value + stack[c_index-1].value;
           stack.splice(0, 3);
-          stack.unshift(sub_result);
+          stack.unshift({
+            'value': sub_result,
+            'type': "number"
+          });
           c_index--;
-        } else if (stack[c_index] == "*") {
-          var sub_result = stack[c_index-2] * stack[c_index-1];
+        } else if (stack[c_index].value == "*") {
+          var sub_result = stack[c_index-2].value * stack[c_index-1].value;
           stack.splice(0, 3);
-          stack.unshift(sub_result);
+          stack.unshift({
+            'value': sub_result,
+            'type': "number"
+          });
           c_index--;
-        } else if (stack[c_index] == "&") {
+        } else if (stack[c_index].value == "/") {
+          var sub_result = stack[c_index-2].value / stack[c_index-1].value;
+          stack.splice(0, 3);
+          stack.unshift({
+            'value': sub_result,
+            'type': "number"
+          });
+          c_index--;
+        } else if (stack[c_index].value == "&") {
           // Concat
-          var sub_result = String(stack[c_index-2]) + String(stack[c_index-1]);
+          var sub_result = String(stack[c_index-2].value) + String(stack[c_index-1].value);
           stack.splice(0, 3);
-          stack.unshift(sub_result);
+          stack.unshift({
+            'value': sub_result,
+            'type': "string"
+          });
           c_index--;
-        } else if (stack[c_index].substring(0, 6).toLowerCase() == "_xlfn.") {
-          // Execute an Excel function.
-          var function_name = stack[c_index].substring(6);
+        }
+      } else {
+        if (stack[c_index].type == "string") {
+          if (stack[c_index].value.substring(0, 6).toLowerCase() == "_xlfn.") {
+            // Execute an Excel function.
+            var function_name = stack[c_index].value.substring(6);
 
-          if (function_name == "ARABIC") {
-            var sub_result = Static_File_Analyzer.convert_roman_numeral_to_int(stack[c_index+1]);
-            stack.splice(0, 2);
-            stack.unshift(sub_result);
-            c_index++;
+            if (function_name == "ARABIC") {
+              var sub_result = Static_File_Analyzer.convert_roman_numeral_to_int(stack[c_index+1].value);
+              stack.splice(0, 2);
+              stack.unshift({
+                'value': sub_result,
+                'type': "number"
+              });
+              c_index++;
+            } else {
+              // Unknown function
+              c_index++;
+            }
           } else {
-            // Unknown function
+            // Skip other stirngs for now
+            c_index++;
           }
+        } else {
+          // Skip numbers and strings
+          c_index++
         }
       }
     }
