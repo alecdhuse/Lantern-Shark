@@ -1157,11 +1157,15 @@ class Static_File_Analyzer {
                     // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
                     // reference to a defined name
                     var var_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
-                    var var_name = spreadsheet_var_names[var_index-1];
-                    formula_calc_stack.push({
-                      'value': var_name.name,
-                      'type':  "string"
-                    });
+
+                    if (var_index-1 < spreadsheet_var_names.length) {
+                      var var_name = spreadsheet_var_names[var_index-1];
+                      formula_calc_stack.push({
+                        'value': var_name.name,
+                        'type':  "string"
+                      });
+                    }
+
                     current_rgce_byte += 4;
                   } else if (formula_type == 0x24) {
                     // PtgRef - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc7c380b-d793-4219-a897-e47e13c4e055
@@ -1286,19 +1290,21 @@ class Static_File_Analyzer {
                         cell_formula += function_name + "(" + cell_formula + ")";
                         break;
                       } else if (param_count >= 2) {
-                        if (formula_calc_stack[c].value == "=") {
-                          // c + 1 is the varable name, c + 2 is the value.
-                          spreadsheet_defined_vars[formula_calc_stack[c+1]] = formula_calc_stack[c+2];
+                        if (formula_calc_stack[c].type == "string" && formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
+                          if (formula_calc_stack[c].value == "=") {
+                            // c + 1 is the varable name, c + 2 is the value.
+                            spreadsheet_defined_vars[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
 
-                          //Set a human readable value for this cell
-                          cell_formula += formula_calc_stack[c+1] + "=" + "\"" + formula_calc_stack[c+2]  + "\"";
+                            //Set a human readable value for this cell
+                            cell_formula += formula_calc_stack[c+1].value + "=" + "\"" + formula_calc_stack[c+2].value  + "\"";
 
-                          formula_calc_stack = formula_calc_stack.slice(3);
-                        } else if (formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
-                          // Execute an Excel function.
-                          var function_name = formula_calc_stack[c].value.substring(6);
-                          cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
-                          var cal_result = this.execute_excel_stack(formula_calc_stack);
+                            formula_calc_stack = formula_calc_stack.slice(3);
+                          } else if (formula_calc_stack[c].value.length > 6 && formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
+                            // Execute an Excel function.
+                            var function_name = formula_calc_stack[c].value.substring(6);
+                            cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
+                            var cal_result = this.execute_excel_stack(formula_calc_stack);
+                          }
                         }
                       }
                     }
@@ -1389,10 +1395,10 @@ class Static_File_Analyzer {
                 if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
                   spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
                     'formula': cell_formula,
-                    'value': formula_calc_stack[0].value
+                    'value': (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""
                   };
 
-                  console.log(cell_ref + " - " + cell_formula + " - " + formula_calc_stack[0].value); // DEBUG
+                  //console.log(cell_ref + " - " + cell_formula + " - " + (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""); // DEBUG
                 }
 
                 cell_record_pos2 += formula_size + 2;
@@ -1479,8 +1485,8 @@ class Static_File_Analyzer {
                 cell_record_pos2 += record_size + 2;
               } else {
                 // error
-                var cell_id = this.get_two_byte_int([object_id[0],object_id[1]], byte_order);
-                console.log("Err: " + cell_id + " - " + object_id[0] + " " + object_id[1]);
+                //var cell_id = this.get_two_byte_int([object_id[0],object_id[1]], byte_order);
+                //console.log("Err: " + cell_id + " - " + object_id[0] + " " + object_id[1]);
 
                 cell_record_pos2++;
               }
