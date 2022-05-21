@@ -1375,7 +1375,8 @@ class Static_File_Analyzer {
                     current_rgce_byte += 6;
                   } else if (formula_type == 0x60) {
                     // PtgArray - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/61167ac8-b0ca-42e5-b82c-41a25d12324c
-                    // 7 unused bytes or maybe just one?
+                    // Maybe just one unused byte?
+                    // TODO: Implement this.
                     current_rgce_byte += 1;
                   } else {
                     // Non implemented formula_type
@@ -1400,7 +1401,7 @@ class Static_File_Analyzer {
                     'value': (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""
                   };
 
-                  //console.log(cell_ref + " - " + cell_formula + " - " + (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""); // DEBUG
+                  console.log(cell_ref + " - " + cell_formula + " - " + (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""); // DEBUG
                 }
 
                 cell_record_pos2 += formula_size + 2;
@@ -1419,43 +1420,30 @@ class Static_File_Analyzer {
 
                 if (rk_number_bits[1] == 0) {
                   // rk_number is the 30 most significant bits of a 64-bit binary floating-point number as defined in [IEEE754]. The remaining 34-bits of the floating-point number MUST be 0.
-                  var bits = rk_number_bits.slice(2).reverse();
-                  //var sign = (bits[0] == 1) ? -1.0 : 1.0;
-                  //var ext = bits.slice(1,12);
-                  //var m = bits.slice(12).concat([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
 
-                  var test1 = bits.concat([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
-                  var bytes = [
-                    this.get_int_from_bin(test1.slice(0,7)),
-                    this.get_int_from_bin(test1.slice(8,16)),
-                    this.get_int_from_bin(test1.slice(16,24)),
-                    this.get_int_from_bin(test1.slice(24,32)),
-                    this.get_int_from_bin(test1.slice(32,40)),
-                    this.get_int_from_bin(test1.slice(41,48)),
-                    this.get_int_from_bin(test1.slice(48,56)),
-                    this.get_int_from_bin(test1.slice(56,64))
-                  ];
+                  var rk_bytes = file_bytes.slice(cell_record_pos2+9, cell_record_pos2+12).reverse();
+                  var rk_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+8]);
+                  rk_bits[0] = 0;
+                  rk_bits[1] = 0;
+                  rk_bytes.push(this.get_int_from_bin(rk_bits.reverse()));
 
-                  var buf = new ArrayBuffer(4);
+                  var buf = new ArrayBuffer(8);
                   var view = new DataView(buf);
 
-                  view.setUint8(0, bytes[0]);
-                  view.setUint8(1, bytes[1]);
-                  view.setUint8(2, bytes[2]);
-                  view.setUint8(3, bytes[3]);
-                  cell_value = view.getFloat32(0, false);
+                  view.setUint8(0, rk_bytes[0]);
+                  view.setUint8(1, rk_bytes[1]);
+                  view.setUint8(2, rk_bytes[2]);
+                  view.setUint8(3, rk_bytes[3]);
+                  view.setUint8(4, 0);
+                  view.setUint8(5, 0);
+                  view.setUint8(6, 0);
+                  view.setUint8(7, 0);
 
-                  /*
-                  var bits = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | (bytes[3]);
-                  var sign = ((bits >>> 31) == 0) ? 1.0 : -1.0;
-                  var e = ((bits >>> 23) & 0xff);
-                  var m = (e == 0) ? (bits & 0x7fffff) << 1 : (bits & 0x7fffff) | 0x800000;
-                  cell_value = sign * m * Math.pow(2, (e - 150));
-                  var t=0;
-                  */
+                  cell_value = view.getFloat64(0, false);
+
                 } else {
                   // rk_number is a signed integer.
-                  var rk_number = this.get_int_from_bin(rk_number_bits.slice(3));
+                  var rk_number = this.get_int_from_bin(rk_number_bits.slice(3), byte_order);
                   cell_value = (rk_number_bits[2] == 1) ? rk_number * -1 : rk_number;
                 }
 
