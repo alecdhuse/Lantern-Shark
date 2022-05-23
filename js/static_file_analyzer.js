@@ -1588,11 +1588,12 @@ class Static_File_Analyzer {
 
                 cell_record_pos2 += record_size + 2;
               } else {
-                // error
+                // Unknown record
+                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
                 var cell_id = "";
-                console.log("Err: " + object_id[0] + " " + object_id[1]);
+                //console.log("Unknown record: " + object_id[0] + " " + object_id[1]);
 
-                cell_record_pos2++;
+                cell_record_pos2 += record_size;
               }
             }
 
