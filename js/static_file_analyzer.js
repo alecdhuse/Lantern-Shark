@@ -363,7 +363,6 @@ class Static_File_Analyzer {
             metadata_matches = metadata_regex.exec(objects_matches[1]);
           }
         }
-        //console.log(objects_matches[1]); // DEBUG
       } else if (objects_matches[2] == "stream") {
         var start_index = objects_matches.index + objects_matches[0].length;
         var end_index = file_text.indexOf("endstream", start_index);
@@ -690,22 +689,31 @@ class Static_File_Analyzer {
     var summary_info_pos = workbook_pos + 128;
     var doc_summary_info_pos = summary_info_pos + 128;
 
-    if (file_bytes[sector_size] == 9) {
+    // Find BOF - Beginning of file record
+    for (var i=sector_size; i<file_bytes.length; i++) {
+      if (file_bytes[i] == 0x09 && file_bytes[i+1] == 0x08) {
+        // Found Beginning of file record.
+        current_byte = i;
+        break;
+      }
+    }
+
+    if (file_bytes[current_byte] == 0x09) {
       // Beginning of file record found.
 
       // BIFF 5 and 7 has a length of 8 bytes. For BIFF 8, the length of the BOF record can be either 8 or 16 bytes.
-      var biff_record_length = this.get_two_byte_int(file_bytes.slice(sector_size+2,sector_size+4), byte_order);
+      var biff_record_length = this.get_two_byte_int(file_bytes.slice(current_byte+2,current_byte+4), byte_order);
 
       // Byte value of 5 representing BIFF 5/7 and 6 representing BIFF 8.
-      var biff_version = file_bytes[sector_size+5];
-      var xlm_val = file_bytes.slice(sector_size+6,sector_size+8);
+      var biff_version = file_bytes[current_byte+5];
+      var xlm_val = file_bytes.slice(current_byte+6,current_byte+8);
 
       if (this.array_equals(xlm_val, [40,0])) {
         // Excel 4.0 macro sheet
         file_info.scripts.script_type = "Excel 4.0 Macro";
       }
 
-      current_byte = sector_size+8;
+      current_byte += 8;
 
       var rup_build = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
       var rup_year = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
@@ -1526,8 +1534,8 @@ class Static_File_Analyzer {
                     'value': (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""
                   };
 
-                  //var cellval_debug = (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : "";
-                  //console.log(cell_ref + " - " + cell_formula + " - " + cellval_debug); // DEBUG
+                  var cellval_debug = (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : "";
+                  console.log(cell_ref + " - " + cell_formula + " - " + cellval_debug); // DEBUG
                 }
 
                 cell_record_pos2 += formula_size + 2;
@@ -1630,6 +1638,11 @@ class Static_File_Analyzer {
                 }
 
                 cell_record_pos2 += record_size + 2;
+              } else if (object_id[0] == 0xBE && object_id[1] == 0x00) {
+                // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
+                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
+                // These are blank cells, not implementing at this time.
+                cell_record_pos2 += record_size;
               } else {
                 // Unknown record
                 var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
@@ -1706,6 +1719,7 @@ class Static_File_Analyzer {
 
     } else {
       // File format error.
+      console.log("No BOF record found.");
     }
 
     return file_info;
