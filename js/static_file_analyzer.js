@@ -929,6 +929,7 @@ class Static_File_Analyzer {
                     break;
                   }
                 }
+                if (sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
 
                 var cell_ref = this.convert_xls_column(cell_col) + cell_row;
                 if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
@@ -936,8 +937,6 @@ class Static_File_Analyzer {
                     'formula': "",
                     'value': cell_val
                   };
-
-                  console.log(cell_ref + " - No Formula - " + cell_val); // DEBUG
                 }
               } else if (object_id[0] == 0x07 && object_id[1] == 0x02) {
                 // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
@@ -968,6 +967,18 @@ class Static_File_Analyzer {
                 var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
                 var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
                 var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
+
+                // Derive the current Sheetname
+                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
+                var current_sheet_name = "";
+                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
+                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
+                    current_sheet_name = spreadsheet_sheet_indexes[si][1].name;
+                    break;
+                  }
+                }
+
+                if (current_sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
 
                 // FormulaValue - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/39a0757a-c7bb-4e85-b144-3e7837b059d7
                 var formula_byte1 = file_bytes[cell_record_pos2+8];
@@ -1196,11 +1207,47 @@ class Static_File_Analyzer {
                     var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
                     var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
 
-                    var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
                     var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
+                    var spreadsheet_obj = null;
+                    for (var ssi=0; ssi<spreadsheet_sheet_list.length; ssi++) {
+                      if (spreadsheet_sheet_list[ssi][1].name == current_sheet_name) {
+                        spreadsheet_obj = spreadsheet_sheet_list[ssi][1];
+                        break;
+                      }
+                    }
 
-                    while (ixti < spreadsheet_sheet_list.length) {
-                      var spreadsheet_obj = spreadsheet_sheet_list[ixti][1];
+                    // Check to what the next rgce_byte is, as that will affect what action is taken.
+                    if (rgce_bytes[current_rgce_byte+6] == 0x60) {
+                      // Put reference
+                      // Calculate the stack.
+                      var stack_result = this.execute_excel_stack(formula_calc_stack).value;
+                      stack_result = stack_result.replaceAll(/\\?[\"\']&\\?[\"\']/gm, "");
+
+                      if (stack_result.charAt(0) == "=") {
+                        // This is an Excel formula or macro
+                        var c_formula_name = stack_result.split("(")[0].toUpperCase();
+
+                        if (c_formula_name == "=CALL" || c_formula_name == "=EXEC" || c_formula_name == "=IF") {
+                          file_info.scripts.script_type = "Excel 4.0 Macro";
+                          file_info.scripts.extracted_script += stack_result + "\n\n";
+
+                          var url_match = /((?:https?\:\/\/|\\\\)[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]+)/gmi.exec(stack_result);
+                          if (url_match !== null) {
+                            // TODO: check for HEX IP and to decode it.
+                            file_info.iocs.push(url_match[1]);
+                          }
+                        }
+                      }
+
+                      spreadsheet_obj.data[cell_ref] = {
+                        'value': stack_result,
+                        'type':  "string"
+                      }
+
+                      formula_calc_stack.shift();
+                      current_rgce_byte += 8;
+                    } else {
+                      // Get reference
                       if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
                         if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
                           // Cell has a value we can use this.
@@ -1216,13 +1263,10 @@ class Static_File_Analyzer {
                         }
 
                         break;
-                      } else {
-                        // This loop is a hack, TODO make sure the spreadsheet indexes line up.
-                        ixti++;
                       }
-                    }
 
-                    current_rgce_byte += 6;
+                      current_rgce_byte += 6;
+                    }
                   } else if (formula_type == 0x41) {
                     // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
                     var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
@@ -1430,6 +1474,8 @@ class Static_File_Analyzer {
                   }
                 }
 
+                if (sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
+
                 var cell_ref = this.convert_xls_column(cell_col) + cell_row;
                 if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
                   spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
@@ -1437,8 +1483,8 @@ class Static_File_Analyzer {
                     'value': (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""
                   };
 
-                  var cellval_debug = (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : "";
-                  console.log(cell_ref + " - " + cell_formula + " - " + cellval_debug); // DEBUG
+                  //var cellval_debug = (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : "";
+                  //console.log(cell_ref + " - " + cell_formula + " - " + cellval_debug); // DEBUG
                 }
 
                 cell_record_pos2 += formula_size + 2;
@@ -1530,36 +1576,26 @@ class Static_File_Analyzer {
                   }
                 }
 
+                if (sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
+
                 var cell_ref = this.convert_xls_column(cell_col) + cell_row;
                 if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
                   spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
                     'formula': null,
                     'value': cell_value
                   };
-
-                  console.log(cell_ref + " - null - " + cell_value); // DEBUG
                 }
 
                 cell_record_pos2 += record_size + 2;
               } else {
                 // error
-                //var cell_id = this.get_two_byte_int([object_id[0],object_id[1]], byte_order);
                 var cell_id = "";
-                console.log("Err: " + cell_id + " - " + object_id[0] + " " + object_id[1]);
+                console.log("Err: " + object_id[0] + " " + object_id[1]);
 
                 cell_record_pos2++;
               }
             }
 
-            // TODO this probably isn't needed anymore
-            /*
-            while (current_dbcell_byte < record_size) {
-              var rgdb = this.get_two_byte_int(file_bytes.slice(i+current_dbcell_byte, i+current_dbcell_byte+2), byte_order);
-              cell_record_pos += rgdb;
-
-              current_dbcell_byte += 2;
-            }
-            */
           }
 
         }
@@ -2266,17 +2302,15 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "==") {
           // comparison
-          var sub_result = (String(stack[c_index-2].value) == String(stack[c_index-1].value));
-
-          /*
-          stack.unshift({
-            'value': sub_result,
-            'type': "string"
-          });
-          c_index--;
-          */
-          c_index++;
+          if (c_index == 0) {
+            // TODO: Implement this more fully. Currently we are just skipping it.
+            stack.shift();
+          } else {
+            var sub_result = (String(stack[c_index-2].value) == String(stack[c_index-1].value));
+            c_index++;
+          }
         } else if (stack[c_index].value == "[]") {
+          // TODO: Implement this more fully.
           if (stack[c_index-1].value.charAt(0) == "=") {
             var code_script = stack[c_index-1].value.replaceAll(/\\?[\"\']&\\?[\"\']/gm, "");
             file_info.scripts.extracted_script += code_script + "\n\n";
