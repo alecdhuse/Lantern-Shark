@@ -1717,6 +1717,36 @@ class Static_File_Analyzer {
         }
       }
 
+      // Hack to find VBA code. TODO proppery index file to get VBA
+      for (var i=current_byte; i<file_bytes.length; i++) {
+        if (file_bytes[i] == 0x01 && file_bytes[i+3] == 0x00 && file_bytes[i+4] == 0x41 && file_bytes[i+5] == 0x74 && file_bytes[i+6] == 0x74) {
+          var compressed_header = [file_bytes[i+2], file_bytes[i+1]]; // Little Endian
+          var header_bit_array = this.get_binary_array(Uint8Array.from(compressed_header));
+          var compressed_chunk_byte_size = this.get_int_from_bin(header_bit_array.slice(4, 16), this.BIG_ENDIAN) + 5;
+
+          var vba_compressed_bytes = file_bytes.slice(i,i+compressed_chunk_byte_size);
+          var vba_bytes = this.decompress_vba(vba_compressed_bytes);
+          var vba_code = Static_File_Analyzer.get_ascii(vba_bytes);
+
+          var sub_match = /\n[a-z\s]?Sub[^\(]+\([^\)]*\)/gmi.exec(vba_code);
+
+          if (sub_match != null) {
+            file_info.scripts.script_type = "VBA Macro";
+            vba_code = vba_code.substring(sub_match.index).trim();
+            var analyzed_results = this.analyze_embedded_script(vba_code);
+
+            for (var f=0; f<analyzed_results.findings.length; f++) {
+              file_info.analytic_findings.push(analyzed_results.findings[f]);
+            }
+
+            for (var f=0; f<analyzed_results.iocs.length; f++) {
+              file_info.iocs.push(analyzed_results.iocs[f]);
+            }
+
+            file_info.scripts.extracted_script += vba_code + "\n\n";
+          }
+        }
+      }
     } else {
       // File format error.
       console.log("No BOF record found.");
