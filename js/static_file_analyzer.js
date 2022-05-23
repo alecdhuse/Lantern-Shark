@@ -1067,6 +1067,18 @@ class Static_File_Analyzer {
                       'value': "*",
                       'type':  "operator"
                     });
+                  } else if (formula_type == 0x06) {
+                    // PtgDiv - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/10585b24-618d-47f4-8ffa-65811d18ad13
+                    formula_calc_stack.push({
+                      'value': "/",
+                      'type':  "operator"
+                    });
+                  } else if (formula_type == 0x07) {
+                    // PtgPower - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e115b216-5dda-4a5b-95d2-cadf0ada9a82
+                    formula_calc_stack.push({
+                      'value': "^",
+                      'type':  "operator"
+                    });
                   } else if (formula_type == 0x08) {
                     // PtgConcat - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/054d699a-4383-4bbf-9df2-6a4020119c1e
                     formula_calc_stack.push({
@@ -1181,6 +1193,29 @@ class Static_File_Analyzer {
                       'type':  "number"
                     });
                     current_rgce_byte += 2;
+                  } else if (formula_type == 0x1F) {
+                    // PtgNum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/40e69183-2cd3-4051-87ba-2f3ccb82bcfa
+                    var float_bytes = rgce_bytes.slice(current_rgce_byte,current_rgce_byte+8);
+                    var buf = new ArrayBuffer(8);
+                    var view = new DataView(buf);
+
+                    view.setUint8(0, float_bytes[0]);
+                    view.setUint8(1, float_bytes[1]);
+                    view.setUint8(2, float_bytes[2]);
+                    view.setUint8(3, float_bytes[3]);
+                    view.setUint8(4, float_bytes[4]);
+                    view.setUint8(5, float_bytes[5]);
+                    view.setUint8(6, float_bytes[6]);
+                    view.setUint8(7, float_bytes[7]);
+
+                    var float_val = view.getFloat64(0, true);
+
+                    formula_calc_stack.push({
+                      'value': float_val,
+                      'type':  "number"
+                    });
+
+                    current_rgce_byte += 8;
                   } else if (formula_type == 0x23) {
                     // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
                     // reference to a defined name
@@ -2286,6 +2321,14 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "/") {
           var sub_result = stack[c_index-2].value / stack[c_index-1].value;
+          stack.splice(c_index-2, 3);
+          stack.unshift({
+            'value': sub_result,
+            'type': "number"
+          });
+          c_index--;
+        } else if (stack[c_index].value == "^") {
+          var sub_result = Math.pow(stack[c_index-2].value, stack[c_index-1].value);
           stack.splice(c_index-2, 3);
           stack.unshift({
             'value': sub_result,
