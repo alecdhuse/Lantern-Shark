@@ -1312,6 +1312,14 @@ class Static_File_Analyzer {
                       // COUNT
                     } else if (iftab == 0x0001) {
                       // IF
+                    } else if (iftab == 0x0030) {
+                      // Text
+                      // TODO - this is a hack and not really implemented.
+                      cell_formula = "=TEXT(" + cell_formula + ")";
+                      formula_calc_stack.splice(-1, 2, {
+                        'value': formula_calc_stack.splice(-2, 1)[0].value,
+                        'type':  "string"
+                      });
                     } else if (iftab == 0x005A) {
                       // DEREF - Reference another cell
                       cell_formula += "=";
@@ -1327,7 +1335,7 @@ class Static_File_Analyzer {
                       // t-params = (ref / val)
                       if (formula_calc_stack.length > 1) {
                         var stack_result = this.execute_excel_stack(formula_calc_stack).value;
-                        cell_formula = "T(" + cell_formula + ")";
+                        cell_formula = "=T(" + cell_formula + ")";
                       }
                     } else if (iftab == 0x0096) {
                       // Call Function
