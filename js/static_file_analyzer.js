@@ -940,8 +940,26 @@ class Static_File_Analyzer {
                   console.log(cell_ref + " - No Formula - " + cell_val); // DEBUG
                 }
               } else if (object_id[0] == 0x07 && object_id[1] == 0x02) {
-                // String?
+                // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
+                // This is probably the pre-calculated cell vaue of the previous cell.
                 var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
+
+                var string_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
+                var byte_option_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+4]);
+                var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
+                var string_end;
+
+                if (double_byte_chars) {
+                  // Characters are two bytes each.
+                  string_end = cell_record_pos2 + 5 + (string_size * 2);
+                } else {
+                  // Characters are one byte each.
+                  string_end = cell_record_pos2 + 5 + string_size;
+                }
+
+                var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(cell_record_pos2+5, string_end));;
+                console.log("Unassociated String - Value " + string_val); // DEBUG
+
                 cell_record_pos2 += record_size + 2;
               } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
                 // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
@@ -1058,7 +1076,6 @@ class Static_File_Analyzer {
                     var byte_option_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte+1]);
                     var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
                     var string_end;
-                    var string_bytes;
 
                     if (double_byte_chars) {
                       // Characters are two bytes each.
@@ -1233,6 +1250,9 @@ class Static_File_Analyzer {
                         var stack_result = this.execute_excel_stack(formula_calc_stack).value;
                         cell_formula = "T(" + cell_formula + ")";
                       }
+                    } else if (iftab == 0x0096) {
+                      // Call Function
+                      console.log("Call function not implemented.");
                     } else {
                       // Non implemented function
                       console.log("Unknown function " + iftab); // DEBUG
@@ -1377,11 +1397,27 @@ class Static_File_Analyzer {
                     // PtgArray - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/61167ac8-b0ca-42e5-b82c-41a25d12324c
                     // Maybe just one unused byte?
                     // TODO: Implement this.
+
+                    var data_type = this.get_bin_from_int(formula_type).slice(5,7);
+
+                    formula_calc_stack.push({
+                      'value': "[]",
+                      'type':  "operator"
+                    });
+
                     current_rgce_byte += 1;
                   } else {
                     // Non implemented formula_type
                     console.log("Unknown formula_type " + formula_type); // DEBUG
                   }
+                }
+
+                if (formula_calc_stack.length > 1) {
+                  var stack_result2 = this.execute_excel_stack(formula_calc_stack);
+                  //console.log("Call Stack Debug: " + formula_calc_stack.join(""));
+                  console.log("Call Stack Result Debug:");
+                  console.log(stack_result2);
+                  var rr=0;
                 }
 
                 // Derive sheetname
@@ -1401,10 +1437,42 @@ class Static_File_Analyzer {
                     'value': (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""
                   };
 
-                  console.log(cell_ref + " - " + cell_formula + " - " + (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""); // DEBUG
+                  var cellval_debug = (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : "";
+                  console.log(cell_ref + " - " + cell_formula + " - " + cellval_debug); // DEBUG
                 }
 
                 cell_record_pos2 += formula_size + 2;
+
+                // Check if next record is a string. As that will probably mean it's the pre-calculated value of this cell.
+                if (this.array_equals(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), [0x07,0x02])) {
+                  // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
+                  var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
+                  var string_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4,cell_record_pos2+6), byte_order);
+
+                  var byte_option_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+6]);
+                  var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
+                  var string_end;
+
+                  if (double_byte_chars) {
+                    // Characters are two bytes each.
+                    string_end = cell_record_pos2 + 7 + (string_size * 2);
+                  } else {
+                    // Characters are one byte each.
+                    string_end = cell_record_pos2 + 7 + string_size;
+                  }
+
+                  var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(cell_record_pos2+7, string_end));;
+
+                  if (string_val == spreadsheet_sheet_names[sheet_name].data[cell_ref].value) {
+                    // Nothing to do
+                  } else {
+                    console.log("Calculated value and pre-calculated value miss match.");
+                    console.log("Cal: " + spreadsheet_sheet_names[sheet_name].data[cell_ref].value);
+                    console.log("Precal: " + string_val);
+                  }
+
+                  cell_record_pos2 += record_size + 4;
+                }
               } else if (object_id[0] == 0x7E && object_id[1] == 0x02) {
                 // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
                 // The RK record specifies the numeric data contained in a single cell.
@@ -1476,7 +1544,8 @@ class Static_File_Analyzer {
               } else {
                 // error
                 //var cell_id = this.get_two_byte_int([object_id[0],object_id[1]], byte_order);
-                //console.log("Err: " + cell_id + " - " + object_id[0] + " " + object_id[1]);
+                var cell_id = "";
+                console.log("Err: " + cell_id + " - " + object_id[0] + " " + object_id[1]);
 
                 cell_record_pos2++;
               }
@@ -2156,7 +2225,7 @@ class Static_File_Analyzer {
       if (stack[c_index].type == "operator") {
         if (stack[c_index].value == "-") {
           var sub_result = stack[c_index-2].value - stack[c_index-1].value;
-          stack.splice(0, 3);
+          stack.splice(c_index-2, 3);
           stack.unshift({
             'value': sub_result,
             'type': "number"
@@ -2164,7 +2233,7 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "+") {
           var sub_result = stack[c_index-2].value + stack[c_index-1].value;
-          stack.splice(0, 3);
+          stack.splice(c_index-2, 3);
           stack.unshift({
             'value': sub_result,
             'type': "number"
@@ -2172,7 +2241,7 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "*") {
           var sub_result = stack[c_index-2].value * stack[c_index-1].value;
-          stack.splice(0, 3);
+          stack.splice(c_index-2, 3);
           stack.unshift({
             'value': sub_result,
             'type': "number"
@@ -2180,7 +2249,7 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "/") {
           var sub_result = stack[c_index-2].value / stack[c_index-1].value;
-          stack.splice(0, 3);
+          stack.splice(c_index-2, 3);
           stack.unshift({
             'value': sub_result,
             'type': "number"
@@ -2189,7 +2258,7 @@ class Static_File_Analyzer {
         } else if (stack[c_index].value == "&") {
           // Concat
           var sub_result = String(stack[c_index-2].value) + String(stack[c_index-1].value);
-          stack.splice(0, 3);
+          stack.splice(c_index-2, 3);
           stack.unshift({
             'value': sub_result,
             'type': "string"
@@ -2198,11 +2267,33 @@ class Static_File_Analyzer {
         } else if (stack[c_index].value == "==") {
           // comparison
           var sub_result = (String(stack[c_index-2].value) == String(stack[c_index-1].value));
+
+          /*
           stack.unshift({
             'value': sub_result,
             'type': "string"
           });
           c_index--;
+          */
+          c_index++;
+        } else if (stack[c_index].value == "[]") {
+          if (stack[c_index-1].value.charAt(0) == "=") {
+            var code_script = stack[c_index-1].value.replaceAll(/\\?[\"\']&\\?[\"\']/gm, "");
+            file_info.scripts.extracted_script += code_script + "\n\n";
+
+            if (code_script.substr(0,3).toUpperCase() == "=IF") {
+              // TODO return the actual valuse
+              stack.splice(c_index-1, 2, {'value': "true",'type': "string"});
+            } else {
+              // return true
+              stack.splice(c_index-1, 2, {'value': "true",'type': "string"});
+            }
+          } else {
+
+          }
+       } else {
+          c_index++;
+          console.log("Unknown Operator");
         }
       } else {
         if (stack[c_index].type == "string") {
@@ -2214,7 +2305,7 @@ class Static_File_Analyzer {
 
                 if (function_name == "ARABIC") {
                   var sub_result = Static_File_Analyzer.convert_roman_numeral_to_int(stack[c_index+1].value);
-                  stack.splice(0, 2);
+                  stack.splice(c_index, 2);
                   stack.unshift({
                     'value': sub_result,
                     'type': "number"
@@ -2222,6 +2313,7 @@ class Static_File_Analyzer {
                   c_index++;
                 } else {
                   // Unknown function
+                  console.log("Unknown Function");
                   c_index++;
                 }
               } else {
