@@ -2048,6 +2048,20 @@ class Static_File_Analyzer {
       }
     }
 
+    var analyzed_results = this.analyze_embedded_script(file_info.scripts.extracted_script);
+
+    for (var f=0; f<analyzed_results.findings.length; f++) {
+      if (analyzed_results.findings.indexOf(analyzed_results.findings[f]) < 0) {
+        file_info.analytic_findings.push(analyzed_results.findings[f]);
+      }
+    }
+
+    for (var f=0; f<analyzed_results.iocs.length; f++) {
+      if (file_info.iocs.indexOf(analyzed_results.iocs[f]) < 0) {
+          file_info.iocs.push(analyzed_results.iocs[f]);
+      }
+    }
+
     return file_info;
   }
 
@@ -2229,7 +2243,7 @@ class Static_File_Analyzer {
       while (formula_matches[param_index] !== null && formula_matches[param_index] !== undefined) {
         if ((formula_matches[param_index].match(/\!/g) || []).length > 1) {
           //Multiple cell references
-          if ((formula_matches[param_index].match(/\&amp\;/gi) || []).length > 1) {
+          if ((formula_matches[param_index].match(/\&amp\;/gmi) || []).length > 1) {
             // Concat
             var concat_parts = formula_matches[param_index].split("&amp;");
             var concat_result = "";
@@ -2238,6 +2252,8 @@ class Static_File_Analyzer {
               concat_result += this.get_ooxlm_cell_data(concat_parts[p], spreadsheet_sheet_names, active_sheet).value;
             }
 
+            // Look for nested string concat and do the concat.
+            concat_result = concat_result.replaceAll(/[\"\']\&amp\;[\"\']/gmi, "");
             formula_params[param_index] = concat_result;
           }
         } else {
