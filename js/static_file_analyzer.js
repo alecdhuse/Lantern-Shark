@@ -1727,6 +1727,7 @@ class Static_File_Analyzer {
           var vba_compressed_bytes = file_bytes.slice(i,i+compressed_chunk_byte_size);
           var vba_bytes = this.decompress_vba(vba_compressed_bytes);
           var vba_code = Static_File_Analyzer.get_ascii(vba_bytes);
+          vba_code = this.pretty_print_vba(vba_code);
 
           var sub_match = /\n[a-z\s]?Sub[^\(]+\([^\)]*\)/gmi.exec(vba_code);
 
@@ -2931,4 +2932,53 @@ class Static_File_Analyzer {
     return !!(array.buffer instanceof ArrayBuffer && array.BYTES_PER_ELEMENT);
   }
 
+  /**
+   * Returns pretty print formated VBA code.
+   *
+   * @param  {String} vba_code The VBA code to format.
+   * @return {String} The pretty print formated VBA code.
+   */
+  pretty_print_vba(vba_code) {
+    var indent = "";
+    var indent_amt = 0;
+    var output_code = "";
+    var code_lines = vba_code.split("\n");
+    var line_tokens;
+    var current_line_token;
+
+    var indent_triggers = ["If","Else","ElseIf","For","Open","Sub","While","With"];
+    var indent_end = ["Close","Else","ElseIf","End","Next","Wend"];
+
+    for (var i=0; i<code_lines.length; i++) {
+      line_tokens = code_lines[i].split(" ");
+
+      if (line_tokens[0] == "Public" || line_tokens[0] == "Private") {
+        current_line_token = line_tokens[1].trim();
+      } else {
+        current_line_token = line_tokens[0].trim();
+      }
+
+      if (indent_triggers.includes(current_line_token.trim())) {
+        if (code_lines[i].slice(-1) == "_") {
+          output_code += indent + code_lines[i].slice(0,-1) + code_lines[i+1] + "\n";
+          i++;
+        } else {
+          output_code += indent + code_lines[i] + "\n";
+        }
+
+        indent_amt++;
+        indent = (indent_amt > 0) ? Array(indent_amt+1).join("\t") : "";
+      } else if (indent_end.includes(current_line_token.trim())) {
+        indent_amt--;
+        indent = (indent_amt > 0) ? Array(indent_amt+1).join("\t") : "";
+        output_code += indent + code_lines[i] + "\n";
+
+        if (code_lines[i].trim() == "End Sub") output_code += "\n";
+      } else {
+        output_code += indent + code_lines[i] + "\n";
+      }
+    }
+
+    return output_code;
+  }
 }
