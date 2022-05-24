@@ -2163,7 +2163,7 @@ class Static_File_Analyzer {
             var number_of_offset_bits = (number_of_bits < 4) ? 4 : ((number_of_bits > 12) ? 12 : number_of_bits);
 
             var offset_bytes = this.get_int_from_bin(copy_token_bits.slice(0, number_of_offset_bits), this.BIG_ENDIAN) + 1;
-            var byte_length = this.get_int_from_bin(copy_token_bits.slice(number_of_offset_bits+1, copy_token_bits.length+1), this.BIG_ENDIAN) + 3;
+            var byte_length = this.get_int_from_bin(copy_token_bits.slice(number_of_offset_bits), this.BIG_ENDIAN) + 3;
             current_byte += 2;
 
             // do the copy
@@ -2195,7 +2195,7 @@ class Static_File_Analyzer {
       }
 
     } else {
-      // Error, header block not find
+      // Error, header block not found
     }
 
     // Remove null chars from the end of the array
