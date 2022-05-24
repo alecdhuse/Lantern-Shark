@@ -703,6 +703,10 @@ class Static_File_Analyzer {
     var summary_info_pos = workbook_pos + 128;
     var doc_summary_info_pos = summary_info_pos + 128;
 
+    if (this.array_equals(file_bytes.slice(workbook_pos, workbook_pos+13),[0x45,0x00,0x6E,0x00,0x63,0x00,0x72,0x00,0x79,0x00,0x70,0x00,0x74])) {
+      file_info.file_encrypted = true;
+    }
+
     // Find BOF - Beginning of file record
     for (var i=sector_size; i<file_bytes.length; i++) {
       if (file_bytes[i] == 0x09 && file_bytes[i+1] == 0x08) {
