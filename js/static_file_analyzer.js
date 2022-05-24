@@ -839,7 +839,6 @@ class Static_File_Analyzer {
 
           var published_name = (prop_bits[13] == 1) ? true : false;
           var is_workbook_param  = (prop_bits[14] == 1) ? true : false;
-          //if (prop_bits[15] != 0) continue;
 
           var shortcut_key = file_bytes[i+6];
           var name_char_count = file_bytes[i+7];
@@ -875,7 +874,7 @@ class Static_File_Analyzer {
         }
       }
 
-      // Test / Debug for DBCell positions
+      // Find DBCell positions
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
           var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
