@@ -20,7 +20,7 @@ See the table below for a list of supported file types and types of data extract
 | RAR            | X            | X               |                 |          |                  |                   |
 | PNG            | X            | X               |                 | X        |                  |                   |
 | PPTX           | X            | X               | X               | X        |                  |                   |
-| XLS            | X            |                 |                 |          |                  |                   |
+| XLS            | X            |                 |                 |          | X                | X                 |
 | XLSX           | X            | X               | X               | X        | X                | X                 |
 | XML            | X            |                 |                 |          |                  |                   |
 | ZIP            | X            | X               | X               |          |                  |                   |
