@@ -676,6 +676,7 @@ class Static_File_Analyzer {
       sector_size = 4096;
     }
 
+    var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), byte_order);
     var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), byte_order);
     var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), byte_order);
     var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), byte_order);
@@ -683,6 +684,19 @@ class Static_File_Analyzer {
     var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), byte_order);
     var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), byte_order);
     var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), byte_order);
+    var difat_bytes = file_bytes.slice(76,512);
+    var difat_index = Array();
+    var difat_loc = Array();
+
+    for (var di=0; di<difat_bytes.length; di+=4) {
+      var di_index = this.get_four_byte_int(difat_bytes.slice(di,di+4), byte_order);
+      if (di_index != 4294967295) {
+        difat_index.push(di_index);
+
+        var di_location = (di_index + 1) * sector_size;
+        difat_loc.push(di_location);
+      }
+    }
 
     var sec_1_pos = 512 + (sec_id_1 * sector_size); // Should be Root Entry
     var workbook_pos = sec_1_pos + 128;
