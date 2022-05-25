@@ -596,6 +596,7 @@ class Static_File_Analyzer {
    * @see http://www.snake.net/software/RTF/RTF-Spec-1.7.pdf
    * @see https://www.mandiant.com/resources/how-rtf-malware-evad
    * @see https://blog.talosintelligence.com/2017/03/how-malformed-rtf-defeats-security.html
+   * @see https://www.decalage.info/rtf_tricks
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
@@ -615,23 +616,37 @@ class Static_File_Analyzer {
     }
 
     // Read RTF header
-    var url_match = /\\(rt[a-zA-Z]*)([0-9]+)/gmi.exec(file_text_ascii);
-    if (url_match !== null) {
-      if (url_match[1] != "rtf") {
+    var header_match = /\\(rt[a-zA-Z]*)([0-9]+)/gmi.exec(file_text_ascii);
+    if (header_match !== null) {
+      if (header_match[1] != "rtf") {
         // Malformed header
-        file_info.analytic_findings.push("SUSPICIOUS - Malformed RTF header: " + url_match[1]);
+        file_info.analytic_findings.push("SUSPICIOUS - Malformed RTF header: " + header_match[1]);
       }
 
-      if (url_match[2] != "1" && url_match[2] != "2" ) {
+      if (header_match[2] != "1") {
         // Invalid RTF version
-        file_info.analytic_findings.push("SUSPICIOUS - Invalid RTF Version: " + url_match[2]);
+        file_info.analytic_findings.push("SUSPICIOUS - Invalid RTF Version: " + header_match[2]);
       }
     }
 
-    var control_word;
-    var control_word_delimiter;
-    var group = [];
+    //Look for Hex data
+    var hex_data_regex = /(\\[a-zA-Z0-9]+)?[\s\r\n\-]([a-fA-F0-9]+[\s\r\n]*)+[\s\}\\]/gm;
+    var hex_data_match = hex_data_regex.exec(file_text_ascii);
 
+    while (hex_data_match != null) {
+      var hex_data = hex_data_match[0].replace(/[^0-9A-Fa-f]/g, '');
+
+      // Microsoft Word allows an extra hex digit, which if present it ignores.
+      if (hex_data.length & 1) {
+        // Odd hex length trim hex data.
+        hex_data = hex_data.slice(0,-1);
+      }
+
+      // Do basic checks to see if the hex data is an OLE Object.
+      var format_id = [Number("0x" + hex_data.substring(4,2)), Number("0x" + hex_data.substring(6,2))];
+
+      hex_data_match = hex_data_regex.exec(file_text_ascii);
+    }
 
     return file_info;
   }
