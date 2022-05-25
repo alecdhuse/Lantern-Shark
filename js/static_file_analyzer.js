@@ -37,10 +37,6 @@ class Static_File_Analyzer {
     this.BIG_ENDIAN = "BIG_ENDIAN";
     this.LITTLE_ENDIAN = "LITTLE_ENDIAN";
 
-    if (file_text == "") {
-      file_text = Static_File_Analyzer.get_ascii(file_bytes);
-    }
-
     var file_info = this.get_default_file_json();
 
     if (this.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
@@ -55,9 +51,13 @@ class Static_File_Analyzer {
       file_info = this.analyze_jpeg(file_bytes);
     } else if (this.array_equals(file_bytes.slice(0,6), [82,97,114,33,26,7])) {
       file_info = this.analyze_rar(file_bytes);
+    } else if (this.array_equals(file_bytes.slice(0,4), [0x7b,0x5c,0x72,0x74])) {
+      file_info = this.analyze_rtf(file_bytes);
     } else if (this.array_equals(file_bytes.slice(0,4), [37,80,68,70])) {
+      if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_pdf(file_bytes, file_text);
     } else if (this.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
+      if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_png(file_bytes, file_text);
     } else if (this.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
       file_info = this.analyze_xls(file_bytes);
@@ -67,6 +67,7 @@ class Static_File_Analyzer {
       file_info = this.analyze_zip(file_bytes);
     } else {
       // Probably a text or mark up/down language
+      if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
     }
 
     return file_info;
@@ -585,6 +586,52 @@ class Static_File_Analyzer {
     } else if (file_bytes[24] == 1) {
       file_info.metadata.creation_os = "Unix";
     }
+
+    return file_info;
+  }
+
+  /**
+   * Extracts meta data and other information from RTF document files.
+   *
+   * @see http://www.snake.net/software/RTF/RTF-Spec-1.7.pdf
+   * @see https://www.mandiant.com/resources/how-rtf-malware-evad
+   * @see https://blog.talosintelligence.com/2017/03/how-malformed-rtf-defeats-security.html
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_rtf(file_bytes, file_text) {
+    // Get ASCII and Unicode translation of bytes.
+    var file_text_unicode = Static_File_Analyzer.get_string_from_array(file_bytes);
+    var file_text_ascii = Static_File_Analyzer.get_ascii(file_bytes);
+
+    var file_info = this.get_default_file_json();
+
+    file_info.file_format = "rtf";
+    file_info.file_generic_type = "Document";
+
+    if (file_text_unicode != file_text_ascii) {
+      file_info.analytic_findings.push("SUSPICIOUS - Non-ASCII characters detected");
+    }
+
+    // Read RTF header
+    var url_match = /\\(rtf?)([0-9]+)/gmi.exec(file_text_ascii);
+    if (url_match !== null) {
+      if (url_match[1] != "rtf") {
+        // Malformed header
+        file_info.analytic_findings.push("SUSPICIOUS - Malformed RTF header");
+      }
+
+      if (url_match[2] != "1" && url_match[2] != "2" ) {
+        // Invalid RTF version
+        file_info.analytic_findings.push("SUSPICIOUS - Invalid RTF Version");
+      }
+    }
+
+    var control_word;
+    var control_word_delimiter;
+    var group = [];
+
 
     return file_info;
   }
