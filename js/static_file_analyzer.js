@@ -615,16 +615,16 @@ class Static_File_Analyzer {
     }
 
     // Read RTF header
-    var url_match = /\\(rtf?)([0-9]+)/gmi.exec(file_text_ascii);
+    var url_match = /\\(rt[a-zA-Z]*)([0-9]+)/gmi.exec(file_text_ascii);
     if (url_match !== null) {
       if (url_match[1] != "rtf") {
         // Malformed header
-        file_info.analytic_findings.push("SUSPICIOUS - Malformed RTF header");
+        file_info.analytic_findings.push("SUSPICIOUS - Malformed RTF header: " + url_match[1]);
       }
 
       if (url_match[2] != "1" && url_match[2] != "2" ) {
         // Invalid RTF version
-        file_info.analytic_findings.push("SUSPICIOUS - Invalid RTF Version");
+        file_info.analytic_findings.push("SUSPICIOUS - Invalid RTF Version: " + url_match[2]);
       }
     }
 
