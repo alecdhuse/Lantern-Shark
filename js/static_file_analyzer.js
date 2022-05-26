@@ -610,7 +610,9 @@ class Static_File_Analyzer {
 
     file_info.file_format = "rtf";
     file_info.file_generic_type = "Document";
-
+    file_info.file_encrypted = "false";
+    file_info.file_encryption_type = "none";
+    
     if (file_text_unicode != file_text_ascii) {
       file_info.analytic_findings.push("SUSPICIOUS - Non-ASCII characters detected");
     }
@@ -626,10 +628,66 @@ class Static_File_Analyzer {
       if (header_match[2] != "1") {
         // Invalid RTF version
         file_info.analytic_findings.push("SUSPICIOUS - Invalid RTF Version: " + header_match[2]);
+      } else {
+        file_info.file_format_ver = "1";
       }
     }
 
-    //Look for Hex data
+    // Look for metadata
+    var doc_title_match = /\{\s*\\title\s+([^\}]+)/gmi.exec(file_text_ascii);
+    file_info.metadata.title = (doc_title_match !== null) ? doc_title_match[1] : "none";
+
+    var doc_subject_match = /\{\s*\\subject\s+([^\}]+)/gmi.exec(file_text_ascii);
+    file_info.metadata.description = (doc_subject_match !== null) ? doc_subject_match[1] : "none";
+
+    var doc_author_match = /\{\s*\\author\s+([^\}]+)/gmi.exec(file_text_ascii);
+    file_info.metadata.author = (doc_author_match !== null) ? doc_author_match[1] : "none";
+
+    var doc_operator_match = /\{\s*\\operator\s+([^\}]+)/gmi.exec(file_text_ascii);
+    var doc_operator = (doc_operator_match !== null) ? doc_operator_match[1] : "none";
+    file_info.metadata.author = (doc_operator != file_info.metadata.author) ? (file_info.metadata.author + " and " + doc_operator) : file_info.metadata.author;
+
+    var doc_creation_match = /\{\s*\\creatim\s*(?:\\yr([0-9]{2,4})\s*)?(?:\\mo([0-9]{1,2})\s*)?(?:\\dy([0-9]{1,2})\s*)?(?:\\hr([0-9]{1,2})\s*)?(?:\\min([0-9]{1,2}))?/gmi.exec(file_text_ascii);
+    if (doc_creation_match !== null) {
+      var create_year  = (doc_creation_match[1] !== null) ? doc_creation_match[1] : "0000";
+      var create_month = (doc_creation_match[2] !== null) ? doc_creation_match[2] : "00";
+      var create_day   = (doc_creation_match[3] !== null) ? doc_creation_match[3] : "00";
+      var create_hour  = (doc_creation_match[4] !== null) ? doc_creation_match[4] : "00";
+      var create_min   = (doc_creation_match[5] !== null) ? doc_creation_match[5] : "00";
+
+      create_month = (create_month.length == 1) ? "0" + create_month : create_month;
+      create_day   = (create_day.length == 1) ? "0" + create_day : create_day;
+      create_hour  = (create_hour.length == 1) ? "0" + create_hour : create_hour;
+      create_min   = (create_min.length == 1) ? "0" + create_min : create_min;
+
+      file_info.metadata.creation_date = create_year + "-" + create_month + "-" + create_day + " " + create_hour + ":" + create_min + ":00";
+    }
+
+    var doc_modified_match = /\{\s*\\revtim\s*(?:\\yr([0-9]{2,4})\s*)?(?:\\mo([0-9]{1,2})\s*)?(?:\\dy([0-9]{1,2})\s*)?(?:\\hr([0-9]{1,2})\s*)?(?:\\min([0-9]{1,2}))?/gmi.exec(file_text_ascii);
+    if (doc_modified_match !== null) {
+      var mod_year  = (doc_modified_match[1] !== null) ? doc_modified_match[1] : "0000";
+      var mod_month = (doc_modified_match[2] !== null) ? doc_modified_match[2] : "00";
+      var mod_day   = (doc_modified_match[3] !== null) ? doc_modified_match[3] : "00";
+      var mod_hour  = (doc_modified_match[4] !== null) ? doc_modified_match[4] : "00";
+      var mod_min   = (doc_modified_match[5] !== null) ? doc_modified_match[5] : "00";
+
+      mod_month = (mod_month.length == 1) ? "0" + mod_month : mod_month;
+      mod_day   = (mod_day.length == 1) ? "0" + mod_day : mod_day;
+      mod_hour  = (mod_hour.length == 1) ? "0" + mod_hour : mod_hour;
+      mod_min   = (mod_min.length == 1) ? "0" + mod_min : mod_min;
+
+      file_info.metadata.last_modified_date = mod_year + "-" + mod_month + "-" + mod_day + " " + mod_hour + ":" + mod_min + ":00";
+    }
+
+    var doc_creation_app_match = /\\xml[0-9a-z]*\s*https?\:\/\/schemas\.microsoft\.com\/office\/word\//gmi.exec(file_text_ascii);
+    if (doc_creation_app_match !== null) {
+      file_info.metadata.creation_application = "Microsoft Word";
+    }
+
+    //file_info.metadata.creation_os = "";
+
+
+    // Look for Hex data
     var hex_data_regex = /(\\[a-zA-Z0-9]+)?[\s\r\n\-]([a-fA-F0-9]+[\s\r\n]*)+[\s\}\\]/gm;
     var hex_data_match = hex_data_regex.exec(file_text_ascii);
 
