@@ -612,7 +612,7 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "Document";
     file_info.file_encrypted = "false";
     file_info.file_encryption_type = "none";
-    
+
     if (file_text_unicode != file_text_ascii) {
       file_info.analytic_findings.push("SUSPICIOUS - Non-ASCII characters detected");
     }
@@ -684,9 +684,6 @@ class Static_File_Analyzer {
       file_info.metadata.creation_application = "Microsoft Word";
     }
 
-    //file_info.metadata.creation_os = "";
-
-
     // Look for Hex data
     var hex_data_regex = /(\\[a-zA-Z0-9]+)?[\s\r\n\-]([a-fA-F0-9]+[\s\r\n]*)+[\s\}\\]/gm;
     var hex_data_match = hex_data_regex.exec(file_text_ascii);
@@ -700,8 +697,21 @@ class Static_File_Analyzer {
         hex_data = hex_data.slice(0,-1);
       }
 
+      // Convert to array
+      var hex_bytes = Array(hex_data.length/2);
+      hex_bytes[0] = Number("0x" + hex_data.substring(0,2));
+
+      for (var bi=2; bi<hex_data.length; bi+=2) {
+        hex_bytes[bi/2] = Number("0x" + hex_data.substring(bi,bi+2));
+      }
+
       // Do basic checks to see if the hex data is an OLE Object.
-      var format_id = [Number("0x" + hex_data.substring(4,2)), Number("0x" + hex_data.substring(6,2))];
+      var format_id = [Number("0x" + hex_data.substring(4,6)), Number("0x" + hex_data.substring(6,8))];
+
+      var test_ascii = Static_File_Analyzer.get_ascii(hex_bytes.slice(0, (hex_bytes.length < 256) ? hex_bytes.length : 256));
+      if (/equation[^\d]+3/gmi.test(test_ascii)) {
+        file_info.analytic_findings.push("MALICIOUS - CVE-2017-11882 Exploit Found");
+      }
 
       hex_data_match = hex_data_regex.exec(file_text_ascii);
     }
