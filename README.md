@@ -18,7 +18,7 @@ See the table below for a list of supported file types and types of data extract
 | JPEG           | X            | X               |                 |          |                  |                   |
 | PDF            | X            | X               |                 | X        |X                 |X                  |
 | RAR            | X            | X               |                 |          |                  |                   |
-| RTF            | X            |                 |                 |          |                  |                   |
+| RTF            | X            | X               |                 | X        |                  |                   |
 | PNG            | X            | X               |                 | X        |                  |                   |
 | PPTX           | X            | X               | X               | X        |                  |                   |
 | XLS            | X            |                 |                 |          | X                | X                 |
