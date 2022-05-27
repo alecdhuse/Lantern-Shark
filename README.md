@@ -21,6 +21,7 @@ See the table below for a list of supported file types and types of data extract
 | PNG            | X            | X               |                 | X        |                  |                   |
 | PPTX           | X            | X               | X               | X        |                  |                   |
 | XLS            | X            |                 |                 |          | X                | X                 |
+| XLSB           | X            | X               | X               | X        | X                | X                 |
 | XLSX           | X            | X               | X               | X        | X                | X                 |
 | XML            | X            |                 |                 |          |                  |                   |
 | ZIP            | X            | X               | X               |          |                  |                   |
