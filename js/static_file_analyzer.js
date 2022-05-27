@@ -1989,6 +1989,7 @@ class Static_File_Analyzer {
       var spreadsheet_defined_names = {};
       var spreadsheet_sheet_names = {}; // Spreadsheet names index
       var spreadsheet_sheet_relations = {};
+      var string_constants = [];
 
       for (var i = 0; i < archive_files.length; i++) {
         if (archive_files[i].file_name.toLowerCase().substring(0, 5) == "ppt/") {
@@ -2001,7 +2002,41 @@ class Static_File_Analyzer {
           file_info.file_format = (file_info.file_format != "xlsm" && file_info.file_format != "xlsb") ? "xlsx" : file_info.file_format;
           file_info.file_generic_type = "Spreadsheet";
 
-          if (archive_files[i].file_name.toLowerCase() == "xl/workbook.xml") {
+          if (archive_files[i].file_name.toLowerCase() == "xl/sharedstrings.bin") {
+            var xl_file_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
+            var current_byte = 0;
+            var current_record_info;
+            var current_record_bytes;
+
+            while (current_byte < xl_file_bytes.length) {
+              current_record_info = this.get_biff12_record_info(xl_file_bytes.slice(current_byte,current_byte+6));
+              current_byte += current_record_info.offset;
+              current_record_bytes = xl_file_bytes.slice(current_byte, current_byte+current_record_info.record_size);
+              current_byte += current_record_bytes.length;
+
+              // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
+              if (current_record_info.record_number == 19) {
+                // BrtSSTItem
+                var option_bits = this.get_bin_from_int(current_record_bytes[0]);
+                var current_byte2 = 1;
+
+                var string_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                var string_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+string_size));
+                var string_text = Static_File_Analyzer.get_string_from_array(string_bytes.filter(i => i !== 0));
+                current_byte2 = current_byte2 + 4 + string_size;
+
+                string_constants.push(string_text);
+                file_info = this.search_for_iocs(string_text, file_info);
+              } else if (current_record_info.record_number == 159) {
+                // BrtBeginSst
+              } else if (current_record_info.record_number == 160) {
+                // BrtEndSst
+              } else {
+                // DEBUG
+                console.log("Unkown record number in sharedStrings.bin " + current_record_info.record_number);
+              }
+            }
+          } else if (archive_files[i].file_name.toLowerCase() == "xl/workbook.xml") {
             // Look for more meta data
             var workbook_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
             var workbook_xml = Static_File_Analyzer.get_string_from_array(workbook_xml_bytes);
@@ -2260,7 +2295,7 @@ class Static_File_Analyzer {
                   } else if (current_record_info.record_number == 7) {
                     // BrtCellIsst - A cell record that contains a string.
                     var col = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
-                    var sst_index = this.get_four_byte_int(current_record_bytes.slice(8,4), this.LITTLE_ENDIAN);
+                    var sst_index = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN);
                   } else if (current_record_info.record_number == 37) {
                     // BrtACBegin
                   } else if (current_record_info.record_number == 38) {
@@ -3428,4 +3463,62 @@ class Static_File_Analyzer {
     return output_code;
   }
 
+  /**
+   * Searches for IoCs and adds found IoCs and any related findings to the file_info object.
+   *
+   * @param  {String} search_text The text to search.
+   * @param  {object} file_json The class outbut object, see get_default_file_json for format.
+   * @return {Object} The updated file_json object.
+   */
+  search_for_iocs(search_text, file_json) {
+    var found_urls = this.search_for_url(search_text);
+
+    for (var i=0; i<found_urls.urls.length; i++) {
+      if (!file_json.iocs.includes(found_urls.urls[i])) {
+        file_json.iocs.push(found_urls.urls[i]);
+      }
+    }
+
+    for (var i=0; i<found_urls.findings.length; i++) {
+      if (!file_json.analytic_findings.includes(found_urls.findings[i])) {
+        file_json.analytic_findings.push(found_urls.findings[i]);
+      }
+    }
+
+    return file_json;
+  }
+
+  /**
+   * Searches for and returns URL detected in the provided text.
+   *
+   * @param  {String} search_text The text to search.
+   * @return {Object} An array of any found URLs.
+   */
+  search_for_url(search_text) {
+    var found_urls = [];
+    var findings = [];
+
+    var url_match = /((?:https?\:\/\/|\\\\)[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]+)/gmi.exec(search_text);
+    if (url_match !== null) {
+      // Check for hex IP
+      var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
+      if (hex_ip_match !== null) {
+        findings.push("SUSPICIOUS - Hex Obfuscated IP Address");
+
+        try {
+          var str_ip = Static_File_Analyzer.get_ip_from_hex(hex_ip_match[1]);
+          found_urls.push(url_match[1].replace(hex_ip_match[1], str_ip));
+        } catch(err) {
+          found_urls.push(url_match[1]);
+        }
+      } else {
+        found_urls.push(url_match[1]);
+      }
+    }
+
+    return {
+      'urls': found_urls,
+      'findings': findings
+    }
+  }
 }
