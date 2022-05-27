@@ -720,46 +720,22 @@ class Static_File_Analyzer {
   }
 
   /**
-   * Extract attributes from a Visual Basic for Applications (VBA) file.
+   * Extracts IoCs and suspicious and malicious indicators from VBA code.
    *
-   * @param {Uint8Array}           file_bytes Array with int values 0-255 representing the bytes of the VBA file to be analyzed.
-   * @return {{attributes: array}} The attributes of the given VBA file bytes.
+   * @param {String} vba_code VBA code in string format.
+   * @param  {{{'type': String, 'doc_obj': Obj}} document_obj Document object
+   * @return {JSON}  Object with findings
    */
-  analyze_vba(file_bytes) {
-    var vba_data = {
-      'attributes': []
-    };
+  analyze_vba(vba_code, document_obj) {
+    var cell_range_regex = /ActiveWorkbook\.Worksheets\(\s*["\']([^\"\']+)[\"\']\s*\)\.Range\(\s*[\"\']([^\:]+)\s*\:\s*([^\"\']+)[\"\']\s*\)/gmi;
+    var cell_range_match = url_regex.exec(cell_range_regex );
+    while (cell_range_match !== null) {
+      if (document_obj.type.toLowerCase() == "spreadsheet") {
 
-    var root_entry_start = -1;
-    var attribute_start = -1;
-    var found_attributes = [];
-
-    // Find Attributes
-    for (var i=0; i<file_bytes.length-19;i++) {
-      if (this.array_equals(file_bytes.slice(i,i+19), [82,0,111,0,111,0,116,0,32,0,69,0,110,0,116,0,114,0,121])) {
-        root_entry_start = i;
-      } else if (this.array_equals(file_bytes.slice(i,i+5), [73,68,61,34,123])) {
-        // ID="{
-        var project_stream_start = i;
-        var project_stream_end = project_stream_start + 639;
-        var project_stream_str = Static_File_Analyzer.get_ascii(file_bytes.slice(project_stream_start,project_stream_end));
-
-        // End any open attributes
-        var decompressed_vba_attribute_bytes = this.decompress_vba(file_bytes.slice(attribute_start, i));
-        vba_data.attributes.push(Static_File_Analyzer.get_ascii(decompressed_vba_attribute_bytes));
-      } else if (this.array_equals(file_bytes.slice(i,i+8), [65,116,116,114,105,98,117,116])) {
-        // Attribute
-        if (attribute_start > 0) {
-          var decompressed_vba_attribute_bytes = this.decompress_vba(file_bytes.slice(attribute_start, i));
-          vba_data.attributes.push(Static_File_Analyzer.get_ascii(decompressed_vba_attribute_bytes));
-          attribute_start = i-4;
-        } else {
-          attribute_start = i-4;
-        }
+      } else {
+        break;
       }
     }
-
-    return vba_data;
   }
 
   /**
@@ -2022,7 +1998,7 @@ class Static_File_Analyzer {
           file_info.file_format = "docx";
           file_info.file_generic_type = "Document";
         } else if (archive_files[i].file_name.toLowerCase().substring(0, 3) == "xl/") {
-          file_info.file_format = (file_info.file_format != "xlsm") ? "xlsx" : "xlsm";
+          file_info.file_format = (file_info.file_format != "xlsm" && file_info.file_format != "xlsb") ? "xlsx" : file_info.file_format;
           file_info.file_generic_type = "Spreadsheet";
 
           if (archive_files[i].file_name.toLowerCase() == "xl/workbook.xml") {
@@ -2089,6 +2065,106 @@ class Static_File_Analyzer {
               sheet_matches = sheet_regex.exec(workbook_xml);
             }
 
+          } else if (archive_files[i].file_name.toLowerCase() == "xl/workbook.bin") {
+            // Excel Binary Format
+            file_info.file_format = "xlsb";
+
+            var workbook_bin_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
+            var current_byte = 0;
+            var current_record_info;
+            var current_record_bytes;
+
+            while (current_byte < workbook_bin_bytes.length) {
+              current_record_info = this.get_biff12_record_info(workbook_bin_bytes.slice(current_byte,current_byte+6));
+              current_byte += current_record_info.offset;
+              current_record_bytes = workbook_bin_bytes.slice(current_byte, current_byte+current_record_info.record_size);
+              current_byte += current_record_bytes.length;
+
+              // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
+              if (current_record_info.record_number == 35) {
+                // BrtFRTBegin
+                var product_version = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
+              } else if (current_record_info.record_number == 36) {
+                // BrtFRTEnd
+              } else if (current_record_info.record_number == 37) {
+                // BrtACBegin
+              } else if (current_record_info.record_number == 38) {
+                // BrtACEnd
+              } else if (current_record_info.record_number == 128) {
+                // BrtFileVersion
+              } else if (current_record_info.record_number == 131) {
+                // BrtBeginBook
+              } else if (current_record_info.record_number == 132) {
+                // BrtEndBook
+              } else if (current_record_info.record_number == 135) {
+                // BrtBeginBookViews
+              } else if (current_record_info.record_number == 136) {
+                // BrtEndBookViews
+              } else if (current_record_info.record_number == 143) {
+                // BrtBeginBundleShs
+              } else if (current_record_info.record_number == 144) {
+                // BrtEndBundleShs
+              } else if (current_record_info.record_number == 153) {
+                // BrtWbProp
+                // 4 bytes of bit properties
+                // 4 bytes for dwThemeVersion
+                var str_name = Static_File_Analyzer.get_string_from_array(current_record_bytes.slice(8));
+              } else if (current_record_info.record_number == 155) {
+                // BrtFileRecover
+              } else if (current_record_info.record_number == 156) {
+                // BrtBundleSh - Sheet information
+                var sheet_state_val = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
+                var sheet_state = (sheet_state_val == 1) ? "hidden" : ((sheet_state_val == 1) ? "very hidden": "visible");
+
+                var sheet_id = this.get_four_byte_int(current_record_bytes.slice(4,8), this.LITTLE_ENDIAN);
+                var sheet_type_size = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN) * 2;
+                var sheet_type_bytes = (current_record_bytes.slice(12,12+sheet_type_size));
+                var sheet_name_size = this.get_four_byte_int(current_record_bytes.slice(sheet_type_size+12,sheet_type_size+16), this.LITTLE_ENDIAN) * 2;
+                var sheet_name_bytes = (current_record_bytes.slice(sheet_type_size+16,sheet_type_size+16+sheet_name_size));
+
+                var sheet_type = Static_File_Analyzer.get_string_from_array(sheet_type_bytes.filter(i => i !== 0));
+                var sheet_name = Static_File_Analyzer.get_string_from_array(sheet_name_bytes.filter(i => i !== 0));
+
+                spreadsheet_sheet_names[sheet_name] = {
+                  'name': sheet_name,
+                  'state': sheet_state,
+                  'sheet_id': sheet_id,
+                  'rid': sheet_type,
+                  'data': {}
+                };
+              } else if (current_record_info.record_number == 157) {
+                // BrtCalcProp
+              } else if (current_record_info.record_number == 158) {
+                // BrtBookView
+              } else if (current_record_info.record_number == 2071) {
+                // BrtAbsPath15
+                file_info.metadata.last_saved_location = Static_File_Analyzer.get_string_from_array(current_record_bytes.slice(2));
+              } else if (current_record_info.record_number == 2091) {
+                // BrtWorkBookPr15
+              } else if (current_record_info.record_number == 3073) {
+                // brtRevisionPtr
+              }
+            }
+          } else if (archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.bin.rels") {
+            // This will build the relationships for this spreadsheet. We can use this to find malicious code.
+            var workbook_xml = Static_File_Analyzer.get_string_from_array(await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i));
+
+            var relationship_regex = /\<\s*relationship[^\>]+\>/gmi;
+            var relationship_matches = relationship_regex.exec(workbook_xml);
+
+            while (relationship_matches != null) {
+              var id_match = /id\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
+              var target_match = /target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
+
+              if (id_match !== null && target_match !== null) {
+                spreadsheet_sheet_relations[id_match[1]] = {
+                  'type':   "",
+                  "target": target_match[1]
+                }
+              }
+
+              relationship_matches = relationship_regex.exec(workbook_xml);
+            }
           } else if (archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.xml.rels") {
             // This will build the relationships for this spreadsheet. We can use this to find malicious code.
             var workbook_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
@@ -2111,11 +2187,11 @@ class Static_File_Analyzer {
         // Look for macros
         if (/vbaProject\.bin/gmi.test(archive_files[i].file_name)) {
           file_info.scripts.script_type = "VBA Macro";
-          file_info.file_format = "xlsm";
+          file_info.file_format = (file_info.file_format != "xlsb") ? "xlsm" : "xlsb";
 
           // Zip Decompression
           var macro_data = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
-          var vba_data = this.analyze_vba(macro_data);
+          var vba_data = this.extract_vba(macro_data);
 
           for (var s = 0; s < vba_data.attributes.length; s++) {
             var sub_match = /\n[a-z\s]+Sub[^\(]+\([^\)]*\)/gmi.exec(vba_data.attributes[s]);
@@ -2135,6 +2211,7 @@ class Static_File_Analyzer {
               file_info.scripts.extracted_script += vba_code + "\n\n";
             }
           }
+
         } else if (/docProps\/core\.xml/gmi.test(archive_files[i].file_name)) {
           // Meta data file
           var meta_data_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
@@ -2150,21 +2227,127 @@ class Static_File_Analyzer {
 
       // If this is a spreadsheet, decode and look for malicious indicators
       if (file_info.file_format.substring(0,3) == "xls") {
-        if (spreadsheet_auto_open == true) {
-          var auto_open_cell = spreadsheet_defined_names[spreadsheet_auto_open_name];
-          var auto_open_sheet_obj = spreadsheet_sheet_names[auto_open_cell.split("!")[0]];
-
-          // Preload sheet target / file names into spreadsheet_sheet_names
-          for (const [key, value] of Object.entries(spreadsheet_sheet_names)) {
+        // Preload sheet target / file names into spreadsheet_sheet_names
+        for (const [key, value] of Object.entries(spreadsheet_sheet_names)) {
+          if (spreadsheet_sheet_relations[value.rid] !== null && spreadsheet_sheet_relations[value.rid] !== undefined) {
             spreadsheet_sheet_names[key].file_name = spreadsheet_sheet_relations[value.rid].target;
           }
+        }
 
-          // Index cell values and formaulas in all sheets
-          for (var fi = 0; fi < archive_files.length; fi++) {
-            for (const [key, value] of Object.entries(spreadsheet_sheet_names)) {
-              if (archive_files[fi].file_name == "xl/" + value.file_name) {
-                var sheet_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, fi);
-                var sheet_xml = Static_File_Analyzer.get_string_from_array(sheet_xml_bytes);
+        // Index cell values and formaulas in all sheets
+        for (var fi = 0; fi < archive_files.length; fi++) {
+          for (const [key, value] of Object.entries(spreadsheet_sheet_names)) {
+            if (archive_files[fi].file_name == "xl/" + value.file_name) {
+              var sheet_file_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, fi);
+
+              if (value.file_name.toLowerCase().slice(-3) == "bin") {
+                // Binary Sheet file
+                var current_byte = 0;
+                var current_record_info;
+                var current_record_bytes;
+
+                while (current_byte < workbook_bin_bytes.length) {
+                  current_record_info = this.get_biff12_record_info(sheet_file_bytes.slice(current_byte,current_byte+6));
+                  current_byte += current_record_info.offset;
+                  current_record_bytes = sheet_file_bytes.slice(current_byte, current_byte+current_record_info.record_size);
+                  current_byte += current_record_bytes.length;
+
+                  // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
+                  if (current_record_info.record_number == 0) {
+                    // BrtRowHdr
+                  } else if (current_record_info.record_number == 1) {
+                    // BrtCellBlank - Blank cell
+                  } else if (current_record_info.record_number == 7) {
+                    // BrtCellIsst - A cell record that contains a string.
+                    var col = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
+                    var sst_index = this.get_four_byte_int(current_record_bytes.slice(8,4), this.LITTLE_ENDIAN);
+                  } else if (current_record_info.record_number == 37) {
+                    // BrtACBegin
+                  } else if (current_record_info.record_number == 38) {
+                    // BrtACEnd
+                  } else if (current_record_info.record_number == 60) {
+                    // BrtColInfo
+                  } else if (current_record_info.record_number == 129) {
+                    // BrtBeginSheet
+                  } else if (current_record_info.record_number == 133) {
+                    // BrtBeginWsViews
+                  } else if (current_record_info.record_number == 134) {
+                    // BrtEndWsViews
+                  } else if (current_record_info.record_number == 137) {
+                    // BrtBeginWsView
+                  } else if (current_record_info.record_number == 138) {
+                    // BrtEndWsView
+                  } else if (current_record_info.record_number == 145) {
+                    // BrtBeginSheetData
+                  } else if (current_record_info.record_number == 146) {
+                    // BrtEndSheetData
+                  } else if (current_record_info.record_number == 147) {
+                    // BrtWsProp
+                  } else if (current_record_info.record_number == 148) {
+                    // BrtWsDim - specifies the used range of the sheet.
+                  } else if (current_record_info.record_number == 152) {
+                    // BrtSel
+                    var pane = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
+                    var row = this.get_four_byte_int(current_record_bytes.slice(4,8), this.LITTLE_ENDIAN);
+                    var col = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN);
+                    var rfx_index = this.get_four_byte_int(current_record_bytes.slice(12,16), this.LITTLE_ENDIAN);
+                    var rfx_count = this.get_four_byte_int(current_record_bytes.slice(16,20), this.LITTLE_ENDIAN);
+                    var rgrfx_bytes = current_record_bytes.slice(20,20+rfx_count);
+                  } else if (current_record_info.record_number == 390) {
+                    // BrtBeginColInfos
+                  } else if (current_record_info.record_number == 391) {
+                    // BrtEndColInfos
+                  } else if (current_record_info.record_number == 476) {
+                    // BrtMargins
+                  } else if (current_record_info.record_number == 477) {
+                    // BrtPrintOptions
+                  } else if (current_record_info.record_number == 485) {
+                    // BrtWsFmtInfo
+                  } else if (current_record_info.record_number == 494) {
+                    // BrtHLink - specifies a hyperlink that applies to a range of cells.
+                    var row_start = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
+                    var row_end = this.get_four_byte_int(current_record_bytes.slice(4,8), this.LITTLE_ENDIAN);
+                    var col_start = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN);
+                    var col_end = this.get_four_byte_int(current_record_bytes.slice(12,16), this.LITTLE_ENDIAN);
+
+                    var rid_size = this.get_four_byte_int(current_record_bytes.slice(16,20), this.LITTLE_ENDIAN) * 2;
+                    var rid_bytes = (current_record_bytes.slice(20, 20+rid_size));
+                    var rid = Static_File_Analyzer.get_string_from_array(rid_bytes.filter(i => i !== 0));
+                    var current_byte2 = 20+rid_size;
+
+                    var location_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                    var location_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+location_size));
+                    var location = Static_File_Analyzer.get_string_from_array(location_bytes.filter(i => i !== 0));
+                    current_byte2 = current_byte2 + 4 + location_size;
+
+                    var tool_tip_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                    var tool_tip_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+tool_tip_size));
+                    var tool_tip = Static_File_Analyzer.get_string_from_array(tool_tip_bytes.filter(i => i !== 0));
+                    current_byte2 = current_byte2 + 4 + tool_tip_size;
+
+                    var display_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                    var display_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+display_size));
+                    var display = Static_File_Analyzer.get_string_from_array(display_bytes.filter(i => i !== 0));
+                    current_byte2 = current_byte2 + 4 + display_size;
+
+                  } else if (current_record_info.record_number == 535) {
+                    // BrtSheetProtection
+                  } else if (current_record_info.record_number == 1024) {
+                    // BrtRwDescent
+                  } else if (current_record_info.record_number == 1045) {
+                    // BrtWsFmtInfoEx14
+                  } else if (current_record_info.record_number == 3072) {
+                    // Unknown
+                  } else {
+                    // DEBUG
+                    console.log("Unknown record type: " + current_record_info.record_number);
+                  }
+                }
+
+                var tt=0; // DEBUG
+              } else {
+                // XLM Sheet file
+                var sheet_xml = Static_File_Analyzer.get_string_from_array(sheet_file_bytes);
 
                 var c_tags_regex = /\<\s*c\s*r\s*\=\s*[\"\']([a-zA-Z0-9]+)[\"\'][^\>]+\>\s*(?:\<\s*f\s*\>([^\<]+)\<\/f\>\s*)?\<\s*v\s*\>([^\<]+)\<\/v\>/gmi;
                 var c_tags_matches = c_tags_regex.exec(sheet_xml);
@@ -2183,6 +2366,11 @@ class Static_File_Analyzer {
               }
             }
           }
+        }
+
+        if (spreadsheet_auto_open == true) {
+          var auto_open_cell = spreadsheet_defined_names[spreadsheet_auto_open_name];
+          var auto_open_sheet_obj = spreadsheet_sheet_names[auto_open_cell.split("!")[0]];
 
           /* Apparently the actual cell for auto open isn't important, we just
              need to execute all the formulas in the sheet part of auto open.
@@ -2193,6 +2381,8 @@ class Static_File_Analyzer {
           }
 
         }
+
+        //var vba_results = this.analyze_vba(file_info.scripts.extracted_script, {'type': "spreadsheet", 'doc_obj': spreadsheet_sheet_names});
       }
     }
 
@@ -2500,14 +2690,14 @@ class Static_File_Analyzer {
     }
   }
 
-  /**
-   * Executes the XLS / Excel 4.0 calculation stack.
-   *
-   * @param {array}    stack The list of operations to execute.
-   * @return {boolean} The result of the execution / calculation.
-   */
-    execute_excel_stack(stack) {
-    var c_index = 0;
+/**
+ * Executes the XLS / Excel 4.0 calculation stack.
+ *
+ * @param {array}    stack The list of operations to execute.
+ * @return {boolean} The result of the execution / calculation.
+ */
+  execute_excel_stack(stack) {
+  var c_index = 0;
 
     while (c_index < stack.length) {
       if (stack[c_index].type == "operator") {
@@ -2633,6 +2823,49 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Extract attributes from a Visual Basic for Applications (VBA) file.
+   *
+   * @param {Uint8Array}           file_bytes Array with int values 0-255 representing the bytes of the VBA file to be analyzed.
+   * @return {{attributes: array}} The attributes of the given VBA file bytes.
+   */
+  extract_vba(file_bytes) {
+    var vba_data = {
+      'attributes': []
+    };
+
+    var root_entry_start = -1;
+    var attribute_start = -1;
+    var found_attributes = [];
+
+    // Find Attributes
+    for (var i=0; i<file_bytes.length-19;i++) {
+      if (this.array_equals(file_bytes.slice(i,i+19), [82,0,111,0,111,0,116,0,32,0,69,0,110,0,116,0,114,0,121])) {
+        root_entry_start = i;
+      } else if (this.array_equals(file_bytes.slice(i,i+5), [73,68,61,34,123])) {
+        // ID="{
+        var project_stream_start = i;
+        var project_stream_end = project_stream_start + 639;
+        var project_stream_str = Static_File_Analyzer.get_ascii(file_bytes.slice(project_stream_start,project_stream_end));
+
+        // End any open attributes
+        var decompressed_vba_attribute_bytes = this.decompress_vba(file_bytes.slice(attribute_start, i));
+        vba_data.attributes.push(Static_File_Analyzer.get_ascii(decompressed_vba_attribute_bytes));
+      } else if (this.array_equals(file_bytes.slice(i,i+8), [65,116,116,114,105,98,117,116])) {
+        // Attribute
+        if (attribute_start > 0) {
+          var decompressed_vba_attribute_bytes = this.decompress_vba(file_bytes.slice(attribute_start, i));
+          vba_data.attributes.push(Static_File_Analyzer.get_ascii(decompressed_vba_attribute_bytes));
+          attribute_start = i-4;
+        } else {
+          attribute_start = i-4;
+        }
+      }
+    }
+
+    return vba_data;
+  }
+
+  /**
    * Compares two arrays to check if every value in the two given arrays are equal.
    *
    * @param {array}  a Any array to compare.
@@ -2662,6 +2895,56 @@ class Static_File_Analyzer {
     }
 
     return ascii_text;
+  }
+
+  /**
+   * Calculates the BIFF12 record number and size given the to possilbe record bytes
+   *
+   * @param {array} record_bytes An array with 2-6 elements, each a an integer from 0-255.
+   * @return {{record_number: integer, record_size: integer, offset: integer} The BIFF12 record number, size and byte offset increment. Returns a record number of -1 if record could not be determined.
+   */
+  get_biff12_record_info(record_bytes) {
+    var record_bits = [];
+    var record_number = -1;
+    var record_size = 0;
+    var record_size_bytes = [];
+    var record_size_start = 0;
+
+    // We need the bits of each byte
+    for (var i=0; i<record_bytes.length; i++) {
+      record_bits.push(this.get_bin_from_int(record_bytes[i]));
+    }
+
+    // Get the record number, records are one or two bytes depending on the first bit.
+    if (record_bits[0][0] == 1) {
+      // Two byte record number, only use the last 7 bits of each byte to get record number.
+      record_number = this.get_int_from_bin(record_bits[1].slice(1)) * 128 + this.get_int_from_bin(record_bits[0].slice(1));
+      record_size_start = 2;
+    } else {
+      // One byte record number, only use the last 7 bits to get record number.
+      record_number = this.get_int_from_bin(record_bits[0].slice(1));
+      record_size_start = 1;
+    }
+
+    // Get the record size, this can be 1-4 bytes.
+    // The high bit in each byte specifies whether an additional byte is used.
+    for (var i=0; i<4; i++) {
+      record_size_bytes.push(this.get_int_from_bin(record_bits[record_size_start+i].slice(1)));
+      if (record_bits[record_size_start+i][0] == 0) {
+        break;
+      }
+    }
+
+    record_size = record_size_bytes[0];
+    for (var i=1; i<record_size_bytes.length; i++) {
+      record_size += record_size_bytes[i] * (i*128);
+    }
+
+    return {
+      'record_number': record_number,
+      'record_size':   record_size,
+      'offset':        record_size_start + record_size_bytes.length
+    };
   }
 
   /**
@@ -3144,4 +3427,5 @@ class Static_File_Analyzer {
 
     return output_code;
   }
+
 }

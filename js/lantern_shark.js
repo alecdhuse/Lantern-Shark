@@ -112,7 +112,7 @@ function read_file(e) {
       $("#summary_metadata_last_saved_location").html(analyzer_results.metadata.last_saved_location);
 
       $("#script_code").val(analyzer_results.scripts.extracted_script);
-      $("#extracted_iocs").val(analyzer_results.iocs.join("\n"));      
+      $("#extracted_iocs").val(analyzer_results.iocs.join("\n"));
       $("#analytic_findings").val(analyzer_results.analytic_findings.join("\n"));
 
       $("#file_text").val(get_file_text(array));
@@ -128,7 +128,7 @@ function read_file(e) {
 async function select_file_component(e) {
   var component_id = e.currentTarget.id;
   var component_index = parseInt(component_id.split("_")[1]);
-  var zip_file_extentions = ["docx", "docm", "pptx", "pptm", "xlsx", "xlsm", "zip"];
+  var zip_file_extentions = ["docx", "docm", "pptx", "pptm", "xlsb", "xlsx", "xlsm", "zip"];
 
   // Change UI to show selected component
   $("#top_level_file").removeClass("file_tree_item_selected");
