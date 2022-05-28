@@ -2280,6 +2280,7 @@ class Static_File_Analyzer {
                 var current_byte = 0;
                 var current_record_info;
                 var current_record_bytes;
+                var current_row = -1;
 
                 while (current_byte < workbook_bin_bytes.length) {
                   current_record_info = this.get_biff12_record_info(sheet_file_bytes.slice(current_byte,current_byte+6));
@@ -2290,12 +2291,25 @@ class Static_File_Analyzer {
                   // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
                   if (current_record_info.record_number == 0) {
                     // BrtRowHdr
+                    current_row = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN) + 1;
                   } else if (current_record_info.record_number == 1) {
                     // BrtCellBlank - Blank cell
                   } else if (current_record_info.record_number == 7) {
                     // BrtCellIsst - A cell record that contains a string.
                     var col = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
                     var sst_index = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN);
+                    var cell_value = string_constants[sst_index];
+
+                    if (current_row > -1) {
+                      var cell_id = this.convert_xls_column(col) + current_row
+
+                      spreadsheet_sheet_names[key]['data'][cell_id] = {
+                        'formula': null,
+                        'value': cell_value
+                      }
+                    }
+
+                    var debug_t=0;
                   } else if (current_record_info.record_number == 37) {
                     // BrtACBegin
                   } else if (current_record_info.record_number == 38) {
