@@ -36,7 +36,7 @@ class Static_File_Analyzer {
   constructor(file_bytes, file_text="") {
     this.BIG_ENDIAN = "BIG_ENDIAN";
     this.LITTLE_ENDIAN = "LITTLE_ENDIAN";
-    this.XML_DOMAINS = ["purl.org","schemas.microsoft.com","schemas.openxmlformats.org"];
+    this.XML_DOMAINS = ["openoffice.org","purl.org","schemas.microsoft.com","schemas.openxmlformats.org","w3.org"];
 
     var file_info = this.get_default_file_json();
 
@@ -2138,6 +2138,19 @@ class Static_File_Analyzer {
             file_info = this.search_for_iocs(xml_target_match[1], file_info);
             xml_target_match = xml_target_regex.exec(xml_text);
           }
+
+          // Look for suspicious XML domains
+          var xml_type_regex = /[^\:\w]Type\s*\=\s*[\"\']([a-zA-Z]+\:\/?\/?([^\/\>\<\"\']+)\/[^\"\']+)/gmi;
+          var xml_type_match = xml_type_regex.exec(xml_text);
+
+          while (xml_type_match !== null) {
+            if (!this.XML_DOMAINS.includes(xml_type_match[2])) {
+              file_info.analytic_findings.push("SUSPICIOUS - Unusual XML Schema Domain: " + xml_type_match[2]);
+              console.log(xml_text); // DEBUG
+            }
+
+            xml_type_match = xml_type_regex.exec(xml_text);
+          }
         }
 
 
@@ -2184,6 +2197,14 @@ class Static_File_Analyzer {
                 // DEBUG
                 console.log("Unkown record number in sharedStrings.bin " + current_record_info.record_number);
               }
+            }
+          } else if (archive_files[i].file_name.toLowerCase() == "xl/sharedstrings.xml") {
+            var sst_regex = /\<\s*t\s*\>([^\<]+)\<\s*\/t\s*\>/gmi;
+            var sst_match = sst_regex.exec(xml_text);
+
+            while (sst_match !== null) {
+              string_constants.push(sst_match[1]);
+              sst_match = sst_regex.exec(xml_text);
             }
           } else if (archive_files[i].file_name.toLowerCase() == "xl/workbook.xml") {
             // Look for more meta data
