@@ -2188,7 +2188,7 @@ class Static_File_Analyzer {
           } else if (archive_files[i].file_name.toLowerCase() == "xl/workbook.xml") {
             // Look for more meta data
             var workbook_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
-            var workbook_xml = Static_File_Analyzer.get_string_from_array(workbook_xml_bytes);
+            var workbook_xml = xml_text;
 
             // Look for last saved location
             var last_saved_loc_matches = /<[a-z0-9]+\:absPath[\sa-zA-Z0-9\:\=\"\'\/\.]+url\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(workbook_xml);
@@ -2331,7 +2331,7 @@ class Static_File_Analyzer {
             }
           } else if (archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.bin.rels") {
             // This will build the relationships for this spreadsheet. We can use this to find malicious code.
-            var workbook_xml = Static_File_Analyzer.get_string_from_array(await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i));
+            var workbook_xml = xml_text;
 
             var relationship_regex = /\<\s*relationship[^\>]+\>/gmi;
             var relationship_matches = relationship_regex.exec(workbook_xml);
