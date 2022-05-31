@@ -122,7 +122,7 @@ class Static_File_Analyzer {
         regex: /Shell\(\s*[^\,\)]+\s*(?:,\s*[a-zA-Z]+\s*)?\)/gmi
       },
       {
-        name:  "SUSPICIOUS - Certutil used to download a file",
+        name:  "SUSPICIOUS - Certutil Used to Download a File",
         regex: /certutil\.exe\s+-urlcache\s+-split\s+-f\s+/gmi
       }
     ];
@@ -726,14 +726,141 @@ class Static_File_Analyzer {
    * @param  {{{'type': String, 'doc_obj': Obj}} document_obj Document object
    * @return {JSON}  Object with findings
    */
-  analyze_vba(vba_code, document_obj) {
-    var cell_range_regex = /ActiveWorkbook\.Worksheets\(\s*["\']([^\"\']+)[\"\']\s*\)\.Range\(\s*[\"\']([^\:]+)\s*\:\s*([^\"\']+)[\"\']\s*\)/gmi;
-    var cell_range_match = url_regex.exec(cell_range_regex );
-    while (cell_range_match !== null) {
-      if (document_obj.type.toLowerCase() == "spreadsheet") {
+  analyze_vba(file_info, document_obj) {
+    var vba_code = file_info.scripts.extracted_script;
 
-      } else {
-        break;
+    if (document_obj.type.toLowerCase() == "spreadsheet") {
+      var cell_range_regex = /(?:([^\s]+)\s*\=\s*)ActiveWorkbook\.Worksheets\s*\(([^\)]+)\)\.Range\s*\(([^\)]+)\)/gmi;
+      var cell_range_match = cell_range_regex.exec(vba_code);
+      var sheet_name;
+      var range_val;
+
+      while (cell_range_match !== null) {
+        if (cell_range_match[2].startsWith("\"")) {
+          // Literal value
+          sheet_name = cell_range_match[2].slice(1,-1);
+        } else {
+          // Varable value
+        }
+
+        if (cell_range_match[3].startsWith("\"")) {
+          // Literal value
+          range_val = cell_range_match[3].slice(1,-1);
+        } else {
+          // Varable value
+        }
+
+        var range_match = /([a-zA-Z]+)([0-9]+)\:([a-zA-Z]+)([0-9]+)/gm.exec(range_val);
+        if (range_match !== null && (range_match[1] == range_match[3] || range_match[2] == range_match[4])) {
+          // Single dimension array
+          document_obj.varables[cell_range_match[1]] = [];
+          var return_array = [];
+          var cell_ref;
+          var cell_value;
+
+          if (range_match[2] == range_match[4]) {
+            // Change columns
+            var current_col = range_match[1];
+            cell_ref = current_col + range_match[2];
+            cell_value = (document_obj.sheets[sheet_name].data.hasOwnProperty(cell_ref)) ? document_obj.sheets[sheet_name].data[cell_ref].value : "";
+            return_array.push(cell_value);
+            document_obj.varables[cell_range_match[1]].push((document_obj.sheets[sheet_name].data.hasOwnProperty(cell_ref)) ? document_obj.sheets[sheet_name].data[cell_ref] : "");
+
+            while (current_col != range_match[3]) {
+              current_col = this.increment_xls_column(current_col);
+              cell_ref = current_col + range_match[2];
+              cell_value = (document_obj.sheets[sheet_name].data.hasOwnProperty(cell_ref)) ? document_obj.sheets[sheet_name].data[cell_ref].value : "";
+              return_array.push(cell_value);
+              document_obj.varables[cell_range_match[1]].push((document_obj.sheets[sheet_name].data.hasOwnProperty(cell_ref)) ? document_obj.sheets[sheet_name].data[cell_ref] : "");
+            }
+          } else {
+            // Change rows
+            for (var i=parseInt(range_match[2]); i<=parseInt(range_match[4]); i++) {
+              cell_ref = range_match[1] + i;
+              cell_value = (document_obj.sheets[sheet_name].data.hasOwnProperty(cell_ref)) ? document_obj.sheets[sheet_name].data[cell_ref].value : "";
+              return_array.push(cell_value);
+              document_obj.varables[cell_range_match[1]].push((document_obj.sheets[sheet_name].data.hasOwnProperty(cell_ref)) ? document_obj.sheets[sheet_name].data[cell_ref] : "");
+            }
+          }
+
+          var comment_insert_loc = vba_code.indexOf("\n", cell_range_match.index);
+          var comment = (cell_range_match[1] !== null) ? cell_range_match[1] + " = " : "";
+          comment = "' " + comment + JSON.stringify(return_array) + "\n";
+
+          file_info.scripts.extracted_script = file_info.scripts.extracted_script.substring(0,comment_insert_loc) + comment + file_info.scripts.extracted_script.substring(comment_insert_loc);
+        }
+
+        cell_range_match = cell_range_regex.exec(cell_range_regex);
+      }
+
+      var creat_object_regex = /CreateObject\s*\(\s*([^\s]+)\s*\)/gmi;
+      var create_object_match = creat_object_regex.exec(vba_code);
+
+      while (create_object_match !== null) {
+        var new_object_type;
+
+        if (create_object_match[1].startsWith("\"")) {
+          // Literal value
+          new_object_type = create_object_match[1].slice(1,-1);
+        } else {
+          // String value
+          new_object_type = create_object_match[1].split(".");
+
+          if (document_obj.varables.hasOwnProperty(new_object_type[0])) {
+            var varable_obj = document_obj.varables[new_object_type[0]];
+
+            if (new_object_type.length > 1) {
+              var item_index_match = /Item\s*\((\d+)\s*\)/gmi.exec(new_object_type[1]);
+              if (item_index_match !== null) {
+                varable_obj = varable_obj[item_index_match[1]-1];
+              }
+
+              if (new_object_type.length > 2) {
+                if (new_object_type[2].toLowerCase() == "value" && varable_obj.hasOwnProperty("value")) {
+                  new_object_type = varable_obj.value;
+                }
+              } else {
+                new_object_type = varable_obj;
+              }
+            } else {
+              new_object_type = varable_obj[0];
+            }
+          }
+        }
+
+        var suspicious_objects = ["ADODB.Stream","MSXML2.ServerXMLHTTP.6.0","Msxml2.XMLHTTP.6.0"];
+        if (suspicious_objects.includes(new_object_type)) {
+          var new_finding = "SUSPICIOUS - Creation of " + new_object_type + " VBA Object Type";
+          if (!file_info.analytic_findings.includes(new_finding)) {
+            file_info.analytic_findings.push(new_finding);
+          }
+        }
+
+        create_object_match = creat_object_regex.exec(vba_code);
+      }
+
+      var shell_regex = /Shell\s*\(\s*([^\)]+)\s*\)/gmi;
+      var shell_match = shell_regex.exec(vba_code);
+      var shell_command;
+
+      while (shell_match !== null) {
+        if (shell_match[1].startsWith("\"")) {
+          // Literal value
+          shell_command = create_object_match[1].slice(1,-1);
+        } else {
+          // Varable value, find definition.
+          var shell_var_regex  = new RegExp("\\.saveToFile\\s+" + shell_match[1], "gm");
+          var shell_var_match = shell_var_regex.exec(vba_code);
+
+          if (shell_var_match !== null) {
+            var new_finding = "SUSPICIOUS - Shell Execution of a Downloaded File";
+            if (!file_info.analytic_findings.includes(new_finding)) {
+              file_info.analytic_findings.push(new_finding);
+            }
+          }
+        }
+
+        shell_match = shell_regex.exec(vba_code);
       }
     }
   }
@@ -2431,7 +2558,13 @@ class Static_File_Analyzer {
 
         }
 
-        //var vba_results = this.analyze_vba(file_info.scripts.extracted_script, {'type': "spreadsheet", 'doc_obj': spreadsheet_sheet_names});
+        var document_obj = {
+          'type': "spreadsheet",
+          'sheets': spreadsheet_sheet_names,
+          'varables': {}
+        };
+
+        var vba_results = this.analyze_vba(file_info, document_obj);
       }
     }
 
@@ -3415,6 +3548,29 @@ class Static_File_Analyzer {
     } else {
       throw "Zip decompression library not found. Please include zip-full.js from https://github.com/gildas-lormeau/zip.js";
     }
+  }
+
+  /**
+   * Converts a column index to a letter value.
+   *
+   * @param {String}  col_index A string representing the column index.
+   * @return {String} next_col_index  A String giving the next letter or multiletter column name.
+   */
+  increment_xls_column(col_index) {
+    var col_conversion = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+
+    var next_col_index = col_conversion.indexOf(col_index.slice(-1).toUpperCase());
+    if (next_col_index == 25) {
+      if (col_index.length == 1) {
+        next_col_index = "AA";
+      } else {
+        col_index.slice(0,-2) + col_conversion[col_conversion.indexOf(col_index.slice(-2,-1)) + 1] + "A";
+      }
+    } else {
+      next_col_index = col_index.slice(0,-1) + col_conversion[next_col_index+1];
+    }
+
+    return next_col_index;
   }
 
   /**
