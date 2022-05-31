@@ -36,6 +36,7 @@ class Static_File_Analyzer {
   constructor(file_bytes, file_text="") {
     this.BIG_ENDIAN = "BIG_ENDIAN";
     this.LITTLE_ENDIAN = "LITTLE_ENDIAN";
+    this.XML_DOMAINS = ["purl.org","schemas.microsoft.com","schemas.openxmlformats.org"];
 
     var file_info = this.get_default_file_json();
 
@@ -844,9 +845,14 @@ class Static_File_Analyzer {
       var shell_command;
 
       while (shell_match !== null) {
+        var new_finding = "SUSPICIOUS - VBA Macro Calls Shell Command";
+        if (!file_info.analytic_findings.includes(new_finding)) {
+          file_info.analytic_findings.push(new_finding);
+        }
+
         if (shell_match[1].startsWith("\"")) {
           // Literal value
-          shell_command = create_object_match[1].slice(1,-1);
+          shell_command = shell_match[1].slice(1,-1);
         } else {
           // Varable value, find definition.
           var shell_var_regex  = new RegExp("\\.saveToFile\\s+" + shell_match[1], "gm");
@@ -2117,8 +2123,24 @@ class Static_File_Analyzer {
       var spreadsheet_sheet_names = {}; // Spreadsheet names index
       var spreadsheet_sheet_relations = {};
       var string_constants = [];
+      var xml_text;
 
       for (var i = 0; i < archive_files.length; i++) {
+        if (archive_files[i].file_name.toLowerCase().indexOf(".xml") >= -1) {
+          xml_text = Static_File_Analyzer.get_string_from_array(await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i));
+
+          // Look for suspicious XML schema targets
+          var xml_target_regex = /Target\s*\=\s*[\"\'](mhtml\:[^\"\']+)/gmi;
+          var xml_target_match = xml_target_regex.exec(xml_text);
+
+          while (xml_target_match !== null) {
+            file_info.analytic_findings.push("SUSPICIOUS - Unusual XML Schema Target: " + xml_target_match[1]);
+            file_info = this.search_for_iocs(xml_target_match[1], file_info);
+            xml_target_match = xml_target_regex.exec(xml_text);
+          }
+        }
+
+
         if (archive_files[i].file_name.toLowerCase().substring(0, 5) == "ppt/") {
           file_info.file_format = "pptx";
           file_info.file_generic_type = "Presentation";
