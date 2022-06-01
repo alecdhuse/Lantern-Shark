@@ -2126,7 +2126,7 @@ class Static_File_Analyzer {
       var xml_text;
 
       for (var i = 0; i < archive_files.length; i++) {
-        if (archive_files[i].file_name.toLowerCase().indexOf(".xml") >= -1) {
+        if (archive_files[i].file_name.toLowerCase().indexOf(".xml") > -1) {
           xml_text = Static_File_Analyzer.get_string_from_array(await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i));
 
           // Look for suspicious XML schema targets
@@ -2151,8 +2151,11 @@ class Static_File_Analyzer {
 
             xml_type_match = xml_type_regex.exec(xml_text);
           }
+        } else if (/embeddings\/oleObject[0-9]+\.bin/gmi.test(archive_files[i].file_name)) {
+          // embedded OLE objects
+          var arc_file_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
+          this.parse_compound_file_binary(arc_file_bytes);
         }
-
 
         if (archive_files[i].file_name.toLowerCase().substring(0, 5) == "ppt/") {
           file_info.file_format = "pptx";
@@ -3624,6 +3627,123 @@ class Static_File_Analyzer {
    */
   is_typed_array(array) {
     return !!(array.buffer instanceof ArrayBuffer && array.BYTES_PER_ELEMENT);
+  }
+
+  /**
+   * Parses compound file binary files and streams.
+   *
+   * @param {array}   file_bytes The bytes representing the compound file binary.
+   * @return {Object} An object representing the parsed compound file binary.
+   */
+  parse_compound_file_binary(file_bytes) {
+    if (this.array_equals(file_bytes.slice(0,4), [0xD0,0xCF,0x11,0xE0])) {
+      var cmb_obj = {
+        byte_order: "LITTLE_ENDIAN",
+        format_version: 0,
+        sector_size: 512,
+        entries: []
+      };
+
+      var current_byte = 0;
+      var compound_file_binary_minor_ver_bytes = file_bytes.slice(24,26);
+      var compound_file_binary_major_ver_bytes = file_bytes.slice(26,28);
+
+      if (this.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
+        cmb_obj.format_version = "3";
+      } else if (this.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
+        cmb_obj.format_version = "4";
+      }
+
+      // Byte order LITTLE_ENDIAN or BIG_ENDIAN
+      var byte_order_bytes = file_bytes.slice(28,30);
+      cmb_obj.byte_order = (byte_order_bytes[1] == 255) ? this.LITTLE_ENDIAN : this.BIG_ENDIAN;
+
+      var sector_size_bytes = file_bytes.slice(30,32);
+      cmb_obj.sector_size = 512; // Size in bytes
+
+      //Sector size will indicate where the beginning of file record starts.
+      if (this.array_equals(sector_size_bytes, [9,0])) {
+        cmb_obj.sector_size = 512;
+      } else if (this.array_equals(sector_size_bytes, [12,0])) {
+        cmb_obj.sector_size = 4096;
+      }
+
+      var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), cmb_obj.byte_order);
+      var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), cmb_obj.byte_order);
+      var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), cmb_obj.byte_order);
+      var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), cmb_obj.byte_order);
+      var short_sec_id_1 = this.get_four_byte_int(file_bytes.slice(60,64), cmb_obj.byte_order);
+      var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), cmb_obj.byte_order);
+      var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), cmb_obj.byte_order);
+      var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), cmb_obj.byte_order);
+      var difat_bytes = file_bytes.slice(76,512);
+      var difat_index = Array();
+      var difat_loc = Array();
+
+      // Index file byte locations of objects
+      for (var di=0; di<difat_bytes.length; di+=4) {
+        var di_index = this.get_four_byte_int(difat_bytes.slice(di,di+4), cmb_obj.byte_order);
+        if (di_index != 4294967295) {
+          difat_index.push(di_index);
+
+          var di_location = (di_index + 1) * cmb_obj.sector_size;
+          difat_loc.push(di_location);
+        }
+      }
+
+      // Proccess DIFAT Array?
+      for (var di=0; di<difat_loc.length; di++) {
+        var next_sector = file_bytes.slice(difat_loc[di], difat_loc[di]+4);
+
+        if (this.array_equals(next_sector, [0xFA,0xFF,0xFF,0xFF])) {
+          // MAXREGSECT
+        } else if (this.array_equals(next_sector, [0xFB,0xFF,0xFF,0xFF])) {
+          // Reserved for future use
+        } else if (this.array_equals(next_sector, [0xFC,0xFF,0xFF,0xFF])) {
+          // DIFSECT
+        } else if (this.array_equals(next_sector, [0xFD,0xFF,0xFF,0xFF])) {
+          // FATSECT
+        } else if (this.array_equals(next_sector, [0xFE,0xFF,0xFF,0xFF])) {
+          // ENDOFCHAIN
+        } else if (this.array_equals(next_sector, [0xFF,0xFF,0xFF,0xFF])) {
+          // FREESECT
+        }
+      }
+
+      // Directory Entry Structure
+      var sec_1_pos = 512 + (sec_id_1 * cmb_obj.sector_size); // Should be Root Entry
+      var next_directory_entry = sec_1_pos + 128;
+
+      while (!this.array_equals(file_bytes.slice(next_directory_entry,next_directory_entry+4), [0,0,0,0])) {
+        var directory_name_bytes = file_bytes.slice(next_directory_entry, next_directory_entry+64);
+        var directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 1)).trim();
+        var directory_name_buf_size = this.get_four_byte_int(file_bytes.slice(next_directory_entry+64, next_directory_entry+66), cmb_obj.byte_order);
+
+        // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
+        var entry_type = file_bytes[next_directory_entry+66];
+
+        var creation_time_bytes = file_bytes.slice(next_directory_entry+100, next_directory_entry+108);
+        var modification_time_bytes = file_bytes.slice(next_directory_entry+108, next_directory_entry+116);
+        var entry_sec_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+116, next_directory_entry+120), cmb_obj.byte_order);
+        var stream_size = this.get_four_byte_int(file_bytes.slice(next_directory_entry+120, next_directory_entry+124), cmb_obj.byte_order);
+        var stream_start = 512 + (entry_sec_id * cmb_obj.sector_size);
+        var stream_bytes = file_bytes.slice(stream_start, stream_start+stream_size);
+
+        cmb_obj.entries.push({
+          entry_name:  directory_name,
+          entry_type:  entry_type,
+          entry_start: stream_start,
+          entry_bytes: stream_bytes
+        });
+
+        next_directory_entry += 128;
+      }
+
+    } else {
+      throw "File Magic Number is not a CFB file.";
+    }
+
+    return cmb_obj;
   }
 
   /**
