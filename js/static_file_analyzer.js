@@ -2154,7 +2154,31 @@ class Static_File_Analyzer {
         } else if (/embeddings\/oleObject[0-9]+\.bin/gmi.test(archive_files[i].file_name)) {
           // embedded OLE objects
           var arc_file_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
-          this.parse_compound_file_binary(arc_file_bytes);
+          var cmb_obj = this.parse_compound_file_binary(arc_file_bytes);
+          var root_guid = cmb_obj.entries[0].enrty_guid;
+
+          for (var ci=1; ci<cmb_obj.entries.length; ci++) {
+            if (root_guid == "0002CE02-0000-0000-C000-000000000046") {
+              // Microsoft Equation 3.0 object
+              // See https://malcat.fr/blog/exploit-steganography-and-delphi-unpacking-dbatloader/
+              if (cmb_obj.entries[ci].entry_bytes[11] == 8) {
+                // Font record, look for null terminator
+                var found_null = false;
+                for (var fr=14; fr<45; fr++) {
+                  // Check if there is a null terminator withing 40 characters of the font name.
+                  if (cmb_obj.entries[ci].entry_bytes[fr] == 0) {
+                    found_null = true;
+                    break;
+                  }
+                }
+
+                if (found_null == false) {
+                  // CVE-2017-11882 Exploit
+                  file_info.analytic_findings.push("MALICIOUS - CVE-2017-11882 Exploit Found");
+                }
+              }
+            }
+          }
         }
 
         if (archive_files[i].file_name.toLowerCase().substring(0, 5) == "ppt/") {
@@ -3712,7 +3736,7 @@ class Static_File_Analyzer {
 
       // Directory Entry Structure
       var sec_1_pos = 512 + (sec_id_1 * cmb_obj.sector_size); // Should be Root Entry
-      var next_directory_entry = sec_1_pos + 128;
+      var next_directory_entry = sec_1_pos;
 
       while (!this.array_equals(file_bytes.slice(next_directory_entry,next_directory_entry+4), [0,0,0,0])) {
         var directory_name_bytes = file_bytes.slice(next_directory_entry, next_directory_entry+64);
@@ -3722,6 +3746,10 @@ class Static_File_Analyzer {
         // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
         var entry_type = file_bytes[next_directory_entry+66];
 
+        // First four bytes of unique id are flipped?
+        var unique_id1 = file_bytes.slice(next_directory_entry+80, next_directory_entry+84).reverse();
+        var unique_id2 = file_bytes.slice(next_directory_entry+84, next_directory_entry+96);
+
         var creation_time_bytes = file_bytes.slice(next_directory_entry+100, next_directory_entry+108);
         var modification_time_bytes = file_bytes.slice(next_directory_entry+108, next_directory_entry+116);
         var entry_sec_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+116, next_directory_entry+120), cmb_obj.byte_order);
@@ -3729,9 +3757,26 @@ class Static_File_Analyzer {
         var stream_start = 512 + (entry_sec_id * cmb_obj.sector_size);
         var stream_bytes = file_bytes.slice(stream_start, stream_start+stream_size);
 
+        var guid = "";
+        for (var k=0; k<unique_id1.length; k++) {
+          var hex_code = unique_id1[k].toString(16).toUpperCase();
+          guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
+        }
+
+        guid += "-";
+
+        for (var k=0; k<unique_id2.length; k++) {
+          var hex_code = unique_id2[k].toString(16).toUpperCase();
+          guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
+          if (guid.length==8 || guid.length==13 || guid.length==18 || guid.length==23) {
+            guid += "-";
+          }
+        }
+
         cmb_obj.entries.push({
           entry_name:  directory_name,
           entry_type:  entry_type,
+          enrty_guid:  guid,
           entry_start: stream_start,
           entry_bytes: stream_bytes
         });
