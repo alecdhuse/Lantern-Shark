@@ -1065,6 +1065,7 @@ class Static_File_Analyzer {
                 current_unique_offset += cb_ext_rst;
               }
 
+              file_info = this.search_for_iocs(rgb, file_info);
               string_constants.push(rgb);
             }
           }
