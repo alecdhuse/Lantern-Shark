@@ -892,7 +892,15 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "Spreadsheet";
 
     var cmb_obj = this.parse_compound_file_binary(file_bytes);
-    console.log(cmb_obj); // DEBUG TEST
+
+    for (var c=0; c<cmb_obj.entries.length; c++) {
+      if (cmb_obj.entries[c].entry_name != "Root Entry") {
+        file_info.file_components.push({
+          'name': cmb_obj.entries[c].entry_name,
+          'type': "cfb"
+        });
+      }
+    }
 
     var current_byte = 0;
 
@@ -2096,7 +2104,10 @@ class Static_File_Analyzer {
       }
 
       archive_files.push(file_entry);
-      file_info.file_components.push(file_entry.file_name);
+      file_info.file_components.push({
+        'name': file_entry.file_name,
+        'type': "zip"
+      });
     }
 
     // Check if this file is really an OOXML Document / Office document

@@ -87,7 +87,7 @@ function read_file(e) {
 
       // Populate file tree.
       for (var i = 0; i < analyzer_results.file_components.length; i++) {
-        var new_name = analyzer_results.file_components[i];
+        var new_name = analyzer_results.file_components[i].name;
         var new_id = "component_" + i;
         var new_item = "<li id='" + new_id + "'>" + new_name + "</li>";
 
@@ -140,7 +140,7 @@ async function select_file_component(e) {
 
   $("#component_" + component_index).addClass("file_tree_item_selected");
 
-  if (zip_file_extentions.includes(analyzer_results.file_format)) {
+  if (analyzer_results.file_components[component_index].type == "zip") {
     var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index);
     $("#file_text").val(get_file_text(component_bytes));
   } else {
