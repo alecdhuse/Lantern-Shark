@@ -1065,7 +1065,6 @@ class Static_File_Analyzer {
                 current_unique_offset += cb_ext_rst;
               }
 
-              file_info = this.search_for_iocs(rgb, file_info);
               string_constants.push(rgb);
             }
           }
@@ -1116,7 +1115,7 @@ class Static_File_Analyzer {
             string_end = i+19 + name_char_count;
           }
 
-          var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(i+19, string_end).filter(i => i > 5));
+          var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(i+19, string_end));
 
           if (string_val !== null && string_val.length > 0) {
             spreadsheet_var_names.push({
@@ -1283,20 +1282,8 @@ class Static_File_Analyzer {
                   }
                 } else {
                   // Xnum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f4aa5725-5bb8-46a9-9fb5-7f0393070a4c
-                  // var xnum_bytes = [formula_byte1,formula_byte2,formula_byte3,formula_byte4,formula_byte5,formula_byte6];
-                  var buf = new ArrayBuffer(8);
-                  var view = new DataView(buf);
-
-                  view.setUint8(0, formula_byte1);
-                  view.setUint8(1, formula_byte2);
-                  view.setUint8(2, formula_byte3);
-                  view.setUint8(3, formula_byte4);
-                  view.setUint8(4, formula_byte5);
-                  view.setUint8(5, formula_byte6);
-                  view.setUint8(6, file_bytes[cell_record_pos2+14]);
-                  view.setUint8(7, file_bytes[cell_record_pos2+15]);
-
-                  cell_value = view.getFloat64(0, true);
+                  var xnum_bytes = [formula_byte1,formula_byte2,formula_byte3,formula_byte4,formula_byte5,formula_byte6];
+                  // decode not currently implemented.
                 }
 
                 var formula_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+16]);
