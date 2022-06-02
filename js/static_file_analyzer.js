@@ -1355,6 +1355,12 @@ class Static_File_Analyzer {
                       'value': "&",
                       'type':  "operator"
                     });
+
+                    // Stack is implemented as Poish notation, if there is no concat already insert one.
+                    if (cell_formula.indexOf("&") < 0) {
+                      var insert_index = cell_formula.indexOf(cell_ref);
+                      cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
+                    }
                     cell_formula += "&";
                   } else if (formula_type == 0x0B) {
                     // PtgEq - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d197275e-cb7f-455c-b9b5-7e968412d470
@@ -1741,10 +1747,13 @@ class Static_File_Analyzer {
 
                     var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
                     var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
+                    var ref_found = false;
 
                     while (ixti < spreadsheet_sheet_list.length) {
                       var spreadsheet_obj = spreadsheet_sheet_list[ixti][1];
                       if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
+                        ref_found = true;
+
                         if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
                           // Cell has a value we can use this.
                           formula_calc_stack.push({
@@ -1763,6 +1772,14 @@ class Static_File_Analyzer {
                         // This loop is a hack, TODO make sure the spreadsheet indexes line up.
                         ixti++;
                       }
+                    }
+
+                    if (ref_found == false) {
+                      formula_calc_stack.push({
+                        'value': "@"+cell_ref,
+                        'type':  "reference"
+                      });
+                      cell_formula += cell_ref;
                     }
 
                     current_rgce_byte += 6;
@@ -1844,6 +1861,8 @@ class Static_File_Analyzer {
                     console.log("Calculated value and pre-calculated value miss match.");
                     console.log("Cal: " + spreadsheet_sheet_names[sheet_name].data[cell_ref].value);
                     console.log("Precal: " + string_val);
+
+                    spreadsheet_sheet_names[sheet_name].data[cell_ref].value = string_val;
                   }
 
                   cell_record_pos2 += record_size + 4;
@@ -3060,7 +3079,10 @@ class Static_File_Analyzer {
             // TODO: Implement this more fully. Currently we are just skipping it.
             stack.shift();
           } else {
-            var sub_result = (String(stack[c_index-2].value) == String(stack[c_index-1].value));
+            if (c_index > 1) {
+              var sub_result = (String(stack[c_index-2].value) == String(stack[c_index-1].value));
+            }
+
             c_index++;
           }
         } else if (stack[c_index].value == "[]") {
