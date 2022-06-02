@@ -1249,6 +1249,7 @@ class Static_File_Analyzer {
                 var formula_expr  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+14, cell_record_pos2+16), byte_order);
 
                 var cell_value = null;
+                var cell_ref_full;
 
                 if (formula_expr == 65535) {
                   if (formula_byte1 == 0) {
@@ -1358,7 +1359,7 @@ class Static_File_Analyzer {
 
                     // Stack is implemented as Poish notation, if there is no concat already insert one.
                     if (cell_formula.indexOf("&") < 0) {
-                      var insert_index = cell_formula.indexOf(cell_ref);
+                      var insert_index = cell_formula.indexOf(cell_ref_full);
                       cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
                     }
                     cell_formula += "&";
@@ -1709,6 +1710,30 @@ class Static_File_Analyzer {
                         }
                       }
                     }
+
+                    if (formula_calc_stack.length > 0) {
+                      // Check to see if formula_calc_stack consists of only strings
+                      var is_all_strings = true;
+                      var string_concat = "";
+                      for (var c=0; c<formula_calc_stack.length; c++) {
+                        if (formula_calc_stack[c].type != "string") {
+                          is_all_strings = false;
+                          break;
+                        } else {
+                          string_concat += formula_calc_stack[c].value;
+                        }
+                      }
+
+                      if (is_all_strings) {
+                        // Concat
+                        formula_calc_stack = [{
+                          'type':  "string",
+                          'value': string_concat
+                        }];
+                        cell_value = string_concat;
+                      }
+                    }
+
                   } else if (formula_type == 0x43) {
                     // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
                     var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
@@ -1748,6 +1773,7 @@ class Static_File_Analyzer {
                     var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
                     var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
                     var ref_found = false;
+                    var ixti_org = ixti+1;
 
                     while (ixti < spreadsheet_sheet_list.length) {
                       var spreadsheet_obj = spreadsheet_sheet_list[ixti][1];
@@ -1775,11 +1801,13 @@ class Static_File_Analyzer {
                     }
 
                     if (ref_found == false) {
+                      cell_ref_full = spreadsheet_sheet_list[ixti_org][1].name + "!" + cell_ref;
+
                       formula_calc_stack.push({
-                        'value': "@"+cell_ref,
+                        'value': "@"+cell_ref_full,
                         'type':  "reference"
                       });
-                      cell_formula += cell_ref;
+                      cell_formula += cell_ref_full;
                     }
 
                     current_rgce_byte += 6;
@@ -3143,6 +3171,10 @@ class Static_File_Analyzer {
           c_index++
         }
       }
+    }
+
+    if (stack.length > 1) {
+      // If the stack still has multiple items, something is wrong.
     }
 
     return stack[0];
