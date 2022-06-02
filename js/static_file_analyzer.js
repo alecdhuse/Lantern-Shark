@@ -3811,6 +3811,7 @@ class Static_File_Analyzer {
         }
 
         next_directory_entry += 128;
+        if (next_directory_entry > file_bytes.length) break;
       }
 
     } else {
