@@ -980,6 +980,7 @@ class Static_File_Analyzer {
       var string_constants = Array();
       var spreadsheet_defined_vars = {};
       var spreadsheet_var_names = [];
+      var downloaded_files = [];
 
       // Find boundsheets
       for (var i=current_byte; i<file_bytes.length; i++) {
@@ -1523,11 +1524,27 @@ class Static_File_Analyzer {
                           file_info.scripts.script_type = "Excel 4.0 Macro";
                           file_info.scripts.extracted_script += stack_result + "\n\n";
 
-                          var url_match = /((?:https?\:\/\/|\\\\)[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]+)/gmi.exec(stack_result);
-                          if (url_match !== null) {
-                            // TODO: check for HEX IP and to decode it.
-                            file_info.iocs.push(url_match[1]);
+                          // Keep a list of downloaded file names.
+                          var file_dl_match = /\=CALL\s*\(\s*[\"\']urlmon[\"\']\s*,[^\,]+\,[^\,]+\,[^\,]+\,[^\,]+\,[\"\'][\.\\]+([^\"\']+)[\"\']/gmi.exec(stack_result);
+                          if (file_dl_match !== null) {
+                            downloaded_files.push(file_dl_match[1]);
                           }
+
+                          // Check EXEC for usage of downloaded files.
+                          if (c_formula_name == "=EXEC") {
+                            for (var dl=0; dl<downloaded_files.length; dl++) {
+                              if (stack_result.indexOf(downloaded_files[dl]) > 0) {
+                                var new_finding = "SUSPICIOUS - Macro Execution of a Downloaded File";
+                                if (!file_info.analytic_findings.includes(new_finding)) {
+                                  file_info.analytic_findings.push(new_finding);
+                                }
+                                break;
+                              }
+                            }
+                          }
+
+                          // Check for IoCs
+                          file_info = this.search_for_iocs(stack_result, file_info);
                         }
                       }
 
@@ -3779,6 +3796,10 @@ class Static_File_Analyzer {
 
         var creation_time_bytes = file_bytes.slice(next_directory_entry+100, next_directory_entry+108);
         var modification_time_bytes = file_bytes.slice(next_directory_entry+108, next_directory_entry+116);
+
+        var date_int = this.get_int_from_bin(creation_time_bytes);
+        var date_test = new Date(date_int);
+
         var entry_sec_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+116, next_directory_entry+120), cmb_obj.byte_order);
         var stream_size = this.get_four_byte_int(file_bytes.slice(next_directory_entry+120, next_directory_entry+124), cmb_obj.byte_order);
         var stream_start = 512 + (entry_sec_id * cmb_obj.sector_size);
