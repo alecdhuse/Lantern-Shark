@@ -2600,9 +2600,33 @@ class Static_File_Analyzer {
 
                 while (c_tags_matches != null) {
                   var cell_id = c_tags_matches[1];
+                  var cell_value = c_tags_matches[3];
+
+                  // Get cell type
+                  var cell_type_match = /[tT]\s*\=\t*[\"\']([^\"\']+)[\"\']/gm.exec(c_tags_matches[0]);
+
+                  if (cell_type_match !== null) {
+                    if (cell_type_match[1].toLowerCase() == "b") {
+                      // Boolean
+                    } else if (cell_type_match[1].toLowerCase() == "e") {
+                      // Error
+                    } else if (cell_type_match[1].toLowerCase() == "n") {
+                      // Number
+                    } else if (cell_type_match[1].toLowerCase() == "s") {
+                      // Shared String, lookup in shared strings
+                      if (cell_value < string_constants.length) {
+                        cell_value = string_constants[cell_value];
+                      }
+                    } else if (cell_type_match[1].toLowerCase() == "str") {
+                      // Formula string
+                    } else if (cell_type_match[1].toLowerCase() == "inlineStr") {
+                      // Inline rich string
+                    }
+                  }
+
                   spreadsheet_sheet_names[key]['data'][cell_id] = {
                     'formula': c_tags_matches[2],
-                    'value': c_tags_matches[3]
+                    'value': cell_value
                   }
 
                   c_tags_matches = c_tags_regex.exec(sheet_xml);
