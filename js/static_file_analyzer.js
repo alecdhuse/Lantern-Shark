@@ -894,7 +894,7 @@ class Static_File_Analyzer {
     var cmb_obj = this.parse_compound_file_binary(file_bytes);
 
     for (var c=0; c<cmb_obj.entries.length; c++) {
-      if (cmb_obj.entries[c].entry_name != "Root Entry") {
+      if (cmb_obj.entries[c].entry_name.toLowerCase() != "root entry") {
         file_info.file_components.push({
           'name': cmb_obj.entries[c].entry_name,
           'type': "cfb"
@@ -2988,7 +2988,7 @@ class Static_File_Analyzer {
   execute_excel_stack(stack) {
   var c_index = 0;
 
-    while (c_index < stack.length) {
+    while (c_index < stack.length && c_index >= 0) {
       if (stack[c_index].type == "operator") {
         if (stack[c_index].value == "-") {
           var sub_result = stack[c_index-2].value - stack[c_index-1].value;
@@ -3032,7 +3032,10 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "&") {
           // Concat
-          var sub_result = String(stack[c_index-2].value) + String(stack[c_index-1].value);
+          var val1 = (stack[c_index-2] !== null && stack[c_index-2] !== undefined && stack[c_index-2].value !== null) ? stack[c_index-2].value : "";
+          var val2 = (stack[c_index-1] !== null && stack[c_index-1] !== undefined && stack[c_index-1].value !== null) ? stack[c_index-1].value : "";
+          var sub_result = String(val1) + String(val2);
+
           stack.splice(c_index-2, 3);
           stack.unshift({
             'value': sub_result,
