@@ -891,29 +891,14 @@ class Static_File_Analyzer {
     file_info.file_format = "xls";
     file_info.file_generic_type = "Spreadsheet";
 
+    var cmb_obj = this.parse_compound_file_binary(file_bytes);
+    console.log(cmb_obj); // DEBUG TEST
+
     var current_byte = 0;
-    var compound_file_binary_minor_ver_bytes = file_bytes.slice(24,26);
-    var compound_file_binary_major_ver_bytes = file_bytes.slice(26,28);
 
-    if (this.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
-      file_info.file_format_ver = "3";
-    } else if (this.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
-      file_info.file_format_ver = "4";
-    }
-
-    // Byte order LITTLE_ENDIAN or BIG_ENDIAN
-    var byte_order_bytes = file_bytes.slice(28,30);
-    var byte_order = (byte_order_bytes[1] == 255) ? this.LITTLE_ENDIAN : this.BIG_ENDIAN;
-
-    var sector_size_bytes = file_bytes.slice(30,32);
-    var sector_size = 512; // Size in bytes
-
-    //Sector size will indicate where the beginning of file record starts.
-    if (this.array_equals(sector_size_bytes, [9,0])) {
-      sector_size = 512;
-    } else if (this.array_equals(sector_size_bytes, [12,0])) {
-      sector_size = 4096;
-    }
+    file_info.file_format_ver = cmb_obj.format_version_major;
+    var byte_order = cmb_obj.byte_order; // Byte order LITTLE_ENDIAN or BIG_ENDIAN
+    var sector_size = cmb_obj.sector_size; // Size in bytes
 
     var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), byte_order);
     var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), byte_order);
@@ -3687,7 +3672,8 @@ class Static_File_Analyzer {
     if (this.array_equals(file_bytes.slice(0,4), [0xD0,0xCF,0x11,0xE0])) {
       var cmb_obj = {
         byte_order: "LITTLE_ENDIAN",
-        format_version: 0,
+        format_version_major: 0,
+        format_version_minor: 0,
         sector_size: 512,
         entries: []
       };
@@ -3697,9 +3683,13 @@ class Static_File_Analyzer {
       var compound_file_binary_major_ver_bytes = file_bytes.slice(26,28);
 
       if (this.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
-        cmb_obj.format_version = "3";
+        cmb_obj.format_version_major = "3";
       } else if (this.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
-        cmb_obj.format_version = "4";
+        cmb_obj.format_version_major = "4";
+      }
+
+      if (compound_file_binary_minor_ver_bytes[0] == 62) {
+        cmb_obj.format_version_minor = "3E";
       }
 
       // Byte order LITTLE_ENDIAN or BIG_ENDIAN
@@ -3764,7 +3754,9 @@ class Static_File_Analyzer {
 
       while (!this.array_equals(file_bytes.slice(next_directory_entry,next_directory_entry+4), [0,0,0,0])) {
         var directory_name_bytes = file_bytes.slice(next_directory_entry, next_directory_entry+64);
-        var directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 1)).trim();
+        var directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 5));
+        directory_name = (directory_name !== null) ? directory_name.trim() : "";
+
         var directory_name_buf_size = this.get_four_byte_int(file_bytes.slice(next_directory_entry+64, next_directory_entry+66), cmb_obj.byte_order);
 
         // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
@@ -3797,13 +3789,15 @@ class Static_File_Analyzer {
           }
         }
 
-        cmb_obj.entries.push({
-          entry_name:  directory_name,
-          entry_type:  entry_type,
-          enrty_guid:  guid,
-          entry_start: stream_start,
-          entry_bytes: stream_bytes
-        });
+        if (entry_type != 0 && directory_name != "") {
+          cmb_obj.entries.push({
+            entry_name:  directory_name,
+            entry_type:  entry_type,
+            enrty_guid:  guid,
+            entry_start: stream_start,
+            entry_bytes: stream_bytes
+          });
+        }
 
         next_directory_entry += 128;
       }
