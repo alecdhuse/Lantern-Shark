@@ -163,6 +163,42 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Extracts IoCs and suspicious and malicious indicators from Excel 4.0 macros.
+   *
+   * @param {object} file_info The file_info object for the current
+   * @param {object} sheets    The object containing all sheets in the spreadsheet.
+   * @param {String} macro_string The string containing the macto to analyze
+   * @return {object}  file_info with added result info.
+   */
+  analyze_excel_macro(file_info, sheets, macro_string) {
+    var macro_functions = macro_string.split("=");
+    var new_finding;
+
+    for (var i=0; i<macro_functions.length; i++) {
+      if (macro_functions[i].trim() != "") {
+        new_finding = "";
+        file_info.scripts.extracted_script += "=" + macro_functions[i] + "\n";
+
+        if (/CALL\(/gm.test(macro_functions[i])) {
+          file_info.scripts.script_type = "Excel 4.0 Macro";
+          new_finding = "SUSPICIOUS - Use of CALL function";
+        } else if (/EXEC\(/gm.test(macro_functions[i])) {
+          file_info.scripts.script_type = "Excel 4.0 Macro";
+          new_finding = "SUSPICIOUS - Use of EXEC function";
+        }
+
+        if (new_finding != "" && !file_info.analytic_findings.includes(new_finding)) {
+          file_info.analytic_findings.push(new_finding);
+        }
+      }
+    }
+
+    file_info = this.search_for_iocs(macro_string, file_info);
+
+    return file_info;
+  }
+
+  /**
    * Extracts meta data and other information from .exe executable files.
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
@@ -1127,6 +1163,7 @@ class Static_File_Analyzer {
       }
 
       // Find DBCell positions
+      var recalc_objs = [];
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
           var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
@@ -1300,6 +1337,9 @@ class Static_File_Analyzer {
                 }
 
                 var formula_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+16]);
+                var always_calc = (formula_bits[0] == 1) ? true : false;
+                var shared_formula = (formula_bits[3] == 1) ? true : false;
+
                 var reserved3 = file_bytes[cell_record_pos2+17];
                 var cache = file_bytes.slice(cell_record_pos2+18, cell_record_pos2+22);
 
@@ -1773,7 +1813,7 @@ class Static_File_Analyzer {
                     var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
                     var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
                     var ref_found = false;
-                    var ixti_org = ixti+1;
+                    var ixti_org = ixti;
 
                     while (ixti < spreadsheet_sheet_list.length) {
                       var spreadsheet_obj = spreadsheet_sheet_list[ixti][1];
@@ -1801,13 +1841,19 @@ class Static_File_Analyzer {
                     }
 
                     if (ref_found == false) {
+                      // Cell reference was not found or hasn't been loaded yet.
+                      // This may mean that cells are stored in the file in a different order than need to be calculated.
+                      // Store the cell names that cant be calculated and go back to recalc after all cells are loaded.
                       cell_ref_full = spreadsheet_sheet_list[ixti_org][1].name + "!" + cell_ref;
+                      var recalc_cell = current_sheet_name + "!" + this.convert_xls_column(cell_col) + cell_row;
 
                       formula_calc_stack.push({
                         'value': "@"+cell_ref_full,
                         'type':  "reference"
                       });
                       cell_formula += cell_ref_full;
+
+                      if (!recalc_objs.includes(recalc_cell)) recalc_objs.push(recalc_cell);
                     }
 
                     current_rgce_byte += 6;
@@ -1835,7 +1881,7 @@ class Static_File_Analyzer {
                   //console.log("Call Stack Debug: " + formula_calc_stack.join(""));
                   console.log("Call Stack Result Debug:");
                   console.log(stack_result2);
-                  var rr=0;
+                  var rr=0; // DEBUG
                 }
 
                 // Derive sheetname
@@ -1980,6 +2026,52 @@ class Static_File_Analyzer {
 
           }
 
+        }
+      }
+
+      for (var ro=0; ro<recalc_objs.length; ro++) {
+        var ref_info = recalc_objs[ro].split("!");
+        var cell;
+
+        if (spreadsheet_sheet_names[ref_info[0]].data.hasOwnProperty(ref_info[1])) {
+          cell = spreadsheet_sheet_names[ref_info[0]].data[ref_info[1]];
+        } else {
+          for (const [key, value] of Object.entries(spreadsheet_sheet_names)) {
+            if (spreadsheet_sheet_names[key].data.hasOwnProperty(ref_info[1])) {
+              cell = spreadsheet_sheet_names[key].data[ref_info[1]];
+              break;
+            }
+          }
+        }
+
+        if (cell.formula.indexOf("&") >= 0) {
+          var cell_concat_result = "";
+          var cell_concats = cell.formula.split("&");
+          var cell_ref_arr;
+          var sheet = spreadsheet_sheet_names[0];
+
+          for (var cc=0; cc<cell_concats.length; cc++) {
+            var cell_ref_str = cell_concats[cc];
+
+            if (cell_ref_str .startsWith("==")) {
+              cell_ref_str = cell_ref_str.substring(2);
+            }
+
+            // Error correction for missing concat
+            var ref_match = /([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)/gm.exec(cell_ref_str);
+            if (ref_match !== null) {
+              for (var ecc=1; ecc<=2; ecc++) {
+                cell_concat_result += this.get_xls_cell(ref_match[ecc], spreadsheet_sheet_names).value;
+              }
+
+              continue;
+            }
+
+            cell_concat_result += this.get_xls_cell(cell_ref_str, spreadsheet_sheet_names).value;
+          }
+
+          cell.value = cell_concat_result;
+          file_info = this.analyze_excel_macro(file_info, spreadsheet_sheet_names, cell.value);
         }
       }
 
@@ -2993,7 +3085,7 @@ class Static_File_Analyzer {
       file_info.analytic_findings.push("SUSPICIOUS - Use of CALL function");
       file_info.scripts.extracted_script += formula_matches.input + "\n\n";
     } else if (formula_name.toUpperCase() == "CHAR") {
-
+      //String.fromCharCode(stack_result)
     } else if (formula_name.toUpperCase() == "EXEC") {
       file_info.analytic_findings.push("SUSPICIOUS - Use of EXEC function");
       file_info.scripts.extracted_script += formula_matches.input + "\n\n";
@@ -3595,6 +3687,63 @@ class Static_File_Analyzer {
     }
 
   /**
+   * Gets the content an XLS cell.
+   *
+   * @param {string}  cell_ref A string in the form of Sheetname!ColumnRow
+   * @param {object}  sheet    The object containing all sheets and their data.
+   * @return {Object} The found cell object.
+   */
+  get_xls_cell(cell_ref, sheets) {
+    var cell_obj;
+    var cell_ref_arr = cell_ref.split("!");
+    var sheet_obj;
+
+    if (sheets.hasOwnProperty(cell_ref_arr[0]) && sheets[cell_ref_arr[0]].data.hasOwnProperty(cell_ref_arr[1])) {
+      sheet_obj = sheets[cell_ref_arr[0]];
+    } else {
+      for (const [key, value] of Object.entries(sheets)) {
+        sheet_obj = value;
+
+        if (sheets[key].data.hasOwnProperty(cell_ref_arr[1])) {
+          break;
+        }
+      }
+    }
+
+    if (sheet_obj !== undefined && sheet_obj.data !== undefined) {
+      if (sheet_obj.data.hasOwnProperty(cell_ref_arr[1])) {
+        cell_obj = sheet_obj.data[cell_ref_arr[1]];
+      } else {
+        // Error return blank cell
+        cell_obj = {
+          'formula': null,
+          'value': ""
+        }
+      }
+    } else {
+      // Error return blank cell
+      cell_obj = {
+        'formula': null,
+        'value': ""
+      }
+    }
+
+    // Check to see if there are unresolved cell references in call value.
+    var at_ref_match = /@([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)/gmi.exec(cell_obj.value);
+
+    while (at_ref_match !== null) {
+      var ref_val = this.get_xls_cell(at_ref_match[1], sheets).value;
+
+      if (ref_val != "") {
+        cell_obj.value = cell_obj.value.replace(at_ref_match[0],ref_val);
+        at_ref_match = /@([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)/gmi.exec(cell_obj.value);
+      }
+    }
+
+    return cell_obj;
+  }
+
+  /**
    * Gets the content of the XML tag from a given start index.
    *
    * @param {string}  source_text String representing an XML file.
@@ -3996,8 +4145,10 @@ class Static_File_Analyzer {
     var found_urls = [];
     var findings = [];
 
-    var url_match = /((?:https?\:\/\/|\\\\)[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]+)/gmi.exec(search_text);
-    if (url_match !== null) {
+    var url_regex = /((?:https?\:\/\/|\\\\)[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]+)/gmi;
+    var url_match = url_regex.exec(search_text);
+
+    while (url_match !== null) {
       // Check for hex IP
       var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
       if (hex_ip_match !== null) {
@@ -4012,6 +4163,8 @@ class Static_File_Analyzer {
       } else {
         found_urls.push(url_match[1]);
       }
+
+      url_match = url_regex.exec(search_text);
     }
 
     return {
