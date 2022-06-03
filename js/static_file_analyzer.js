@@ -1012,6 +1012,7 @@ class Static_File_Analyzer {
       var stream_start = current_byte;
 
       // Variables to load spreadsheet into mem.
+      var sheet_index_list = []; // Indexed list of sheet names.
       var spreadsheet_sheet_names = {};
       var string_constants = Array();
       var spreadsheet_defined_vars = {};
@@ -1046,6 +1047,14 @@ class Static_File_Analyzer {
 
           i += boundsheet_length+3;
         }
+      }
+
+      // Sort list by byte position.
+      sheet_index_list = Object.entries(spreadsheet_sheet_names);
+      sheet_index_list = sheet_index_list.sort((a, b) => a[1].file_pos - b[1].file_pos);
+
+      for (var si=0; si<sheet_index_list.length; si++) {
+        sheet_index_list[si] = sheet_index_list[si][0];
       }
 
       // Find SST - string constants - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b6231b92-d32e-4626-badd-c3310a672bab
@@ -1275,6 +1284,14 @@ class Static_File_Analyzer {
                 }
 
                 if (current_sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
+
+                var current_sheet_index = 0;
+                for (var si=0; si<sheet_index_list.length-1; si++) {
+                  if (sheet_index_list[si] == current_sheet_name) {
+                    current_sheet_index = si;
+                    break;
+                  }
+                }
 
                 // FormulaValue - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/39a0757a-c7bb-4e85-b144-3e7837b059d7
                 var formula_byte1 = file_bytes[cell_record_pos2+8];
@@ -1814,9 +1831,13 @@ class Static_File_Analyzer {
                     var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
                     var ref_found = false;
                     var ixti_org = ixti;
+                    var ref_sheet_name;
+                    var spreadsheet_obj;
 
-                    while (ixti < spreadsheet_sheet_list.length) {
-                      var spreadsheet_obj = spreadsheet_sheet_list[ixti][1];
+                    while (ixti < sheet_index_list.length) {
+                      ref_sheet_name = sheet_index_list[ixti];
+                      spreadsheet_obj = spreadsheet_sheet_names[ref_sheet_name];
+
                       if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
                         ref_found = true;
 
@@ -1844,7 +1865,8 @@ class Static_File_Analyzer {
                       // Cell reference was not found or hasn't been loaded yet.
                       // This may mean that cells are stored in the file in a different order than need to be calculated.
                       // Store the cell names that cant be calculated and go back to recalc after all cells are loaded.
-                      cell_ref_full = spreadsheet_sheet_list[ixti_org][1].name + "!" + cell_ref;
+                      ref_sheet_name = sheet_index_list[current_sheet_index + 1 + ixti_org];
+                      cell_ref_full = ref_sheet_name + "!" + cell_ref;
                       var recalc_cell = current_sheet_name + "!" + this.convert_xls_column(cell_col) + cell_row;
 
                       formula_calc_stack.push({
@@ -2048,7 +2070,7 @@ class Static_File_Analyzer {
           var cell_concat_result = "";
           var cell_concats = cell.formula.split("&");
           var cell_ref_arr;
-          var sheet = spreadsheet_sheet_names[0];
+          var sheet = sheet_index_list[0];
 
           for (var cc=0; cc<cell_concats.length; cc++) {
             var cell_ref_str = cell_concats[cc];
