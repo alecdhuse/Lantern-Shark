@@ -2572,12 +2572,16 @@ class Static_File_Analyzer {
 
             while (relationship_matches != null) {
               var id_match = /id\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
-              var target_match = /target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
+              var type_match = /Type\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
+              var target_match = /Target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
+
+              var type = (type_match !== null) ? type_match[1] : "";
+              var target = (target_match !== null) ? target_match[1] : "";
 
               if (id_match !== null && target_match !== null) {
                 spreadsheet_sheet_relations[id_match[1]] = {
-                  'type':   "",
-                  "target": target_match[1]
+                  'type':   type,
+                  "target": target
                 }
               }
 
@@ -2585,23 +2589,69 @@ class Static_File_Analyzer {
             }
           } else if (archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.xml.rels") {
             // This will build the relationships for this spreadsheet. We can use this to find malicious code.
-            var workbook_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
-            var workbook_xml = Static_File_Analyzer.get_string_from_array(workbook_xml_bytes);
-
-            var relationship_regex = /\<Relationship\s*Id\s*\=\s*[\"\']([a-zA-Z0-9]+)[\"\']\s+Type\s*\=\s*[\"\']([^\"\']+)[\"\']\s*Target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi;
-            var relationship_matches = relationship_regex.exec(workbook_xml);
+            var relationship_regex = /<\s*Relationship([^\>]+)\>/gmi;
+            var relationship_matches = relationship_regex.exec(xml_text);
 
             while (relationship_matches != null) {
+              var type_match = /Type\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+              var target_match = /Target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+
+              var type = (type_match !== null) ? type_match[1] : "";
+              var target = (target_match !== null) ? target_match[1] : "";
+
+              if (type.toLowerCase().endsWith("vbaproject")) {
+                if (target !== "vbaProject.bin") {
+                  file_info.analytic_findings.push("SUSPICIOUS - Nonstandard VBA Project File Name: " + target);
+                }
+
+                file_info.scripts.script_type = "VBA Macro";
+                var vba_file_index = -1;
+                for (var fci=0; fci<file_info.file_components.length; fci++) {
+                  if (file_info.file_components[fci].name.split("/")[1] == target) {
+                    vba_file_index = fci;
+                    break;
+                  }
+                }
+
+                if (vba_file_index >= 0) {
+                  var macro_data = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, vba_file_index);
+                  var vba_data = this.extract_vba(macro_data);
+
+                  for (var s = 0; s < vba_data.attributes.length; s++) {
+                    var sub_match = /\n[a-z\s]+Sub[^\(]+\([^\)]*\)/gmi.exec(vba_data.attributes[s]);
+
+                    if (sub_match != null) {
+                      var vba_code = vba_data.attributes[s].substring(sub_match.index).trim();
+                      var analyzed_results = this.analyze_embedded_script(vba_code);
+
+                      //includes
+                      for (var f=0; f<analyzed_results.findings.length; f++) {
+                        file_info.analytic_findings.push(analyzed_results.findings[f]);
+                      }
+
+                      for (var f=0; f<analyzed_results.iocs.length; f++) {
+                        file_info.iocs.push(analyzed_results.iocs[f]);
+                      }
+
+                      file_info.scripts.extracted_script += vba_code + "\n\n";
+                    }
+                  }
+                }
+
+              }
+
               spreadsheet_sheet_relations[relationship_matches[1]] = {
                 'type':   relationship_matches[2],
                 "target": relationship_matches[3]
               }
 
-              relationship_matches = relationship_regex.exec(workbook_xml);
+              relationship_matches = relationship_regex.exec(xml_text);
             }
+
           }
         }
 
+        /*
         // Look for macros
         if (/vbaProject\.bin/gmi.test(archive_files[i].file_name)) {
           file_info.scripts.script_type = "VBA Macro";
@@ -2630,7 +2680,9 @@ class Static_File_Analyzer {
             }
           }
 
-        } else if (/docProps\/core\.xml/gmi.test(archive_files[i].file_name)) {
+        } else
+        */
+        if (/docProps\/core\.xml/gmi.test(archive_files[i].file_name)) {
           // Meta data file
           var meta_data_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
           var meta_data_xml = Static_File_Analyzer.get_string_from_array(meta_data_xml_bytes);
