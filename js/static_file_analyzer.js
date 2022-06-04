@@ -822,8 +822,7 @@ class Static_File_Analyzer {
 
           var comment_insert_loc = vba_code.indexOf("\n", cell_range_match.index);
           var comment = (cell_range_match[1] !== null) ? cell_range_match[1] + " = " : "";
-          comment = "' " + comment + JSON.stringify(return_array) + "\n";
-
+          comment = "'🦈 " + comment + JSON.stringify(return_array) + "\n";
           file_info.scripts.extracted_script = file_info.scripts.extracted_script.substring(0,comment_insert_loc) + comment + file_info.scripts.extracted_script.substring(comment_insert_loc);
         }
 
@@ -899,6 +898,37 @@ class Static_File_Analyzer {
             if (!file_info.analytic_findings.includes(new_finding)) {
               file_info.analytic_findings.push(new_finding);
             }
+          }
+        }
+
+        // multiple vars, resolve their values
+        var comp_var_regex = /(\"[^\"]+\"|[\w\d]+)\s*([\+\-\*\\\%\^\&])?/gm;
+        var comp_var_match = comp_var_regex.exec(shell_match[1]);
+        var comp_result = "";
+
+        while (comp_var_match !== null) {
+          // Get varable value
+          var shell_var_regex  = new RegExp(comp_var_match[1] + "\\s*\\=\\s*(\\\"?[^\\n\\r\\\"]+\\\"?)", "gm");
+          var shell_var_match = shell_var_regex.exec(vba_code);
+
+          if (shell_var_match !== null) {
+            if (shell_var_match[1].startsWith("\"")) {
+              // Literal value
+              comp_result += shell_var_match[1].slice(1,-1);
+            }
+
+          }
+
+          comp_var_match = comp_var_regex.exec(shell_match[1]);
+        }
+
+        if (comp_result.length > 0) {
+          var comment_insert_loc = vba_code.indexOf("\n", shell_match.index);
+          comment = "'🦈 Shell(\"" + comp_result + "\")\n";
+          file_info.scripts.extracted_script = file_info.scripts.extracted_script.substring(0,comment_insert_loc) + comment + file_info.scripts.extracted_script.substring(comment_insert_loc);
+
+          if (comp_result.indexOf("mshta") >= 0) {
+            file_info.analytic_findings.push("SUSPICIOUS - Mshta Command Used to Load Internet Hosted Resource");
           }
         }
 
@@ -2626,11 +2656,15 @@ class Static_File_Analyzer {
 
                       //includes
                       for (var f=0; f<analyzed_results.findings.length; f++) {
-                        file_info.analytic_findings.push(analyzed_results.findings[f]);
+                        if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
+                          file_info.analytic_findings.push(analyzed_results.findings[f]);
+                        }
                       }
 
                       for (var f=0; f<analyzed_results.iocs.length; f++) {
-                        file_info.iocs.push(analyzed_results.iocs[f]);
+                        if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
+                          file_info.iocs.push(analyzed_results.iocs[f]);
+                        }
                       }
 
                       file_info.scripts.extracted_script += vba_code + "\n\n";
