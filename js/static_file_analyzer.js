@@ -2640,9 +2640,11 @@ class Static_File_Analyzer {
             while (relationship_matches != null) {
               var type_match = /Type\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
               var target_match = /Target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+              var rid_match = /Id\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
 
               var type = (type_match !== null) ? type_match[1] : "";
               var target = (target_match !== null) ? target_match[1] : "";
+              var rid = (rid_match !== null) ? rid_match[1] : "";
 
               if (type.toLowerCase().endsWith("vbaproject")) {
                 if (target !== "vbaProject.bin") {
@@ -2675,9 +2677,11 @@ class Static_File_Analyzer {
 
               }
 
-              spreadsheet_sheet_relations[relationship_matches[1]] = {
-                'type':   relationship_matches[2],
-                "target": relationship_matches[3]
+              if (rid != "") {
+                spreadsheet_sheet_relations[rid] = {
+                  'type':   type,
+                  "target": target
+                }
               }
 
               relationship_matches = relationship_regex.exec(xml_text);
@@ -2837,7 +2841,7 @@ class Static_File_Analyzer {
                 // XLM Sheet file
                 var sheet_xml = Static_File_Analyzer.get_string_from_array(sheet_file_bytes);
 
-                var c_tags_regex = /\<\s*c\s*r\s*\=\s*[\"\']([a-zA-Z0-9]+)[\"\'][^\>]+\>\s*(?:\<\s*f\s*\>([^\<]+)\<\/f\>\s*)?\<\s*v\s*\>([^\<]+)\<\/v\>/gmi;
+                var c_tags_regex = /\<\s*c\s*r\s*\=\s*[\"\']([a-zA-Z0-9]+)[\"\'][^\>]+\>\s*(?:\<\s*f\s*\>([^\<]+)\<\/f\>\s*)?\<\s*v\s*(?:[^\>]*)?\>([^\<]+)\<\/v\>/gmi;
                 var c_tags_matches = c_tags_regex.exec(sheet_xml);
 
                 while (c_tags_matches != null) {
@@ -2865,6 +2869,11 @@ class Static_File_Analyzer {
                       // Inline rich string
                     }
                   }
+
+                  // Replace XML special key words
+                  cell_value = cell_value.replaceAll(/\&lt\;/gmi, "<");
+                  cell_value = cell_value.replaceAll(/\&gt\;/gmi, ">");
+                  cell_value = cell_value.replaceAll(/\&amp\;/gmi, "&");
 
                   spreadsheet_sheet_names[key]['data'][cell_id] = {
                     'formula': c_tags_matches[2],
@@ -3088,7 +3097,7 @@ class Static_File_Analyzer {
   calculate_cell_formula(cell_formula, spreadsheet_sheet_names, active_sheet, file_info) {
     var formula_output = "";
 
-    var formula_regex = /\=?([a-zA-Z]+)\(([^\,\)]+\,?)([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?\)/gmi;
+    var formula_regex = /\=?(?:null)?([a-zA-Z]+)\(([^\,\)]+\,?)([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?([^\,\)]+\,?)?\)/gmi;
     var formula_matches = formula_regex.exec(cell_formula);
 
     while (formula_matches != null) {
@@ -3099,17 +3108,24 @@ class Static_File_Analyzer {
       while (formula_matches[param_index] !== null && formula_matches[param_index] !== undefined) {
         if ((formula_matches[param_index].match(/\!/g) || []).length > 1) {
           //Multiple cell references
-          if ((formula_matches[param_index].match(/\&amp\;/gmi) || []).length > 1) {
+          if ((formula_matches[param_index].match(/(?:\&amp\;|&)/gmi) || []).length > 1) {
             // Concat
-            var concat_parts = formula_matches[param_index].split("&amp;");
             var concat_result = "";
+            var concat_parts = formula_matches[param_index].split("&amp;");
+            concat_parts = (concat_parts.length > 1) ? concat_parts : concat_parts.split("&");
 
             for (var p=0; p<concat_parts.length; p++) {
-              concat_result += this.get_ooxlm_cell_data(concat_parts[p], spreadsheet_sheet_names, active_sheet).value;
+              if (concat_parts[p].charAt(0) == "\"" && concat_parts[p].slice(-1) == "\"") {
+                // String literal
+                concat_result += concat_parts[p].slice(1,-1);
+              } else {
+                // Cell reference
+                concat_result += this.get_ooxlm_cell_data(concat_parts[p], spreadsheet_sheet_names, active_sheet).value;
+              }
             }
 
             // Look for nested string concat and do the concat.
-            concat_result = concat_result.replaceAll(/[\"\']\&amp\;[\"\']/gmi, "");
+            concat_result = concat_result.replaceAll(/(?:[\"\']\&amp\;[\"\']|\"?\&\"?)/gmi, "");
             formula_params[param_index] = concat_result;
           }
         } else {
@@ -3119,6 +3135,7 @@ class Static_File_Analyzer {
             if (cell_ref_obj.value !== null && cell_ref_obj.value !== undefined) {
               // Value is already calculated
               formula_params[param_index] = cell_ref_obj.value;
+              formula_params[param_index] = formula_params[param_index].replaceAll(/[\"\']\&amp\;[\"\']/gmi, "");
             } else {
               // We will have to calculate this
               if (cell_ref_obj.formula !== null && cell_ref_obj.formula !== undefined) {
@@ -3160,12 +3177,18 @@ class Static_File_Analyzer {
     if (formula_name.toUpperCase() == "ARABIC") {
 
     } else if (formula_name.toUpperCase() == "CALL") {
-      file_info.analytic_findings.push("SUSPICIOUS - Use of CALL function");
+      if (!file_info.analytic_findings.includes("SUSPICIOUS - Use of CALL function")) {
+        file_info.analytic_findings.push("SUSPICIOUS - Use of CALL function");
+      }
+
       file_info.scripts.extracted_script += formula_matches.input + "\n\n";
     } else if (formula_name.toUpperCase() == "CHAR") {
       //String.fromCharCode(stack_result)
     } else if (formula_name.toUpperCase() == "EXEC") {
-      file_info.analytic_findings.push("SUSPICIOUS - Use of EXEC function");
+      if (!file_info.analytic_findings.includes("SUSPICIOUS - Use of EXEC function")) {
+        file_info.analytic_findings.push("SUSPICIOUS - Use of EXEC function");
+      }
+
       file_info.scripts.extracted_script += formula_matches.input + "\n\n";
     } else if (formula_name.toUpperCase() == "FORMULA") {
       /*  FORMULA(formula_text, reference)
@@ -3205,6 +3228,8 @@ class Static_File_Analyzer {
           this.execute_excel_formula(formula_matches[1], formula_matches, [], spreadsheet_sheet_names, active_sheet, file_info);
         }
       }
+    } else if (formula_name.toUpperCase() == "_XLFN.ARABIC") {
+
     }
   }
 
