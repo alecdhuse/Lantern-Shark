@@ -3190,11 +3190,13 @@ class Static_File_Analyzer {
       }
 
       file_info.scripts.extracted_script += formula_matches.input + "\n\n";
-    } else if (formula_name.toUpperCase() == "FORMULA") {
+    } else if (formula_name.toUpperCase() == "FORMULA" || formula_name.toUpperCase() == "FILL") {
       /*  FORMULA(formula_text, reference)
           Formula_text - text, number, reference, or formula
           reference - Cell Reference
           Takes the value in formula_text and places it in the spreadsheet at the location defined by reference.
+
+          FILL is often used in the same way as FORMULA.
       */
       var cell_name;
       var new_sheet_name;
@@ -3230,6 +3232,8 @@ class Static_File_Analyzer {
       }
     } else if (formula_name.toUpperCase() == "_XLFN.ARABIC") {
 
+    } else {
+      console.log(formula_name + " function has not been implemented yet.")
     }
   }
 
