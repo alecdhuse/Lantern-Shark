@@ -125,6 +125,10 @@ class Static_File_Analyzer {
       {
         name:  "SUSPICIOUS - Certutil Used to Download a File",
         regex: /certutil\.exe\s+-urlcache\s+-split\s+-f\s+/gmi
+      },
+      {
+        name:  "SUSPICIOUS - Mshta Command Used to Load Internet Hosted Resource",
+        regex: /mshta\s+[a-zA-Z]+\:\/\//gmi
       }
     ];
 
@@ -926,15 +930,26 @@ class Static_File_Analyzer {
           var comment_insert_loc = vba_code.indexOf("\n", shell_match.index);
           comment = "'🦈 Shell(\"" + comp_result + "\")\n";
           file_info.scripts.extracted_script = file_info.scripts.extracted_script.substring(0,comment_insert_loc) + comment + file_info.scripts.extracted_script.substring(comment_insert_loc);
-
-          if (comp_result.indexOf("mshta") >= 0) {
-            file_info.analytic_findings.push("SUSPICIOUS - Mshta Command Used to Load Internet Hosted Resource");
-          }
         }
 
         shell_match = shell_regex.exec(vba_code);
       }
     }
+
+    var analyzed_results = this.analyze_embedded_script(file_info.scripts.extracted_script);
+
+    for (var f=0; f<analyzed_results.findings.length; f++) {
+      if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
+        file_info.analytic_findings.push(analyzed_results.findings[f]);
+      }
+    }
+
+    for (var f=0; f<analyzed_results.iocs.length; f++) {
+      if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
+        file_info.iocs.push(analyzed_results.iocs[f]);
+      }
+    }
+
   }
 
   /**
@@ -2652,21 +2667,7 @@ class Static_File_Analyzer {
 
                     if (sub_match != null) {
                       var vba_code = vba_data.attributes[s].substring(sub_match.index).trim();
-                      var analyzed_results = this.analyze_embedded_script(vba_code);
-
-                      //includes
-                      for (var f=0; f<analyzed_results.findings.length; f++) {
-                        if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
-                          file_info.analytic_findings.push(analyzed_results.findings[f]);
-                        }
-                      }
-
-                      for (var f=0; f<analyzed_results.iocs.length; f++) {
-                        if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
-                          file_info.iocs.push(analyzed_results.iocs[f]);
-                        }
-                      }
-
+                      vba_code = this.pretty_print_vba(vba_code);
                       file_info.scripts.extracted_script += vba_code + "\n\n";
                     }
                   }
@@ -2685,37 +2686,6 @@ class Static_File_Analyzer {
           }
         }
 
-        /*
-        // Look for macros
-        if (/vbaProject\.bin/gmi.test(archive_files[i].file_name)) {
-          file_info.scripts.script_type = "VBA Macro";
-          file_info.file_format = (file_info.file_format != "xlsb") ? "xlsm" : "xlsb";
-
-          // Zip Decompression
-          var macro_data = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
-          var vba_data = this.extract_vba(macro_data);
-
-          for (var s = 0; s < vba_data.attributes.length; s++) {
-            var sub_match = /\n[a-z\s]+Sub[^\(]+\([^\)]*\)/gmi.exec(vba_data.attributes[s]);
-
-            if (sub_match != null) {
-              var vba_code = vba_data.attributes[s].substring(sub_match.index).trim();
-              var analyzed_results = this.analyze_embedded_script(vba_code);
-
-              for (var f=0; f<analyzed_results.findings.length; f++) {
-                file_info.analytic_findings.push(analyzed_results.findings[f]);
-              }
-
-              for (var f=0; f<analyzed_results.iocs.length; f++) {
-                file_info.iocs.push(analyzed_results.iocs[f]);
-              }
-
-              file_info.scripts.extracted_script += vba_code + "\n\n";
-            }
-          }
-
-        } else
-        */
         if (/docProps\/core\.xml/gmi.test(archive_files[i].file_name)) {
           // Meta data file
           var meta_data_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
