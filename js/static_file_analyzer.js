@@ -2213,7 +2213,7 @@ class Static_File_Analyzer {
           var vba_code = Static_File_Analyzer.get_ascii(vba_bytes);
           vba_code = this.pretty_print_vba(vba_code);
 
-          var sub_match = /\n[a-z\s]?Sub[^\(]+\([^\)]*\)/gmi.exec(vba_code);
+          var sub_match = /\n[a-z\s]?(?:Sub|Function)[^\(]+\([^\)]*\)/gmi.exec(vba_code);
 
           if (sub_match != null) {
             file_info.scripts.script_type = "VBA Macro";
