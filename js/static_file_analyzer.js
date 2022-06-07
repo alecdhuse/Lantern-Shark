@@ -4202,20 +4202,6 @@ class Static_File_Analyzer {
           stream_properties = this.parse_cfb_summary_information(stream_bytes, cmb_obj);
         }
 
-        // Temp fix for too long sections
-        if (has_summary_information == false) {
-          for (var fbi=0; fbi<file_bytes.length; fbi++) {
-            if (this.array_equals(file_bytes.slice(fbi,fbi+25), [0x00,0x00,0x05,0x00,0x53,0x00,0x75,0x00,0x6D,0x00,0x6D,0x00,0x61,0x00,0x72,0x00,0x79,0x00,0x49,0x00,0x6E,0x00,0x66,0x00,0x6F])) {
-              has_summary_information = true;
-              continue;
-            } else if (has_summary_information && this.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
-              var summary_information_start = fbi;
-
-              break;
-            }
-          }
-        }
-
         if (stream_start < file_bytes.length && entry_type != 0 && directory_name != "") {
           cmb_obj.entries.push({
             entry_name:  directory_name,
@@ -4229,6 +4215,37 @@ class Static_File_Analyzer {
 
         next_directory_entry += 128;
         if (next_directory_entry > file_bytes.length) break;
+      }
+
+      // Temp fix for too long sections
+      if (has_summary_information == false) {
+        var summary_information_start = -1;
+        var summary_information_end = -1;
+
+        for (var fbi=0; fbi<file_bytes.length; fbi++) {
+          if (this.array_equals(file_bytes.slice(fbi,fbi+25), [0x00,0x00,0x05,0x00,0x53,0x00,0x75,0x00,0x6D,0x00,0x6D,0x00,0x61,0x00,0x72,0x00,0x79,0x00,0x49,0x00,0x6E,0x00,0x66,0x00,0x6F])) {
+            has_summary_information = true;
+            continue;
+          } else if (summary_information_start > 0 && this.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
+            summary_information_end = fbi;
+            var summary_stream = file_bytes.slice(summary_information_start, summary_information_end);
+            stream_properties = this.parse_cfb_summary_information(summary_stream, cmb_obj);
+
+            cmb_obj.entries.push({
+              entry_name:  "SummaryInformation",
+              entry_type:  2,
+              entry_guid:  "",
+              entry_start: summary_information_start,
+              entry_bytes: summary_stream ,
+              entry_properties: stream_properties
+            });
+
+            break;
+          } else if (has_summary_information && this.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
+            summary_information_start = fbi;
+            continue;
+          }
+        }
       }
 
       // TODO implement Short-Stream
