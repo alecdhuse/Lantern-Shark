@@ -983,13 +983,26 @@ class Static_File_Analyzer {
       }
 
       if (cmb_obj.entries[c].entry_name.toLowerCase() == "summaryinformation") {
-        file_info.metadata.author = cmb_obj.entries[c].entry_properties.author;
-        file_info.metadata.creation_application = cmb_obj.entries[c].entry_properties.creating_application;
-        file_info.metadata.creation_os = cmb_obj.entries[c].entry_properties.os + " " + cmb_obj.entries[c].entry_properties.os_version;
-        file_info.metadata.creation_date = cmb_obj.entries[c].entry_properties.create_date;
-        file_info.metadata.description = cmb_obj.entries[c].entry_properties.subject;
-        file_info.metadata.last_modified_date = cmb_obj.entries[c].entry_properties.last_saved;
-        file_info.metadata.title = cmb_obj.entries[c].entry_properties.title;
+        var props = cmb_obj.entries[c].entry_properties;
+        var creation_os = "unknown";
+
+        if (props.hasOwnProperty("os")) {
+          creation_os = props.os + " " + (props.hasOwnProperty("os_version") ? props.os_version : "");
+        }
+
+        file_info.metadata.author = (props.hasOwnProperty("author")) ? props.author : "unknown";
+        file_info.metadata.creation_application = (props.hasOwnProperty("creating_application")) ? props.creating_application : "unknown";
+        file_info.metadata.creation_os = creation_os;
+        file_info.metadata.creation_date = (props.hasOwnProperty("create_date")) ? props.create_date : "0000-00-00 00:00:00";
+        file_info.metadata.description = (props.hasOwnProperty("subject")) ? props.subject : "unknown";
+        file_info.metadata.last_modified_date = (props.hasOwnProperty("last_saved")) ? props.last_saved : "0000-00-00 00:00:00";
+        file_info.metadata.title = (props.hasOwnProperty("title")) ? props.title : "unknown";
+      } else if (cmb_obj.entries[c].entry_name.toLowerCase() == "worddocument") {
+        file_info.file_format = "doc";
+        file_info.file_generic_type = "Document";
+      } else if (cmb_obj.entries[c].entry_name.toLowerCase() == "workbook") {
+        file_info.file_format = "xls";
+        file_info.file_generic_type = "Spreadsheet";
       }
     }
 
