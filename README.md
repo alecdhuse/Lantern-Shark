@@ -3,6 +3,9 @@ Lantern Shark is a file analyzer written in HTML and JavaScript. It can extract 
 
 A live demo of this project can be viewed [here](https://alecdhuse.github.io/Lantern-Shark/).
 
+# Additional Features
+  - Deobfuscation of extracted scripts via inserted comments. Look for the comment caracter followed by the 🦈 shark emoji.
+
 # Notes
 This project is under heavy development, and currently only supports a small number of file types.
 See the table below for a list of supported file types and types of data extracted from each.
@@ -20,7 +23,7 @@ See the table below for a list of supported file types and types of data extract
 | RTF            | X            | X               |                 | X        |                  |                   |
 | PNG            | X            | X               |                 | X        |                  |                   |
 | PPTX           | X            | X               | X               | X        |                  |                   |
-| XLS            | X            |                 |                 |          | X                | X                 |
+| XLS            | X            | X               |                 | X        | X                | X                 |
 | XLSB           | X            | X               | X               | X        | X                | X                 |
 | XLSX           | X            | X               | X               | X        | X                | X                 |
 | XML            | X            |                 |                 |          |                  |                   |
@@ -32,6 +35,10 @@ Lantern Shark should be able to detect the following CVEs:
 - PDF
   - CVE-2019-7089
   - CVE-2018-4993
+- RTF
+  - CVE-2017-11882 (Limited Detection)
+- XLSB, XLSM, XLSX
+  - CVE-2017-11882 (Limited Detection)
 
 # Dependencies
 Lantern Shark uses the following libraries:
