@@ -4146,6 +4146,9 @@ class Static_File_Analyzer {
         }
       }
 
+      // Section flags
+      var has_summary_information = false;
+
       // Directory Entry Structure
       var sec_1_pos = 512 + (sec_id_1 * cmb_obj.sector_size); // Should be Root Entry
       var next_directory_entry = sec_1_pos;
@@ -4195,128 +4198,21 @@ class Static_File_Analyzer {
 
         // http://sedna-soft.de/articles/summary-information-stream/
         if (directory_name == "SummaryInformation") {
-          if (this.array_equals(stream_bytes.slice(0,4), [0xFE,0xFF,0x00,0x00])) {
+          has_summary_information = true;
+          stream_properties = this.parse_cfb_summary_information(stream_bytes, cmb_obj);
+        }
 
+        // Temp fix for too long sections
+        if (has_summary_information == false) {
+          for (var fbi=0; fbi<file_bytes.length; fbi++) {
+            if (this.array_equals(file_bytes.slice(fbi,fbi+25), [0x00,0x00,0x05,0x00,0x53,0x00,0x75,0x00,0x6D,0x00,0x6D,0x00,0x61,0x00,0x72,0x00,0x79,0x00,0x49,0x00,0x6E,0x00,0x66,0x00,0x6F])) {
+              has_summary_information = true;
+              continue;
+            } else if (has_summary_information && this.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
+              var summary_information_start = fbi;
 
-            stream_properties['os_version'] = stream_bytes[4] + "." + stream_bytes[5];
-            stream_properties['os'] = (stream_bytes[6] == 2) ? "Windows" : (stream_bytes[6] == 1) ? "MacOS" : "Other OS";
-
-            var section_count = this.get_four_byte_int(stream_bytes.slice(18, 22), cmb_obj.byte_order);
-            var section_ofset = this.get_four_byte_int(stream_bytes.slice(44, 48), cmb_obj.byte_order);
-            var section_length = this.get_four_byte_int(stream_bytes.slice(section_ofset, section_ofset+4), cmb_obj.byte_order);
-            var section_prop_count = this.get_four_byte_int(stream_bytes.slice(section_ofset+4, section_ofset+8), cmb_obj.byte_order);
-
-            var section_prop_info = [];
-            var current_offset = section_ofset+8;
-            for (var pi=0; pi<section_prop_count; pi++) {
-              current_offset += 8;
-              var prop_offset = this.get_four_byte_int(stream_bytes.slice(current_offset+4, current_offset+8), cmb_obj.byte_order) + 52;
-
-              if (prop_offset < stream_bytes.length) {
-                section_prop_info.push({
-                  'id': this.get_four_byte_int(stream_bytes.slice(current_offset, current_offset+4), cmb_obj.byte_order),
-                  'offset': prop_offset
-                });
-              }
+              break;
             }
-
-            for (var pi=0; pi<section_prop_info.length; pi++) {
-              switch (section_prop_info[pi].id) {
-                case 1:
-                  // Code page (02)
-                  stream_properties['code_page'] = this.get_two_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+2), cmb_obj.byte_order);
-                  break;
-                case 2:
-                  // Title (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['title'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 3:
-                  // Subject (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['subject'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 4:
-                  // Author (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['author'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 5:
-                  // Keywords (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['keywords'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 6:
-                  // Comments (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['comments'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 7:
-                  // Template (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['template'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 8:
-                  // Last Saved By (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['last_saved_by'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 9:
-                  // Revision Number (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['revision_number'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 10:
-                  // Total Editing Time (40)
-                  var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
-                  stream_properties['total_editing_time'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
-                  break;
-                case 11:
-                  // Last Printed (40)
-                  var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
-                  stream_properties['last_printed'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
-                  break;
-                case 12:
-                  // Create Time/Date (40)
-                  var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
-                  stream_properties['create_date'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
-                  break;
-                case 13:
-                  // Last Saved Time/Date (40)
-                  var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
-                  stream_properties['last_saved'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
-                  break;
-                case 14:
-                  // Number of Pages (03)
-                  stream_properties['page_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  break;
-                case 15:
-                  // Number of Words (03)
-                  stream_properties['word_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  break;
-                case 16:
-                  // Number of Characters (03)
-                  stream_properties['charater_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  break;
-                case 17:
-                  // Thumbnail (47)
-                  break;
-                case 18:
-                  // Name of Creating Application (1e)
-                  var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  stream_properties['creating_application'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
-                  break;
-                case 19:
-                  // Security (03)
-                  stream_properties['security'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
-                  break;
-                case 2147483648:
-                  // Locale ID (13)
-                  break;
-              }
-            }
-
-            var debug_T = "t";
           }
         }
 
@@ -4345,6 +4241,141 @@ class Static_File_Analyzer {
     }
 
     return cmb_obj;
+  }
+
+  /**
+   * Parses the summary information stream in a compound file binary file.
+   *
+   * @see https://sedna-soft.de/articles/summary-information-stream/
+   *
+   * @param {array}   stream_bytes The bytes representing the compound file binary.
+   * @param {Object}  cmb_obj compound file binary file object.
+   * @return {Object} An object with all the extracted properties from the summary information stream.
+   */
+  parse_cfb_summary_information(stream_bytes, cmb_obj) {
+    var stream_properties = {};
+
+    if (this.array_equals(stream_bytes.slice(0,4), [0xFE,0xFF,0x00,0x00])) {
+      stream_properties['os_version'] = stream_bytes[4] + "." + stream_bytes[5];
+      stream_properties['os'] = (stream_bytes[6] == 2) ? "Windows" : (stream_bytes[6] == 1) ? "MacOS" : "Other OS";
+
+      var section_count = this.get_four_byte_int(stream_bytes.slice(18, 22), cmb_obj.byte_order);
+      var section_ofset = this.get_four_byte_int(stream_bytes.slice(44, 48), cmb_obj.byte_order);
+      var section_length = this.get_four_byte_int(stream_bytes.slice(section_ofset, section_ofset+4), cmb_obj.byte_order);
+      var section_prop_count = this.get_four_byte_int(stream_bytes.slice(section_ofset+4, section_ofset+8), cmb_obj.byte_order);
+
+      var section_prop_info = [];
+      var current_offset = section_ofset+8;
+      for (var pi=0; pi<section_prop_count; pi++) {
+        current_offset += 8;
+        var prop_offset = this.get_four_byte_int(stream_bytes.slice(current_offset+4, current_offset+8), cmb_obj.byte_order) + 52;
+
+        if (prop_offset < stream_bytes.length) {
+          section_prop_info.push({
+            'id': this.get_four_byte_int(stream_bytes.slice(current_offset, current_offset+4), cmb_obj.byte_order),
+            'offset': prop_offset
+          });
+        }
+      }
+
+      for (var pi=0; pi<section_prop_info.length; pi++) {
+        switch (section_prop_info[pi].id) {
+          case 1:
+            // Code page (02)
+            stream_properties['code_page'] = this.get_two_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+2), cmb_obj.byte_order);
+            break;
+          case 2:
+            // Title (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['title'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 3:
+            // Subject (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['subject'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 4:
+            // Author (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['author'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 5:
+            // Keywords (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['keywords'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 6:
+            // Comments (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['comments'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 7:
+            // Template (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['template'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 8:
+            // Last Saved By (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['last_saved_by'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 9:
+            // Revision Number (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['revision_number'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 10:
+            // Total Editing Time (40)
+            var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
+            stream_properties['total_editing_time'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
+            break;
+          case 11:
+            // Last Printed (40)
+            var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
+            stream_properties['last_printed'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
+            break;
+          case 12:
+            // Create Time/Date (40)
+            var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
+            stream_properties['create_date'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
+            break;
+          case 13:
+            // Last Saved Time/Date (40)
+            var date_bytes = stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+8);
+            stream_properties['last_saved'] = this.get_eight_byte_date(date_bytes, cmb_obj.byte_order);
+            break;
+          case 14:
+            // Number of Pages (03)
+            stream_properties['page_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            break;
+          case 15:
+            // Number of Words (03)
+            stream_properties['word_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            break;
+          case 16:
+            // Number of Characters (03)
+            stream_properties['charater_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            break;
+          case 17:
+            // Thumbnail (47)
+            break;
+          case 18:
+            // Name of Creating Application (1e)
+            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['creating_application'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
+            break;
+          case 19:
+            // Security (03)
+            stream_properties['security'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            break;
+          case 2147483648:
+            // Locale ID (13)
+            break;
+        }
+      }
+    }
+
+    return stream_properties;
   }
 
   /**
