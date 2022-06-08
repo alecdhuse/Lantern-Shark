@@ -142,7 +142,7 @@ class Static_File_Analyzer {
     var ioc_search_base = [script_text, script_text.split("").reverse().join("")];
 
     for (var sbi=0; sbi<ioc_search_base.length; sbi++) {
-      var url_regex = /((?:https?\:\/\/|\\\\)[^\s\)\"\']+)/gmi;
+      var url_regex = /((?:https?\:\/\/|\\\\)[^\s\)\"\'\,]+)/gmi;
       var url_match = url_regex.exec(ioc_search_base[sbi]);
       while (url_match !== null) {
         if (sbi == 1) {
@@ -3215,6 +3215,8 @@ class Static_File_Analyzer {
    * @param {object}  file_info               The working file info object, passed so we can add analytic_findings and extracted_script code.
    */
   execute_excel_formula(formula_name, formula_matches, formula_params, spreadsheet_sheet_names, active_sheet, file_info) {
+    var macro_formula = formula_matches.input;
+
     if (formula_name.toUpperCase() == "ARABIC") {
 
     } else if (formula_name.toUpperCase() == "CALL") {
@@ -3222,7 +3224,32 @@ class Static_File_Analyzer {
         file_info.analytic_findings.push("SUSPICIOUS - Use of CALL function");
       }
 
-      file_info.scripts.extracted_script += formula_matches.input + "\n\n";
+      // Check for various cell references
+      var dollar_sign_ref_regex = /(?:([a-zA-Z0-9]+)!)?\$([a-zA-Z]+)\$([0-9]+)/gmi;
+      var dollar_sign_ref_match = dollar_sign_ref_regex.exec(macro_formula);
+      var sheet_ref;
+
+      while (dollar_sign_ref_match !== null) {
+        if (dollar_sign_ref_match[1] !== null && dollar_sign_ref_match[1] !== undefined) {
+          sheet_ref = dollar_sign_ref_match[1];
+        } else {
+          // No sheet ref, use acive sheet
+          sheet_ref = active_sheet;
+        }
+        var cell_ref = dollar_sign_ref_match[2] + dollar_sign_ref_match[3];
+        var cell_obj = spreadsheet_sheet_names[sheet_ref].data[cell_ref];
+        var cell_val = "";
+
+        if (cell_obj.value !== null) {
+          cell_val = cell_obj.value;
+        }
+
+        macro_formula = macro_formula.replaceAll(dollar_sign_ref_match[0], cell_val);
+
+        dollar_sign_ref_match = dollar_sign_ref_regex.exec(macro_formula);
+      }
+
+      file_info.scripts.extracted_script += macro_formula + "\n\n";
     } else if (formula_name.toUpperCase() == "CHAR") {
       //String.fromCharCode(stack_result)
     } else if (formula_name.toUpperCase() == "EXEC") {
