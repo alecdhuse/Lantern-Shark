@@ -139,25 +139,33 @@ class Static_File_Analyzer {
     }
 
     // Check for IoCs
-    var url_regex = /((?:https?\:\/\/|\\\\)[^\s\)\"\']+)/gmi;
-    var url_match = url_regex.exec(script_text);
-    while (url_match !== null) {
-      // Check for hex IP
-      var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
-      if (hex_ip_match !== null) {
-        findings.push("SUSPICIOUS - Hex Obfuscated IP Address");
+    var ioc_search_base = [script_text, script_text.split("").reverse().join("")];
 
-        try {
-          var str_ip = Static_File_Analyzer.get_ip_from_hex(hex_ip_match[1]);
-          iocs.push(url_match[1].replace(hex_ip_match[1], str_ip));
-        } catch(err) {
+    for (var sbi=0; sbi<ioc_search_base.length; sbi++) {
+      var url_regex = /((?:https?\:\/\/|\\\\)[^\s\)\"\']+)/gmi;
+      var url_match = url_regex.exec(ioc_search_base[sbi]);
+      while (url_match !== null) {
+        if (sbi == 1) {
+          findings.push("SUSPICIOUS - IoC Found in Reversed String");
+        }
+
+        // Check for hex IP
+        var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
+        if (hex_ip_match !== null) {
+          findings.push("SUSPICIOUS - Hex Obfuscated IP Address");
+
+          try {
+            var str_ip = Static_File_Analyzer.get_ip_from_hex(hex_ip_match[1]);
+            iocs.push(url_match[1].replace(hex_ip_match[1], str_ip));
+          } catch(err) {
+            iocs.push(url_match[1]);
+          }
+        } else {
           iocs.push(url_match[1]);
         }
-      } else {
-        iocs.push(url_match[1]);
-      }
 
-      url_match = url_regex.exec(script_text);
+        url_match = url_regex.exec(ioc_search_base[sbi]);
+      }
     }
 
     return {
@@ -770,6 +778,42 @@ class Static_File_Analyzer {
   analyze_vba(file_info, document_obj) {
     var vba_code = file_info.scripts.extracted_script;
 
+    // All document types
+    var doc_property_regex = /(?:([^\s\n\r]+)\s*\=\s*)?ActiveWorkbook\.BuiltinDocumentProperties\s*\(\s*([^\)]+)\s*\)/gmi;
+    var doc_property_match = doc_property_regex.exec(vba_code);
+
+    while (doc_property_match !== null) {
+      var property_name = "";
+      var property_val = "";
+
+      if (doc_property_match[2].startsWith("\"")) {
+        // Literal value
+        property_name = doc_property_match[2].slice(1,-1);
+      } else {
+        // Varable value
+      }
+
+      if (property_name.toLowerCase() == "author") {
+        property_val = document_obj.document_properties.author;
+      } else if (property_name.toLowerCase() == "comments") {
+        property_val = document_obj.document_properties.comments;
+      } else if (property_name.toLowerCase() == "keywords") {
+        property_val = document_obj.document_properties.keywords;
+      } else if (property_name.toLowerCase() == "subject") {
+        property_val = document_obj.document_properties.subject;
+      } else if (property_name.toLowerCase() == "title") {
+        property_val = document_obj.document_properties.title;
+      }
+
+      var comment_insert_loc = vba_code.indexOf("\n", doc_property_match.index+doc_property_match[0].length);
+      var comment = (doc_property_match[1] !== null && doc_property_match[1] !== undefined) ? doc_property_match[1] + " = " : "";
+      comment = "'🦈 " + comment + property_val + "\n";
+      file_info.scripts.extracted_script = file_info.scripts.extracted_script.substring(0,comment_insert_loc) + comment + file_info.scripts.extracted_script.substring(comment_insert_loc);
+      vba_code = file_info.scripts.extracted_script;
+
+      doc_property_match = doc_property_regex.exec(vba_code);
+    }
+
     if (document_obj.type.toLowerCase() == "spreadsheet") {
       var cell_range_regex = /(?:([^\s]+)\s*\=\s*)ActiveWorkbook\.Worksheets\s*\(([^\)]+)\)\.Range\s*\(([^\)]+)\)/gmi;
       var cell_range_match = cell_range_regex.exec(vba_code);
@@ -824,10 +868,11 @@ class Static_File_Analyzer {
             }
           }
 
-          var comment_insert_loc = vba_code.indexOf("\n", cell_range_match.index);
-          var comment = (cell_range_match[1] !== null) ? cell_range_match[1] + " = " : "";
+          var comment_insert_loc = vba_code.indexOf("\n", cell_range_match.index+cell_range_match[0].length);
+          var comment = (cell_range_match[1] !== null && cell_range_match[1] !== undefined) ? cell_range_match[1] + " = " : "";
           comment = "'🦈 " + comment + JSON.stringify(return_array) + "\n";
           file_info.scripts.extracted_script = file_info.scripts.extracted_script.substring(0,comment_insert_loc) + comment + file_info.scripts.extracted_script.substring(comment_insert_loc);
+          vba_code = file_info.scripts.extracted_script;
         }
 
         cell_range_match = cell_range_regex.exec(cell_range_regex);
@@ -972,6 +1017,15 @@ class Static_File_Analyzer {
     file_info.file_format = "xls";
     file_info.file_generic_type = "Spreadsheet";
 
+    // Variables to load spreadsheet into mem.
+    var sheet_index_list = []; // Indexed list of sheet names.
+    var spreadsheet_sheet_names = {};
+    var string_constants = Array();
+    var spreadsheet_defined_vars = {};
+    var spreadsheet_var_names = [];
+    var downloaded_files = [];
+    var document_properties = {};
+
     var cmb_obj = this.parse_compound_file_binary(file_bytes);
 
     for (var c=0; c<cmb_obj.entries.length; c++) {
@@ -983,20 +1037,20 @@ class Static_File_Analyzer {
       }
 
       if (cmb_obj.entries[c].entry_name.toLowerCase() == "summaryinformation") {
-        var props = cmb_obj.entries[c].entry_properties;
+        document_properties = cmb_obj.entries[c].entry_properties;
         var creation_os = "unknown";
 
-        if (props.hasOwnProperty("os")) {
-          creation_os = props.os + " " + (props.hasOwnProperty("os_version") ? props.os_version : "");
+        if (document_properties.hasOwnProperty("os")) {
+          creation_os = document_properties.os + " " + (document_properties.hasOwnProperty("os_version") ? document_properties.os_version : "");
         }
 
-        file_info.metadata.author = (props.hasOwnProperty("author")) ? props.author : "unknown";
-        file_info.metadata.creation_application = (props.hasOwnProperty("creating_application")) ? props.creating_application : "unknown";
+        file_info.metadata.author = (document_properties.hasOwnProperty("author")) ? document_properties.author : "unknown";
+        file_info.metadata.creation_application = (document_properties.hasOwnProperty("creating_application")) ? document_properties.creating_application : "unknown";
         file_info.metadata.creation_os = creation_os;
-        file_info.metadata.creation_date = (props.hasOwnProperty("create_date")) ? props.create_date : "0000-00-00 00:00:00";
-        file_info.metadata.description = (props.hasOwnProperty("subject")) ? props.subject : "unknown";
-        file_info.metadata.last_modified_date = (props.hasOwnProperty("last_saved")) ? props.last_saved : "0000-00-00 00:00:00";
-        file_info.metadata.title = (props.hasOwnProperty("title")) ? props.title : "unknown";
+        file_info.metadata.creation_date = (document_properties.hasOwnProperty("create_date")) ? document_properties.create_date : "0000-00-00 00:00:00";
+        file_info.metadata.description = (document_properties.hasOwnProperty("subject")) ? document_properties.subject : "unknown";
+        file_info.metadata.last_modified_date = (document_properties.hasOwnProperty("last_saved")) ? document_properties.last_saved : "0000-00-00 00:00:00";
+        file_info.metadata.title = (document_properties.hasOwnProperty("title")) ? document_properties.title : "unknown";
       } else if (cmb_obj.entries[c].entry_name.toLowerCase() == "worddocument") {
         file_info.file_format = "doc";
         file_info.file_generic_type = "Document";
@@ -1067,14 +1121,6 @@ class Static_File_Analyzer {
 
       // stream_start is the offset within the whole file for lbPlyPos / sheet stream_pos.
       var stream_start = current_byte;
-
-      // Variables to load spreadsheet into mem.
-      var sheet_index_list = []; // Indexed list of sheet names.
-      var spreadsheet_sheet_names = {};
-      var string_constants = Array();
-      var spreadsheet_defined_vars = {};
-      var spreadsheet_var_names = [];
-      var downloaded_files = [];
 
       // Find boundsheets
       for (var i=current_byte; i<file_bytes.length; i++) {
@@ -2230,17 +2276,16 @@ class Static_File_Analyzer {
           if (sub_match != null) {
             file_info.scripts.script_type = "VBA Macro";
             vba_code = vba_code.substring(sub_match.index).trim();
-            var analyzed_results = this.analyze_embedded_script(vba_code);
-
-            for (var f=0; f<analyzed_results.findings.length; f++) {
-              file_info.analytic_findings.push(analyzed_results.findings[f]);
-            }
-
-            for (var f=0; f<analyzed_results.iocs.length; f++) {
-              file_info.iocs.push(analyzed_results.iocs[f]);
-            }
-
             file_info.scripts.extracted_script += vba_code + "\n\n";
+
+            var document_obj = {
+              'type': "spreadsheet",
+              'document_properties': document_properties,
+              'sheets': spreadsheet_sheet_names,
+              'varables': {}
+            };
+
+            var vba_results = this.analyze_vba(file_info, document_obj);
           }
         }
       }
@@ -2620,32 +2665,15 @@ class Static_File_Analyzer {
                 // brtRevisionPtr
               }
             }
-          } else if (archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.bin.rels") {
+          } else if (archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.xml.rels" ||
+                     archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.bin.rels") {
+
             // This will build the relationships for this spreadsheet. We can use this to find malicious code.
-            var workbook_xml = xml_text;
-
-            var relationship_regex = /\<\s*relationship[^\>]+\>/gmi;
-            var relationship_matches = relationship_regex.exec(workbook_xml);
-
-            while (relationship_matches != null) {
-              var id_match = /id\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
-              var type_match = /Type\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
-              var target_match = /Target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[0]);
-
-              var type = (type_match !== null) ? type_match[1] : "";
-              var target = (target_match !== null) ? target_match[1] : "";
-
-              if (id_match !== null && target_match !== null) {
-                spreadsheet_sheet_relations[id_match[1]] = {
-                  'type':   type,
-                  "target": target
-                }
-              }
-
-              relationship_matches = relationship_regex.exec(workbook_xml);
+            if (archive_files[i].file_name.indexOf(".bin") > 0) {
+              var workbook_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
+              xml_text = Static_File_Analyzer.get_string_from_array(workbook_xml_bytes);
             }
-          } else if (archive_files[i].file_name.toLowerCase() == "xl/_rels/workbook.xml.rels") {
-            // This will build the relationships for this spreadsheet. We can use this to find malicious code.
+
             var relationship_regex = /<\s*Relationship([^\>]+)\>/gmi;
             var relationship_matches = relationship_regex.exec(xml_text);
 
@@ -2917,6 +2945,7 @@ class Static_File_Analyzer {
 
         var document_obj = {
           'type': "spreadsheet",
+          'document_properties': {},
           'sheets': spreadsheet_sheet_names,
           'varables': {}
         };
