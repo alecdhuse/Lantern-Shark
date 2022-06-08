@@ -1689,6 +1689,7 @@ class Static_File_Analyzer {
 
                     var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
                     var spreadsheet_obj = null;
+                    var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
                     for (var ssi=0; ssi<spreadsheet_sheet_list.length; ssi++) {
                       if (spreadsheet_sheet_list[ssi][1].name == current_sheet_name) {
                         spreadsheet_obj = spreadsheet_sheet_list[ssi][1];
@@ -1819,7 +1820,10 @@ class Static_File_Analyzer {
                         // A single varable with the 0x42 formula is the EXEC macro.
                         // When executing a command ^ is a special, escape charater that will be ignored.
                         // It is often used to obfusticate cmd codes.
-                        formula_calc_stack[c].value = formula_calc_stack[c].value.replaceAll("^", "");
+                        try {
+                          formula_calc_stack[c].value = formula_calc_stack[c].value.replaceAll("^", "");
+                        } catch (error) {}
+                                                                        
                         cell_formula = "=EXEC(" + formula_calc_stack[c].value + ")";
 
                         file_info.scripts.script_type = "Excel 4.0 Macro";
@@ -1938,7 +1942,6 @@ class Static_File_Analyzer {
                     var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
                     var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
 
-                    var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
                     var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
                     var ref_found = false;
                     var ixti_org = ixti;
