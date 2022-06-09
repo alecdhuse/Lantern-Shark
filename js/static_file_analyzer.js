@@ -205,6 +205,21 @@ class Static_File_Analyzer {
       }
     }
 
+    var cms_regex = /cmd\s+(?:\/\w\s+)?([a-z0-9]+)\s+[^\s\)]+/gmi;
+    var cmd_match = cms_regex.exec(macro_string);
+    while (cmd_match !== null) {
+      if (/((?:https?\:\/\/|\\\\)[^\s\)]+)/gmi.test(cmd_match[0])) {
+        if (cmd_match[1] == "mshta") {
+          new_finding = "SUSPICIOUS - Mshta Command Used to Load Internet Hosted Resource";
+          if (!file_info.analytic_findings.includes(new_finding)) {
+            file_info.analytic_findings.push(new_finding);
+          }
+        }
+      }
+
+      cmd_match = cms_regex.exec(macro_string);
+    }
+
     file_info = this.search_for_iocs(macro_string, file_info);
 
     return file_info;
@@ -1485,6 +1500,7 @@ class Static_File_Analyzer {
                   var cell_formula_debug = Static_File_Analyzer.get_string_from_array(rgce_bytes); // temp / debug
 
                   // Ptg / formula_type - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/9310c3bb-d73f-4db0-8342-28e1e0fcb68f
+                  var last_formula_type = formula_type; // For DEBUG
                   formula_type = rgce_bytes[current_rgce_byte];
                   current_rgce_byte += 1;
 
@@ -1538,6 +1554,20 @@ class Static_File_Analyzer {
                       'type':  "operator"
                     });
                     cell_formula += "==";
+                  } else if (formula_type == 0x0E) {
+                    // PtgNe - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0e49033d-5dc7-40f1-8fca-eb3b8b1c2c91
+                    formula_calc_stack.push({
+                      'value': "!=",
+                      'type':  "operator"
+                    });
+                    cell_formula += "!=";
+                  } else if (formula_type == 0x16) {
+                    // PtgMissArg - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/69352e6c-e712-48d7-92d1-0bf7c1f61f69
+                    formula_calc_stack.push({
+                      'value': "",
+                      'type':  "string"
+                    });
+                    cell_formula += "\"\"";
                   } else if (formula_type == 0x17) {
                     // String
                     var string_size = rgce_bytes[current_rgce_byte];
@@ -1677,7 +1707,7 @@ class Static_File_Analyzer {
                     } else {
                       current_rgce_byte += 1;
                     }
-                  } else if (formula_type == 0x24) {
+                  } else if (formula_type == 0x24 || formula_type == 0x44) {
                     // PtgRef - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc7c380b-d793-4219-a897-e47e13c4e055
                     // The PtgRef operand specifies a reference to a single cell in this sheet.
                     var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
@@ -1760,11 +1790,25 @@ class Static_File_Analyzer {
                         }
 
                         break;
+                      } else {
+                        // Cell reference was not found or hasn't been loaded yet.
+                        // This may mean that cells are stored in the file in a different order than need to be calculated.
+                        // Store the cell names that cant be calculated and go back to recalc after all cells are loaded.
+                        cell_ref_full = spreadsheet_obj.name + "!" + cell_ref;
+                        var recalc_cell = current_sheet_name + "!" + this.convert_xls_column(cell_col) + cell_row;
+
+                        formula_calc_stack.push({
+                          'value': "@"+cell_ref_full,
+                          'type':  "reference"
+                        });
+                        cell_formula += cell_ref_full;
+
+                        if (!recalc_objs.includes(recalc_cell)) recalc_objs.push(recalc_cell);
                       }
 
-                      current_rgce_byte += 6;
+                      current_rgce_byte += 4;
                     }
-                  } else if (formula_type == 0x41) {
+                  } else if (formula_type == 0x41 || formula_type == 0x21) {
                     // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
                     var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
                     var iftab = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
@@ -1782,6 +1826,9 @@ class Static_File_Analyzer {
                         'value': formula_calc_stack.splice(-2, 1)[0].value,
                         'type':  "string"
                       });
+                    } else if (iftab == 0x004F) {
+                      // ABSREF - Returns the absolute reference of the cells that are offset from a reference by a specified amount
+
                     } else if (iftab == 0x005A) {
                       // DEREF - Reference another cell
                       cell_formula += "=";
@@ -1802,21 +1849,93 @@ class Static_File_Analyzer {
                     } else if (iftab == 0x0096) {
                       // Call Function
                       console.log("Call function not implemented.");
+                    } else if (iftab == 0x00E1) {
+                      // End IF
                     } else {
                       // Non implemented function
                       console.log("Unknown function " + iftab); // DEBUG
+                      console.log("^ Last function: " + last_formula_type); // DEBUG
                     }
 
                     current_rgce_byte += 2;
                   } else if (formula_type == 0x42) {
                     // PtgFuncVar - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d105171-6b73-4f40-a7cd-6bf2aae15e83
                     var param_count = rgce_bytes[current_rgce_byte];
-                    var tab_bits = this.get_bin_from_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
+                    var tab_bits = this.get_binary_array(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
+                    var tab_int = rgce_bytes[current_rgce_byte+1];
+                    //var tab_int = this.get_int_from_bin(tab_bits.slice(0,15), this.LITTLE_ENDIAN);
                     current_rgce_byte += 3;
+
+                    if (tab_bits[15] == 0) {
+                      // Ftab value - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00b5dd7d-51ca-4938-b7b7-483fe0e5933b
+                      if (tab_int == 0x00) {
+                      } else if (tab_int == 0x1A) {
+                        // SIGN - https://support.microsoft.com/en-us/office/sign-function-109c932d-fcdc-4023-91f1-2dd0e916a1d8
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.SIGN",
+                          'type':   "string",
+                          'params': param_count
+                        });
+                      } else if (tab_int == 0x58) {
+                        // SET.NAME
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.SET.NAME",
+                          'type':   "string",
+                          'params': param_count
+                        });
+                      } else if (tab_int == 0x6C) {
+                        // STDEVPA - Calculates standard deviation
+                      } else if (tab_int == 0x6E) {
+                        // EXEC
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.EXEC",
+                          'type':   "string",
+                          'params': param_count
+                        });
+
+                        var stack_result = this.execute_excel_stack(formula_calc_stack);
+                        file_info.scripts.script_type = "Excel 4.0 Macro";
+                        file_info = this.analyze_excel_macro(file_info, spreadsheet_sheet_names, stack_result.value);
+                      } else if (tab_int == 0x80) {
+                        // ISNUMBER
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.ISNUMBER",
+                          'type':   "string",
+                          'params': param_count
+                        });
+                      } else if (tab_int == 0x95) {
+                        // REGISTER
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.REGISTER",
+                          'type':   "string",
+                          'params': param_count
+                        });
+                      } else if (tab_int == 0xA9) {
+                        // COUNTA - counts the number of cells that are not empty in a range.
+                        // https://support.microsoft.com/en-us/office/counta-function-7dc98875-d5c1-46f1-9a82-53f3219e2509
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.COUNTA",
+                          'type':   "string",
+                          'params': param_count
+                        });
+                      } else if (tab_int == 0xFF) {
+                        // User Defined Function
+                        //formula_calc_stack.push({
+                        //  'value': "_xlfn.USERFUNCTION",
+                        //  'type':  "string",
+                        //'params': param_count
+                        //});
+                      } else {
+                        console.log("Unknown PtgFuncVar: " + tab_int); // DEBUG
+                      }
+                    } else {
+                      // Cetab value - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0b8acba5-86d2-4854-836e-0afaee743d44
+                    }
 
                     // Execute formula_calc_stack
                     for (var c=0; c<formula_calc_stack.length; c++) {
                       if (param_count == 1 && formula_calc_stack.length <= 1) {
+                        /*
                         // A single varable with the 0x42 formula is the EXEC macro.
                         // When executing a command ^ is a special, escape charater that will be ignored.
                         // It is often used to obfusticate cmd codes.
@@ -1853,6 +1972,7 @@ class Static_File_Analyzer {
                             file_info.iocs.push(url_match[1]);
                           }
                         }
+                        */
                       } else if (param_count == 1 && formula_calc_stack.length > 1) {
                         function_name = "";
 
@@ -1867,16 +1987,28 @@ class Static_File_Analyzer {
                         if (formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
                           if (formula_calc_stack[c].value == "=") {
                             // c + 1 is the varable name, c + 2 is the value.
-                            spreadsheet_defined_vars[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
+                            if (formula_calc_stack.length > 2) {
+                              spreadsheet_defined_vars[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
 
-                            //Set a human readable value for this cell
-                            cell_formula += formula_calc_stack[c+1].value + "=" + "\"" + formula_calc_stack[c+2].value  + "\"";
+                              //Set a human readable value for this cell
+                              cell_formula += formula_calc_stack[c+1].value + "=" + "\"" + formula_calc_stack[c+2].value  + "\"";
+                              formula_calc_stack = formula_calc_stack.slice(3);
+                            } else if (formula_calc_stack.length == 2) {
+                              spreadsheet_defined_vars[formula_calc_stack[c+1].value] = "";
+                              cell_formula += formula_calc_stack[c+1].value + "=" + "\"\"";
+                              formula_calc_stack = formula_calc_stack.slice(2);
+                            }
 
-                            formula_calc_stack = formula_calc_stack.slice(3);
                           } else if (formula_calc_stack[c].value.length > 6 && formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
                             // Execute an Excel function.
                             var function_name = formula_calc_stack[c].value.substring(6);
-                            cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
+
+                            if (c+1 < formula_calc_stack.length) {
+                              cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
+                            } else {
+                              cell_formula += function_name + "(" + formula_calc_stack[c].value + ")";
+                            }
+
                             var cal_result = this.execute_excel_stack(formula_calc_stack);
                           }
                         }
@@ -1924,7 +2056,11 @@ class Static_File_Analyzer {
                         });
 
                       } else {
-                        // Varable ref error.
+                        // Probably definning the variable
+                        formula_calc_stack.push({
+                          'value': ref_var_name.name,
+                          'type':  "reference"
+                        });
                       }
                     } else {
                       // error looking up varable.
@@ -3028,12 +3164,18 @@ class Static_File_Analyzer {
 
     while (char_rem > 0) {
       c = ((char_rem) % 26);
+      var t = String.fromCharCode(c+65);
       col_name = col_conversion[c] + col_name;
+
       char_rem = Math.floor((char_rem - c - 1) / 26);
+
+      //col_name = col_conversion[(char_rem % 25)-1] + col_name
+      //char_rem = Math.floor(char_rem / 25);
     }
 
     return col_name;
   }
+
 
   /**
    * Decompress Visual Basic for Applicaitons (VBA) files within Microsoft OOXML Documents.
@@ -3393,6 +3535,18 @@ class Static_File_Analyzer {
 
             c_index++;
           }
+        } else if (stack[c_index].value == "!=") {
+          // not comparison
+          if (c_index == 0) {
+            // TODO: Implement this more fully. Currently we are just skipping it.
+            stack.shift();
+          } else {
+            if (c_index > 1) {
+              var sub_result = (String(stack[c_index-2].value) != String(stack[c_index-1].value));
+            }
+
+            c_index++;
+          }
         } else if (stack[c_index].value == "[]") {
           // TODO: Implement this more fully.
           if (stack[c_index-1].value.charAt(0) == "=") {
@@ -3428,6 +3582,67 @@ class Static_File_Analyzer {
                     'value': sub_result,
                     'type': "number"
                   });
+                  c_index++;
+                } else if (function_name == "COUNTA") {
+                  // COUNTA - counts the number of cells that are not empty in a range. Two params start_cell, end_cell
+                  c_index++;
+                } else if (function_name == "EXEC") {
+                  var param_count = stack[c_index].params;
+                  var exec_cmd = "";
+
+                  for (var rpi=c_index-param_count; rpi<c_index; rpi++) {
+                    exec_cmd += stack[rpi].value + ",";
+                  }
+                  exec_cmd = exec_cmd.slice(0,-1);
+                  exec_cmd = exec_cmd.replaceAll("^", "");
+                  var sub_result = "=EXEC(" + exec_cmd + ")"
+
+                  stack.splice(0, c_index+1);
+                  stack.unshift({
+                    'value': sub_result,
+                    'type': "string"
+                  });
+
+                  c_index++;
+                } else if (function_name == "ISNUMBER") {
+                  c_index++;
+                } else if (function_name == "REGISTER") {
+                  var sub_result = "=REGISTER(";
+                  var reg_params = stack.slice(0,c_index);
+
+                  for (var rpi=0; rpi<reg_params.length; rpi++) {
+                    sub_result += reg_params[rpi].value + ",";
+                  }
+                  sub_result = sub_result.slice(0,-1) + ")";
+                  stack.splice(0, c_index+1);
+                  stack.unshift({
+                    'value': sub_result,
+                    'type': "string"
+                  });
+                  c_index++;
+                } else if (function_name == "SET.NAME") {
+                  c_index++;
+                } else if (function_name == "SIGN") {
+                  // Determines the sign of a number. Returns 1 if the number is positive, zero (0) if the number is 0, and -1 if the number is negative.
+                  c_index++;
+                } else if (function_name == "USERFUNCTION") {
+                  // TODO finish implementation of user defined functions
+                  if (stack.length > 1) {
+                    if (stack[c_index-1].type == "number") {
+                      // skip;
+                    } else if (stack[c_index-1].type == "string") {
+                      // Evaluate string as macro
+                      var debug_stop=1;
+                    } else if (stack[c_index-1].type == "reference") {
+                      var sub_result = "_xlfn.USERFUNCTION(" + stack[c_index-1].value + ")";
+                      stack.splice(c_index-1, c_index+1);
+                      stack.unshift({
+                        'value': sub_result,
+                        'type': "string"
+                      });
+                    }
+                  }
+
                   c_index++;
                 } else {
                   // Unknown function
