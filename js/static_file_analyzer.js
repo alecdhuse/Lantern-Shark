@@ -1823,7 +1823,7 @@ class Static_File_Analyzer {
                         try {
                           formula_calc_stack[c].value = formula_calc_stack[c].value.replaceAll("^", "");
                         } catch (error) {}
-                                                                        
+
                         cell_formula = "=EXEC(" + formula_calc_stack[c].value + ")";
 
                         file_info.scripts.script_type = "Excel 4.0 Macro";
@@ -3022,16 +3022,18 @@ class Static_File_Analyzer {
    */
   convert_xls_column(col_index) {
     var col_conversion = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
-    var char_count = (col_index == 0) ? 1 : Math.ceil(col_index / 25);
     var col_name = "";
+    var c;
+    var char_rem = col_index;
 
-    for (var i=0; i<char_count; i++) {
-      col_name += col_conversion[col_index % 25]
+    while (char_rem > 0) {
+      c = ((char_rem) % 26);
+      col_name = col_conversion[c] + col_name;
+      char_rem = Math.floor((char_rem - c - 1) / 26);
     }
 
     return col_name;
   }
-
 
   /**
    * Decompress Visual Basic for Applicaitons (VBA) files within Microsoft OOXML Documents.
