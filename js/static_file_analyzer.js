@@ -3594,6 +3594,9 @@ class Static_File_Analyzer {
                     exec_cmd += stack[rpi].value + ",";
                   }
                   exec_cmd = exec_cmd.slice(0,-1);
+
+                  // When executing a command ^ is a special, escape charater that will be ignored.
+                  // It is often used to obfusticate cmd codes.
                   exec_cmd = exec_cmd.replaceAll("^", "");
                   var sub_result = "=EXEC(" + exec_cmd + ")"
 
