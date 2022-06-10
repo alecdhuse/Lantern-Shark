@@ -1,10 +1,13 @@
-var file_byte_array = [];
 var analyzer_results = {};
+var file_byte_array = [];
+var file_password = null;
 
 window.addEventListener('load', (event) => {
   document.getElementById('open_file').addEventListener('change', read_file, false);
   document.getElementById('tab_summary').addEventListener('click', change_tab, false);
   document.getElementById('tab_text').addEventListener('click', change_tab, false);
+  document.getElementById('summary_file_encrypted_password_img').addEventListener('click', decrypt_file, false);
+
 });
 
 /**
@@ -29,6 +32,63 @@ function change_tab(e) {
     $("#tab_body_text").show();
     $("#tab_text").addClass("tab_selected");
   }
+}
+
+/**
+ * Decrypt file using provided password
+ * @async
+ *
+ * @param {Event}  e The event triggered from clicking the decrypt file image.
+ */
+async function decrypt_file(e) {
+  file_password = $("#summary_file_encrypted_password_txt").val();
+
+  // If there is only one file, auto analyze that file
+  if (analyzer_results.file_components.length == 1) {
+    var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, 0, file_password);
+    var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
+    display_file_summary(subfile_analyzer_results);
+    select_file_component(null, 0);
+  }
+}
+
+/**
+ * Displays the provided file summary
+ *
+ * @param {object}  file_analyzer_results The results from the Static_File_Analyzer
+ */
+function display_file_summary(file_analyzer_results) {
+  // Load summary info
+  $("#summary_file_format").html(file_analyzer_results.file_format);
+  $("#summary_file_type").html(file_analyzer_results.file_generic_type);
+  $("#summary_file_format_ver").html(file_analyzer_results.file_format_ver);
+  $("#summary_file_encrypted").html(file_analyzer_results.file_encrypted);
+
+  if (file_analyzer_results.file_encrypted.toLowerCase() == "true" || file_analyzer_results.file_encrypted == true) {
+    if (file_analyzer_results.file_format == "zip") {
+      $("#summary_file_encrypted_password").css("display", "contents");
+    } else {
+      $("#summary_file_encrypted_password").css("display", "none");
+      file_password = null;
+    }
+  } else {
+    $("#summary_file_encrypted_password").css("display", "none");
+    file_password = null;
+  }
+
+  $("#summary_detected_script").html(file_analyzer_results.scripts.script_type);
+  $("#summary_metadata_title").html(file_analyzer_results.metadata.title);
+  $("#summary_metadata_author").html(file_analyzer_results.metadata.author);
+  $("#summary_metadata_description").html(file_analyzer_results.metadata.description);
+  $("#summary_metadata_creation_application").html(file_analyzer_results.metadata.creation_application);
+  $("#summary_metadata_creation_os").html(file_analyzer_results.metadata.creation_os);
+  $("#summary_metadata_creation_date").html(file_analyzer_results.metadata.creation_date);
+  $("#summary_metadata_last_modified_date").html(file_analyzer_results.metadata.last_modified_date);
+  $("#summary_metadata_last_saved_location").html(file_analyzer_results.metadata.last_saved_location);
+
+  $("#script_code").val(file_analyzer_results.scripts.extracted_script);
+  $("#extracted_iocs").val(file_analyzer_results.iocs.join("\n"));
+  $("#analytic_findings").val(file_analyzer_results.analytic_findings.join("\n"));
 }
 
 /**
@@ -96,24 +156,7 @@ function read_file(e) {
       }
 
       // Load summary info
-      $("#summary_file_format").html(analyzer_results.file_format);
-      $("#summary_file_type").html(analyzer_results.file_generic_type);
-      $("#summary_file_format_ver").html(analyzer_results.file_format_ver);
-      $("#summary_file_encrypted").html(analyzer_results.file_encrypted);
-      $("#summary_detected_script").html(analyzer_results.scripts.script_type);
-
-      $("#summary_metadata_title").html(analyzer_results.metadata.title);
-      $("#summary_metadata_author").html(analyzer_results.metadata.author);
-      $("#summary_metadata_description").html(analyzer_results.metadata.description);
-      $("#summary_metadata_creation_application").html(analyzer_results.metadata.creation_application);
-      $("#summary_metadata_creation_os").html(analyzer_results.metadata.creation_os);
-      $("#summary_metadata_creation_date").html(analyzer_results.metadata.creation_date);
-      $("#summary_metadata_last_modified_date").html(analyzer_results.metadata.last_modified_date);
-      $("#summary_metadata_last_saved_location").html(analyzer_results.metadata.last_saved_location);
-
-      $("#script_code").val(analyzer_results.scripts.extracted_script);
-      $("#extracted_iocs").val(analyzer_results.iocs.join("\n"));
-      $("#analytic_findings").val(analyzer_results.analytic_findings.join("\n"));
+      display_file_summary(analyzer_results);
 
       $("#file_text").val(get_file_text(array));
     }
@@ -125,29 +168,35 @@ function read_file(e) {
  * @async
  * @param {Event}  e The event triggered from the user click.
  */
-async function select_file_component(e) {
-  var component_id = e.currentTarget.id;
-  var component_index = parseInt(component_id.split("_")[1]);
-  var zip_file_extentions = ["docx", "docm", "pptx", "pptm", "xlsb", "xlsx", "xlsm", "zip"];
-
-  // Change UI to show selected component
-  $("#top_level_file").removeClass("file_tree_item_selected");
-
-  for (var i = 0; i < analyzer_results.file_components.length; i++) {
-    var new_id = "#component_" + i;
-    $(new_id).removeClass("file_tree_item_selected");
+async function select_file_component(e, component_index=null) {
+  if (e !== null) {
+    var component_id = e.currentTarget.id;
+    var component_index = parseInt(component_id.split("_")[1]);
   }
 
-  $("#component_" + component_index).addClass("file_tree_item_selected");
+  if (component_index !== null) {
+    var zip_file_extentions = ["docx", "docm", "pptx", "pptm", "xlsb", "xlsx", "xlsm", "zip"];
 
-  if (analyzer_results.file_components[component_index].type == "zip") {
-    var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index);
-    $("#file_text").val(get_file_text(component_bytes));
-  } else {
-    // Code for other componets
+    // Change UI to show selected component
+    $("#top_level_file").removeClass("file_tree_item_selected");
+
+    for (var i = 0; i < analyzer_results.file_components.length; i++) {
+      var new_id = "#component_" + i;
+      $(new_id).removeClass("file_tree_item_selected");
+    }
+
+    $("#component_" + component_index).addClass("file_tree_item_selected");
+
+    if (analyzer_results.file_components[component_index].type == "zip") {
+      file_password = ($("#summary_file_encrypted_password_txt").val().length > 0) ? $("#summary_file_encrypted_password_txt").val() : null;
+      var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+      $("#file_text").val(get_file_text(component_bytes));
+    } else {
+      // Code for other componets
+    }
   }
 
-  e.stopPropagation();
+  if (e !== null) e.stopPropagation();
 }
 
 /**

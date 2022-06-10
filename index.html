@@ -23,7 +23,7 @@
           <div id="tab_body">
 
             <div id="tab_body_summary">
-              <table>
+              <table id="summary_file_table">
                 <tr>
                   <td class="tab_summary_label">File Format</td>
                   <td id="summary_file_format" class="tab_summary_value"></td>
@@ -38,7 +38,13 @@
                 </tr>
                 <tr>
                   <td class="tab_summary_label">File Encrypted</td>
-                  <td id="summary_file_encrypted" class="tab_summary_value capitalize"></td>
+                  <td id="summary_file_encrypted_td" class="tab_summary_value capitalize">
+                    <span id="summary_file_encrypted"></span>
+                    <span id="summary_file_encrypted_password">
+                      <img src="img/decrypt.svg" id="summary_file_encrypted_password_img"  />
+                      <input type="text" id="summary_file_encrypted_password_txt" placeholder="Password"/>                      
+                    </span>
+                  </td>
                 </tr>
 
                 <tr>

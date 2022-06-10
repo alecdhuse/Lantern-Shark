@@ -59,6 +59,32 @@ body {
   flex: 2;
 }
 
+#summary_file_encrypted {
+  
+}
+
+#summary_file_encrypted_password {
+  width: 40%;
+  display: none;
+}
+
+#summary_file_encrypted_password_img {
+  cursor: pointer;
+  float: right;
+  height: 17px;
+  margin: 2px;
+  padding-left: 2px;
+}
+
+#summary_file_encrypted_password_txt {
+  float: right;
+  width: 50%;
+}
+
+#summary_file_table {
+  min-width: 500px;
+}
+
 #tab_body_text {
   display: none;
 }

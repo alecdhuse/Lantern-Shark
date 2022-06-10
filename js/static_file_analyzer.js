@@ -4332,10 +4332,14 @@ class Static_File_Analyzer {
    * @param {int}    entry_index The index within the Zip archive of the target file.
    * @return {array} The decompressed bytes of the target file in the Zip archive.
    */
-  static async get_zipped_file_bytes(file_bytes, entry_index) {
+  static async get_zipped_file_bytes(file_bytes, entry_index, password=null) {
     if (window.zip) {
+      var options = { useWebWorkers: false };
       var uint8_array = new Uint8Array(file_bytes);
-      var new_zip = new zip.ZipReader(new zip.Uint8ArrayReader(uint8_array), {useWebWorkers: false});
+
+      if (password !== null) options['password'] = password;
+
+      var new_zip = new zip.ZipReader(new zip.Uint8ArrayReader(uint8_array), options);
       var new_zip_entries = await new_zip.getEntries({});
       var unzipped_file_bytes = await new_zip_entries[entry_index].getData(new zip.Uint8ArrayWriter());
 
