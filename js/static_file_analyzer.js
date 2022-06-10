@@ -1041,6 +1041,14 @@ class Static_File_Analyzer {
     var downloaded_files = [];
     var document_properties = {};
 
+    var document_obj = {
+      'type': "spreadsheet",
+      'document_properties': document_properties,
+      'sheets': spreadsheet_sheet_names,
+      'current_sheet_name': "",
+      'varables': spreadsheet_defined_vars
+    };
+
     var cmb_obj = this.parse_compound_file_binary(file_bytes);
 
     for (var c=0; c<cmb_obj.entries.length; c++) {
@@ -1727,7 +1735,7 @@ class Static_File_Analyzer {
                       }
                     }
 
-                    var document_obj = {
+                    document_obj = {
                       'type': "spreadsheet",
                       'document_properties': document_properties,
                       'sheets': spreadsheet_sheet_names,
@@ -1821,7 +1829,7 @@ class Static_File_Analyzer {
                     var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
                     var iftab = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
 
-                    var document_obj = {
+                    document_obj = {
                       'type': "spreadsheet",
                       'document_properties': document_properties,
                       'sheets': spreadsheet_sheet_names,
@@ -1882,7 +1890,7 @@ class Static_File_Analyzer {
                     //var tab_int = this.get_int_from_bin(tab_bits.slice(0,15), this.LITTLE_ENDIAN);
                     current_rgce_byte += 3;
 
-                    var document_obj = {
+                    document_obj = {
                       'type': "spreadsheet",
                       'document_properties': document_properties,
                       'sheets': spreadsheet_sheet_names,
