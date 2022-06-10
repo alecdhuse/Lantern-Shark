@@ -166,7 +166,8 @@ function read_file(e) {
 /**
  * Event triggered when the user clicks a file component from the file tree.
  * @async
- * @param {Event}  e The event triggered from the user click.
+ * @param {Event}   e The event triggered from the user click.
+ * @param {integer} component_index Optional value to select ty component index.
  */
 async function select_file_component(e, component_index=null) {
   if (e !== null) {
