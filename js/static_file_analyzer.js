@@ -1876,6 +1876,13 @@ class Static_File_Analyzer {
                           'type':   "string",
                           'params': param_count
                         });
+                      } else if (tab_int == 0x37) {
+                        // RETURN
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.RETURN",
+                          'type':   "string",
+                          'params': param_count
+                        });
                       } else if (tab_int == 0x58) {
                         // SET.NAME
                         formula_calc_stack.push({
@@ -1896,6 +1903,13 @@ class Static_File_Analyzer {
                         var stack_result = this.execute_excel_stack(formula_calc_stack);
                         file_info.scripts.script_type = "Excel 4.0 Macro";
                         file_info = this.analyze_excel_macro(file_info, spreadsheet_sheet_names, stack_result.value);
+                      } else if (tab_int == 0x6F) {
+                        // CHAR
+                        formula_calc_stack.push({
+                          'value':  "_xlfn.CHAR",
+                          'type':   "string",
+                          'params': param_count
+                        });
                       } else if (tab_int == 0x80) {
                         // ISNUMBER
                         formula_calc_stack.push({
@@ -3583,6 +3597,8 @@ class Static_File_Analyzer {
                     'type': "number"
                   });
                   c_index++;
+                } else if (function_name == "CHAR") {
+                  c_index++;
                 } else if (function_name == "COUNTA") {
                   // COUNTA - counts the number of cells that are not empty in a range. Two params start_cell, end_cell
                   c_index++;
@@ -3616,6 +3632,22 @@ class Static_File_Analyzer {
                   for (var rpi=0; rpi<reg_params.length; rpi++) {
                     sub_result += reg_params[rpi].value + ",";
                   }
+
+                  sub_result = sub_result.slice(0,-1) + ")";
+                  stack.splice(0, c_index+1);
+                  stack.unshift({
+                    'value': sub_result,
+                    'type': "string"
+                  });
+                  c_index++;
+                } else if (function_name == "RETURN") {
+                  var sub_result = "=RETURN(";
+                  var reg_params = stack.slice(0,c_index);
+
+                  for (var rpi=0; rpi<reg_params.length; rpi++) {
+                    sub_result += reg_params[rpi].value + ",";
+                  }
+
                   sub_result = sub_result.slice(0,-1) + ")";
                   stack.splice(0, c_index+1);
                   stack.unshift({
@@ -3624,6 +3656,7 @@ class Static_File_Analyzer {
                   });
                   c_index++;
                 } else if (function_name == "SET.NAME") {
+
                   c_index++;
                 } else if (function_name == "SIGN") {
                   // Determines the sign of a number. Returns 1 if the number is positive, zero (0) if the number is 0, and -1 if the number is negative.
