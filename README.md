@@ -46,4 +46,4 @@ Lantern Shark uses the following libraries:
 - jQuery - Included in this repository but also available from https://jquery.com/download/
 
 # Credits
-- Unlock by Andy M - https://thenounproject.com/icon/unlock-4584617/ (Purchased for this project)
+- Unlock Icon by Andy M - https://thenounproject.com/icon/unlock-4584617/ (Purchased for this project)
