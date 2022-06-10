@@ -1046,6 +1046,7 @@ class Static_File_Analyzer {
       'document_properties': document_properties,
       'sheets': spreadsheet_sheet_names,
       'current_sheet_name': "",
+      'current_cell': "",
       'varables': spreadsheet_defined_vars
     };
 
@@ -1740,6 +1741,7 @@ class Static_File_Analyzer {
                       'document_properties': document_properties,
                       'sheets': spreadsheet_sheet_names,
                       'current_sheet_name': current_sheet_name,
+                      'current_cell': this.convert_xls_column(cell_col) + cell_row,
                       'varables': spreadsheet_defined_vars
                     };
 
@@ -1834,6 +1836,7 @@ class Static_File_Analyzer {
                       'document_properties': document_properties,
                       'sheets': spreadsheet_sheet_names,
                       'current_sheet_name': current_sheet_name,
+                      'current_cell': this.convert_xls_column(cell_col) + cell_row,
                       'varables': spreadsheet_defined_vars
                     };
 
@@ -1895,6 +1898,7 @@ class Static_File_Analyzer {
                       'document_properties': document_properties,
                       'sheets': spreadsheet_sheet_names,
                       'current_sheet_name': current_sheet_name,
+                      'current_cell': this.convert_xls_column(cell_col) + cell_row,
                       'varables': spreadsheet_defined_vars
                     };
 
@@ -1964,6 +1968,8 @@ class Static_File_Analyzer {
                           'type':   "string",
                           'params': param_count
                         });
+
+                        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
                       } else if (tab_int == 0x80) {
                         // ISNUMBER
                         formula_calc_stack.push({
@@ -2062,14 +2068,14 @@ class Static_File_Analyzer {
                           if (formula_calc_stack[c].value == "=") {
                             // c + 1 is the varable name, c + 2 is the value.
                             if (formula_calc_stack.length > 2) {
-                              spreadsheet_defined_vars[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
+                              document_obj.varables[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
 
                               //Set a human readable value for this cell
                               cell_formula += formula_calc_stack[c+1].value + "=" + "\"" + formula_calc_stack[c+2].value  + "\"";
                               formula_calc_stack = formula_calc_stack.slice(3);
                             } else if (formula_calc_stack.length == 2) {
                               if (c == 0) {
-                                spreadsheet_defined_vars[formula_calc_stack[c+1].value] = "";
+                                document_obj.varables[formula_calc_stack[c+1].value] = "";
                                 cell_formula += formula_calc_stack[c+1].value + "=" + "\"\"";
                                 formula_calc_stack = formula_calc_stack.slice(2);
                               }
@@ -2125,9 +2131,9 @@ class Static_File_Analyzer {
                     if (name_index <= spreadsheet_var_names.length) {
                       var ref_var_name = spreadsheet_var_names[name_index-1];
 
-                      if (spreadsheet_defined_vars.hasOwnProperty(ref_var_name.name)) {
+                      if (document_obj.varables.hasOwnProperty(ref_var_name.name)) {
                         formula_calc_stack.push({
-                          'value': spreadsheet_defined_vars[ref_var_name.name],
+                          'value': document_obj.varables[ref_var_name.name],
                           'type':  "string"
                         });
 
@@ -2227,8 +2233,8 @@ class Static_File_Analyzer {
                 if (formula_calc_stack.length > 1) {
                   var stack_result2 = this.execute_excel_stack(formula_calc_stack, document_obj);
                   //console.log("Call Stack Debug: " + formula_calc_stack.join(""));
-                  console.log("Call Stack Result Debug:");
-                  console.log(stack_result2);
+                  //console.log("Call Stack Result Debug:");
+                  //console.log(stack_result2);
                   var rr=0; // DEBUG
                 }
 
@@ -2505,6 +2511,8 @@ class Static_File_Analyzer {
               'type': "spreadsheet",
               'document_properties': document_properties,
               'sheets': spreadsheet_sheet_names,
+              'current_sheet_name': "",
+              'current_cell': "",
               'varables': spreadsheet_defined_vars
             };
 
@@ -3170,6 +3178,8 @@ class Static_File_Analyzer {
           'type': "spreadsheet",
           'document_properties': {},
           'sheets': spreadsheet_sheet_names,
+          'current_sheet_name': "",
+          'current_cell': "",
           'varables': {}
         };
 
@@ -3244,9 +3254,6 @@ class Static_File_Analyzer {
       col_name = col_conversion[c] + col_name;
 
       char_rem = Math.floor((char_rem - c - 1) / 26);
-
-      //col_name = col_conversion[(char_rem % 25)-1] + col_name
-      //char_rem = Math.floor(char_rem / 25);
     }
 
     return col_name;
@@ -3779,6 +3786,20 @@ class Static_File_Analyzer {
                     }
                   }
 
+                  var ref_match = /R\[?(\-?\d+)?\]?C\[?(\-?\d+)?\]?/gmi.exec(param2.value);
+                  if (ref_match !== null) {
+                    var row_shift = (ref_match[1] !== undefined) ? ref_match[1] : 0;
+                    var col_shift = (ref_match[2] !== undefined) ? ref_match[2] : 0;
+
+                    var new_cell_ref = this.get_shifted_cell_name(workbook.current_cell,row_shift,col_shift);
+                    if (workbook.sheets[workbook.current_sheet_name].data.hasOwnProperty(new_cell_ref)) {
+                      param2 = workbook.sheets[workbook.current_sheet_name].data[new_cell_ref];
+                    } else {
+                      param2 = "@" + workbook.current_sheet_name + "!" + new_cell_ref;
+                    }
+                    var db="dd";
+                  }
+
                   if (param2.value !== null) {
                     if (param2.type == "string") {
                       workbook.varables[param2.value] = param1.value;
@@ -4267,6 +4288,48 @@ class Static_File_Analyzer {
         'value': null
       };
     }
+  }
+
+  /**
+   * Returns a new cell reference based on a relative row and column shift.
+   *
+
+   * @param {String}   current_cell Array with int values 0-255 representing byte values.
+   * @param {integer}  row_shift Array with int values 0-255 representing byte values.
+   * @param {integer}  col_shift Array with int values 0-255 representing byte values.
+   * @return {string}  A new cell reference based on the given relative row and column shift values.
+   */
+  get_shifted_cell_name(current_cell, row_shift=0, col_shift=0) {
+    var sheet_ref = "";
+    var return_val = current_cell;
+
+    row_shift = parseInt(row_shift);
+    col_shift = parseInt(col_shift);
+
+    if (current_cell.indexOf("!") >= 0) {
+      sheet_ref = current_cell.split("!")[0];
+      current_cell = current_cell.split("!")[1];
+    }
+
+    var cell_match = /([a-zA-Z]+)([0-9]+)/gm.exec(current_cell);
+
+    if (cell_match !== null) {
+      var current_col = cell_match[1];
+      var current_row = parseInt(cell_match[2]);
+      current_row += row_shift;
+
+      for (var i=1; i<=col_shift; i++) {
+        current_col = increment_xls_column(current_col);
+      }
+
+      if (sheet_ref == "") {
+        return_val = current_col + current_row;
+      } else {
+        return_val = sheet_ref + "!" + current_col + current_row;
+      }
+    }
+
+    return return_val;
   }
 
   /**
