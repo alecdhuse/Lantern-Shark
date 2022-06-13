@@ -2312,12 +2312,12 @@ class Static_File_Analyzer {
                 // RkNumber - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/04fa5340-122f-49db-93ea-00cc75501efc
                 var rk_number_bits = this.get_binary_array(file_bytes.slice(cell_record_pos2+8, cell_record_pos2+12), byte_order);
                 var cell_value = 0;
+                var rk_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+8]);
 
-                if (rk_number_bits[1] == 0) {
+                if (rk_bits[1] == 0) {
                   // rk_number is the 30 most significant bits of a 64-bit binary floating-point number as defined in [IEEE754]. The remaining 34-bits of the floating-point number MUST be 0.
-
                   var rk_bytes = file_bytes.slice(cell_record_pos2+9, cell_record_pos2+12).reverse();
-                  var rk_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+8]);
+
                   rk_bits[0] = 0;
                   rk_bits[1] = 0;
                   rk_bytes.push(this.get_int_from_bin(rk_bits.reverse()));
@@ -2342,7 +2342,7 @@ class Static_File_Analyzer {
                   cell_value = (rk_number_bits[2] == 1) ? rk_number * -1 : rk_number;
                 }
 
-                if (rk_number_bits[0] == 1) {
+                if (rk_bits[0] == 1) {
                   // The value of RkNumber is the value of rk_number divided by 100.
                   cell_value = cell_value / 100;
                 }
