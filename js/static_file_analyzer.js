@@ -2019,46 +2019,7 @@ class Static_File_Analyzer {
 
                     // Execute formula_calc_stack
                     for (var c=0; c<formula_calc_stack.length; c++) {
-                      if (param_count == 1 && formula_calc_stack.length <= 1) {
-                        /*
-                        // A single varable with the 0x42 formula is the EXEC macro.
-                        // When executing a command ^ is a special, escape charater that will be ignored.
-                        // It is often used to obfusticate cmd codes.
-                        try {
-                          formula_calc_stack[c].value = formula_calc_stack[c].value.replaceAll("^", "");
-                        } catch (error) {}
-
-                        cell_formula = "=EXEC(" + formula_calc_stack[c].value + ")";
-
-                        file_info.scripts.script_type = "Excel 4.0 Macro";
-                        file_info.scripts.extracted_script += cell_formula + "\n\n";
-
-                        var cmd_match = /cmd\s+(?:\/\w\s+)?([a-z0-9]+)\s+/gmi.exec(cell_formula);
-                        var url_match = /((?:https?\:\/\/|\\\\)[^\s\)]+)/gmi.exec(cell_formula);
-                        if (url_match !== null) {
-                          if (cmd_match !== null) {
-                            if (cmd_match[1] == "mshta") {
-                              file_info.analytic_findings.push("SUSPICIOUS - Mshta Command Used to Load Internet Hosted Resource");
-                            }
-                          }
-
-                          // Check for hex IP
-                          var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
-                          if (hex_ip_match !== null) {
-                            file_info.analytic_findings.push("SUSPICIOUS - Hex Obfuscated IP Address");
-
-                            try {
-                              var str_ip = Static_File_Analyzer.get_ip_from_hex(hex_ip_match[1]);
-                              file_info.iocs.push(url_match[1].replace(hex_ip_match[1], str_ip));
-                            } catch(err) {
-                              file_info.iocs.push(url_match[1]);
-                            }
-                          } else {
-                            file_info.iocs.push(url_match[1]);
-                          }
-                        }
-                        */
-                      } else if (param_count == 1 && formula_calc_stack.length > 1) {
+                      if (param_count == 1 && formula_calc_stack.length > 1) {
                         function_name = "";
                         var stack_result = {};
                         // Execute the stack, if it's length is greater than 1.
