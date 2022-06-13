@@ -1203,14 +1203,14 @@ class Static_File_Analyzer {
               // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/173d9f51-e5d3-43da-8de2-be7f22e119b9
               for (var u=0; u < cst_unique; u++) {
                 var char_count = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
-                var char_prop_bits = this.get_bin_from_int(rgb_bytes[current_unique_offset+2]);
+                var char_prop_bits = this.get_bin_from_int(rgb_bytes[current_unique_offset+2]).reverse();
                 var double_byte_chars = (char_prop_bits[0] == 1) ? true : false;
                 var rgb_len = (double_byte_chars) ? char_count * 2 : char_count;
                 var phonetic_string = (char_prop_bits[2] == 1) ? true : false;
                 var rich_string = (char_prop_bits[3] == 1) ? true : false;
                 var reserved2 = this.get_int_from_bin(char_prop_bits.slice(4,8));
 
-                if (reserved2 != 0) break;
+                //if (reserved2 != 0) break;
 
                 var varable_offset = 3;
                 var c_run;
@@ -1226,7 +1226,9 @@ class Static_File_Analyzer {
                   varable_offset += 2;
                 }
 
-                var rgb = Static_File_Analyzer.get_string_from_array(rgb_bytes.slice(current_unique_offset+varable_offset, rgb_len+current_unique_offset+varable_offset));
+                var rgb_text_bytes = rgb_bytes.slice(current_unique_offset+varable_offset, rgb_len+current_unique_offset+varable_offset).filter(i => i !== 0);
+                var rgb = Static_File_Analyzer.get_string_from_array(rgb_text_bytes);
+                rgb = (rgb !== null) ? rgb : Static_File_Analyzer.get_ascii(rgb_text_bytes);
                 current_unique_offset += rgb_len + varable_offset;
 
                 if (rich_string) {
@@ -1305,6 +1307,37 @@ class Static_File_Analyzer {
             });
           }
         }
+      }
+
+      document_obj = {
+        'type': "spreadsheet",
+        'document_properties': document_properties,
+        'sheets': spreadsheet_sheet_names,
+        'current_sheet_name': current_sheet_name,
+        'current_cell': this.convert_xls_column(cell_col) + cell_row,
+        'varables': spreadsheet_defined_vars,
+        'recalc_objs': document_obj.recalc_objs
+      };
+
+      var cell_records = this.read_dbcell_records(cmb_obj, document_obj, byte_order);
+
+      // Parse the String and Number cells first.
+      for (var i=0; i<cell_records.length; i++) {
+        var cell_data_obj;
+
+        if (cell_records[i].record_type == "LabelSst") {
+          cell_data_obj = this.parse_xls_label_set_record(cell_records[i], string_constants, byte_order);
+          document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
+          console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
+        } else if (cell_records[i].record_type == "RK") {
+          cell_data_obj = this.parse_xls_rk_record(cell_records[i], byte_order);
+          document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
+          console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
+        } else if (cell_records[i].record_type == "String") {
+
+        }
+
+
       }
 
       // Find DBCell positions
@@ -2357,6 +2390,7 @@ class Static_File_Analyzer {
         }
       }
 
+      console.log("~~Recalc cells") // DEBUG
       for (var ro=0; ro<document_obj.recalc_objs.length; ro++) {
         var ref_info = document_obj.recalc_objs[ro].split("!");
         var cell;
@@ -2371,6 +2405,10 @@ class Static_File_Analyzer {
             }
           }
         }
+
+        // DEBUG
+        console.log("Cell: " + document_obj.recalc_objs[ro]);
+        console.log("Formula: " + cell.formula + " Value: " + cell.value);
 
         // Replace cell references
         var cell_ref_regex = /\@?([a-zA-Z0-9]+)\!(\w+[0-9]+)/gm;
@@ -2392,6 +2430,8 @@ class Static_File_Analyzer {
         }
 
         spreadsheet_sheet_names = document_obj.sheets;
+
+        console.log("Formula: " + spreadsheet_sheet_names[ref_info[0]].data[ref_info[1]].formula  + " Value: " + spreadsheet_sheet_names[ref_info[0]].data[ref_info[1]].value);
 
         if (cell.formula.indexOf("&") >= 0) {
           var cell_concat_result = "";
@@ -4965,6 +5005,102 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Parses an Excel Label Set record
+   *
+   * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
+   *
+   * @param {object}   cell_record_obj The object containing the raw lebel set record data.
+   * @param {array}    string_constants The array of defined string constants.
+   * @param {String}   byte_order Optional. this is the byte order to read records in. Default is Little Endian.
+   * @return {Object}  An object with the parsed cell data.
+   */
+  parse_xls_label_set_record(cell_record_obj, string_constants, byte_order=this.LITTLE_ENDIAN) {
+    var bytes = cell_record_obj.record_bytes;
+
+    var cell_row  = this.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
+    var cell_col  = this.get_two_byte_int(bytes.slice(2, 4), byte_order);
+    var cell_ref  = this.convert_xls_column(cell_col) + cell_row;
+
+    var cell_ixfe = this.get_two_byte_int(bytes.slice(4, 6), byte_order);
+
+    var isst = this.get_four_byte_int(bytes.slice(6, 10), byte_order);
+    var cell_value = string_constants[isst];
+
+    return {
+      'sheet_name': cell_record_obj.sheet_name,
+      'cell_name' : cell_ref,
+      'cell_data': {
+        'formula': null,
+        'value': cell_value
+      }
+    };
+  }
+
+  /**
+   * Parses an Excel RK record.
+   *
+   * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
+   * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/04fa5340-122f-49db-93ea-00cc75501efc
+   *
+   * @param {object}   cell_record_obj The object containing the raw RK record data.
+   * @param {String}   byte_order Optional. this is the byte order to read records in. Default is Little Endian.
+   * @return {Object}  An object with the parsed cell data.
+   */
+  parse_xls_rk_record(cell_record_obj, byte_order=this.LITTLE_ENDIAN) {
+    var bytes = cell_record_obj.record_bytes;
+
+    var cell_row  = this.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
+    var cell_col  = this.get_two_byte_int(bytes.slice(2, 4), byte_order);
+    var cell_ref  = this.convert_xls_column(cell_col) + cell_row;
+
+    var cell_ixfe = this.get_two_byte_int(bytes.slice(4, 6), byte_order);
+    var rk_number_bits = this.get_binary_array(bytes.slice(6, 10), byte_order);
+    var cell_value = 0;
+    var rk_bits = this.get_bin_from_int(bytes[6]);
+
+    if (rk_bits[1] == 0) {
+      // rk_number is the 30 most significant bits of a 64-bit binary floating-point number as defined in [IEEE754]. The remaining 34-bits of the floating-point number MUST be 0.
+      var rk_bytes = bytes.slice(7, 10).reverse();
+
+      rk_bits[0] = 0;
+      rk_bits[1] = 0;
+      rk_bytes.push(this.get_int_from_bin(rk_bits.reverse()));
+
+      var buf = new ArrayBuffer(8);
+      var view = new DataView(buf);
+
+      view.setUint8(0, rk_bytes[0]);
+      view.setUint8(1, rk_bytes[1]);
+      view.setUint8(2, rk_bytes[2]);
+      view.setUint8(3, rk_bytes[3]);
+      view.setUint8(4, 0);
+      view.setUint8(5, 0);
+      view.setUint8(6, 0);
+      view.setUint8(7, 0);
+
+      cell_value = view.getFloat64(0, false);
+    } else {
+      // rk_number is a signed integer.
+      var rk_number = this.get_int_from_bin(rk_number_bits.slice(3), byte_order);
+      cell_value = (rk_number_bits[2] == 1) ? rk_number * -1 : rk_number;
+    }
+
+    if (rk_bits[0] == 1) {
+      // The value of RkNumber is the value of rk_number divided by 100.
+      cell_value = cell_value / 100;
+    }
+
+    return {
+      'sheet_name': cell_record_obj.sheet_name,
+      'cell_name' : cell_ref,
+      'cell_data': {
+        'formula': null,
+        'value': cell_value
+      }
+    };
+  }
+
+  /**
    * Returns pretty print formated VBA code.
    *
    * @param  {String} vba_code The VBA code to format.
@@ -5012,6 +5148,103 @@ class Static_File_Analyzer {
     }
 
     return output_code;
+  }
+
+  /**
+   * Returns an array of DBCell records
+   *
+   * @param  {object} cmb_obj - The object representing the CBM file.
+   * @param  {object} document_obj - The object repreasenting the spreadsheet document.
+   * @param  {String} byte_order - Optional, default is LITTLE_ENDIAN.
+   * @return {array} An array containing all the records raw bytes.
+   */
+  read_dbcell_records(cmb_obj, document_obj, byte_order=this.LITTLE_ENDIAN) {
+    // Find workbook entry
+    var cell_records = [];
+    var workbook = null;
+    var current_sheet_index = 0;
+    var sheet_name = "";
+
+    for (var c=0; c<cmb_obj.entries.length; c++) {
+      if (cmb_obj.entries[c].entry_name.toLowerCase() == "workbook") {
+        workbook = cmb_obj.entries[c];
+        break;
+      }
+    }
+
+    if (workbook !== null) {
+      for (var i=0; i<workbook.entry_bytes.length; i++) {
+        if (workbook.entry_bytes[i] == 0xD7 && workbook.entry_bytes[i+1] == 0x00 && workbook.entry_bytes[i+3] == 0x00) {
+          var record_size = this.get_two_byte_int(workbook.entry_bytes.slice(i+2,i+4), byte_order);
+          var first_row_record = this.get_four_byte_int(workbook.entry_bytes.slice(i+4, i+8), byte_order);
+          var cell_record_pos = i - first_row_record - workbook.entry_start; // DEBUG - double check this
+          i += (record_size>0) ? record_size -1 : 1;
+
+          if (record_size > 4) {
+            while (cell_record_pos > 0 && cell_record_pos < i) {
+              // Derive the current Sheetname
+              var spreadsheet_sheet_indexes = Object.entries(document_obj.sheets);
+              sheet_name = spreadsheet_sheet_indexes[0][1].name;
+              for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
+                if (cell_record_pos > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos < spreadsheet_sheet_indexes[si+1][1].file_pos) {
+                  sheet_name = spreadsheet_sheet_indexes[si][1].name;
+                  break;
+                }
+              }
+
+              var record_type_str = "unknown";
+              var record_type_bytes = workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2);
+              cell_record_pos += 2;
+
+              var record_size = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order);
+              cell_record_pos += 2;
+
+              var record_bytes = workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+record_size);
+
+              if (record_type_bytes[0] == 0x00 && record_type_bytes[1] == 0x02) {
+                // Unknown record 0x00 0x02 - Dimensions? - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5fd3837c-9f3d-4952-8a85-ad93ddb37ced
+                cell_record_pos += record_size;
+              } else if (record_type_bytes[0] == 0x08 && record_type_bytes[1] == 0x02) {
+                // Row Record - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4aab09eb-49ed-4d01-a3b1-1d726247d3c2
+                record_type_str = "Row";
+                cell_record_pos += record_size;
+              } else if (record_type_bytes[0] == 0xFD && record_type_bytes[1] == 0x00) {
+                // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
+                record_type_str = "LabelSst";
+                cell_record_pos += record_size;
+              } else if (record_type_bytes[0] == 0x07 && record_type_bytes[1] == 0x02) {
+                // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
+                // This is probably the pre-calculated cell vaue of the previous cell.
+                record_type_str = "String";
+                cell_record_pos += record_size;
+              } else if (record_type_bytes[0] == 0x06 && record_type_bytes[1] == 0x00) {
+                // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
+                record_type_str = "Formula";
+                cell_record_pos += record_size;
+              } else if (record_type_bytes[0] == 0x7E && record_type_bytes[1] == 0x02) {
+                // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
+                // The RK record specifies the numeric data contained in a single cell.
+                record_type_str = "RK";
+                cell_record_pos += record_size;
+              }
+
+              if (record_type_str != "unknown") {
+                cell_records.push({
+                  'sheet_name': sheet_name,
+                  'record_type': record_type_str,
+                  'record_type_bytes': record_type_bytes,
+                  'record_size': record_size,
+                  'record_bytes': record_bytes
+                });
+              }
+            }
+
+          }
+        }
+      }
+    }
+
+    return cell_records;
   }
 
   /**
