@@ -1948,6 +1948,8 @@ class Static_File_Analyzer {
                         });
 
                         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+                        cell_formula += stack_result.formula;
+                        cell_val = stack_result.value;
                       } else if (tab_int == 0x6C) {
                         // STDEVPA - Calculates standard deviation
                       } else if (tab_int == 0x6E) {
@@ -2361,6 +2363,8 @@ class Static_File_Analyzer {
                     'value': cell_value
                   };
                 }
+
+                console.log(cell_ref + " - [No Formula] - " + cell_value); // DEBUG
 
                 cell_record_pos2 += record_size + 2;
               } else if (object_id[0] == 0xBE && object_id[1] == 0x00) {
@@ -3557,40 +3561,35 @@ class Static_File_Analyzer {
       if (stack[c_index].type == "operator") {
         if (stack[c_index].value == "-") {
           var sub_result = stack[c_index-2].value - stack[c_index-1].value;
-          stack.splice(c_index-2, 3);
-          stack.unshift({
+          stack.splice(c_index-2, 3, {
             'value': sub_result,
             'type': "number"
           });
           c_index--;
         } else if (stack[c_index].value == "+") {
           var sub_result = stack[c_index-2].value + stack[c_index-1].value;
-          stack.splice(c_index-2, 3);
-          stack.unshift({
+          stack.splice(c_index-2, 3, ({
             'value': sub_result,
             'type': "number"
           });
           c_index--;
         } else if (stack[c_index].value == "*") {
           var sub_result = stack[c_index-2].value * stack[c_index-1].value;
-          stack.splice(c_index-2, 3);
-          stack.unshift({
+          stack.splice(c_index-2, 3, {
             'value': sub_result,
             'type': "number"
           });
           c_index--;
         } else if (stack[c_index].value == "/") {
           var sub_result = stack[c_index-2].value / stack[c_index-1].value;
-          stack.splice(c_index-2, 3);
-          stack.unshift({
+          stack.splice(c_index-2, 3, {
             'value': sub_result,
             'type': "number"
           });
           c_index--;
         } else if (stack[c_index].value == "^") {
           var sub_result = Math.pow(stack[c_index-2].value, stack[c_index-1].value);
-          stack.splice(c_index-2, 3);
-          stack.unshift({
+          stack.splice(c_index-2, 3, {
             'value': sub_result,
             'type': "number"
           });
@@ -3601,8 +3600,7 @@ class Static_File_Analyzer {
           var val2 = (stack[c_index-1] !== null && stack[c_index-1] !== undefined && stack[c_index-1].value !== null) ? stack[c_index-1].value : "";
           var sub_result = String(val1) + String(val2);
 
-          stack.splice(c_index-2, 3);
-          stack.unshift({
+          stack.splice(c_index-2, 3, {
             'value': sub_result,
             'type': "string"
           });
@@ -3797,7 +3795,6 @@ class Static_File_Analyzer {
                     } else {
                       param2 = "@" + workbook.current_sheet_name + "!" + new_cell_ref;
                     }
-                    var db="dd";
                   }
 
                   if (param2.value !== null) {
