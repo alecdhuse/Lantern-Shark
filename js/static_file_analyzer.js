@@ -1047,7 +1047,8 @@ class Static_File_Analyzer {
       'sheets': spreadsheet_sheet_names,
       'current_sheet_name': "",
       'current_cell': "",
-      'varables': spreadsheet_defined_vars
+      'varables': spreadsheet_defined_vars,
+      'recalc_objs': []
     };
 
     var cmb_obj = this.parse_compound_file_binary(file_bytes);
@@ -1307,7 +1308,6 @@ class Static_File_Analyzer {
       }
 
       // Find DBCell positions
-      var recalc_objs = [];
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
           var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
@@ -1742,7 +1742,8 @@ class Static_File_Analyzer {
                       'sheets': spreadsheet_sheet_names,
                       'current_sheet_name': current_sheet_name,
                       'current_cell': this.convert_xls_column(cell_col) + cell_row,
-                      'varables': spreadsheet_defined_vars
+                      'varables': spreadsheet_defined_vars,
+                      'recalc_objs': document_obj.recalc_objs
                     };
 
                     // Check to what the next rgce_byte is, as that will affect what action is taken.
@@ -1821,7 +1822,7 @@ class Static_File_Analyzer {
                         });
                         cell_formula += cell_ref_full;
 
-                        if (!recalc_objs.includes(recalc_cell)) recalc_objs.push(recalc_cell);
+                        if (!document_obj.recalc_objs.includes(recalc_cell)) document_obj.recalc_objs.push(recalc_cell);
                       }
 
                       current_rgce_byte += 4;
@@ -1837,7 +1838,8 @@ class Static_File_Analyzer {
                       'sheets': spreadsheet_sheet_names,
                       'current_sheet_name': current_sheet_name,
                       'current_cell': this.convert_xls_column(cell_col) + cell_row,
-                      'varables': spreadsheet_defined_vars
+                      'varables': spreadsheet_defined_vars,
+                      'recalc_objs': document_obj.recalc_objs
                     };
 
                     // Execute a function - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00b5dd7d-51ca-4938-b7b7-483fe0e5933b
@@ -1861,12 +1863,18 @@ class Static_File_Analyzer {
                       cell_formula += "=";
                     } else if (iftab == 0x006F) {
                       // CHAR
-                      var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
-                      cell_formula += "CHAR(" + stack_result + ")";
-                      formula_calc_stack.splice(-1, 1, {
-                        'value': String.fromCharCode(stack_result),
-                        'type':  "string"
+                      formula_calc_stack.push({
+                        'value':  "_xlfn.CHAR",
+                        'type':   "string",
+                        'params': param_count
                       });
+
+                      var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
+                      //cell_formula += "CHAR(" + stack_result + ")";
+                      //formula_calc_stack.splice(-1, 1, {
+                      //  'value': String.fromCharCode(stack_result),
+                      //  'type':  "string"
+                      //});
                     } else if (iftab == 0x0082) {
                       // t-params = (ref / val)
                       if (formula_calc_stack.length > 1) {
@@ -1899,7 +1907,8 @@ class Static_File_Analyzer {
                       'sheets': spreadsheet_sheet_names,
                       'current_sheet_name': current_sheet_name,
                       'current_cell': this.convert_xls_column(cell_col) + cell_row,
-                      'varables': spreadsheet_defined_vars
+                      'varables': spreadsheet_defined_vars,
+                      'recalc_objs': document_obj.recalc_objs
                     };
 
                     if (tab_bits[15] == 0) {
@@ -2209,7 +2218,7 @@ class Static_File_Analyzer {
                       });
                       cell_formula += cell_ref_full;
 
-                      if (!recalc_objs.includes(recalc_cell)) recalc_objs.push(recalc_cell);
+                      if (!document_obj.recalc_objs.includes(recalc_cell)) document_obj.recalc_objs.push(recalc_cell);
                     }
 
                     current_rgce_byte += 6;
@@ -2387,8 +2396,8 @@ class Static_File_Analyzer {
         }
       }
 
-      for (var ro=0; ro<recalc_objs.length; ro++) {
-        var ref_info = recalc_objs[ro].split("!");
+      for (var ro=0; ro<document_obj.recalc_objs.length; ro++) {
+        var ref_info = document_obj.recalc_objs[ro].split("!");
         var cell;
 
         if (spreadsheet_sheet_names[ref_info[0]].data.hasOwnProperty(ref_info[1])) {
@@ -2401,6 +2410,27 @@ class Static_File_Analyzer {
             }
           }
         }
+
+        // Replace cell references
+        var cell_ref_regex = /\@?([a-zA-Z0-9]+)\!(\w+[0-9]+)/gm;
+        var cell_ref_match = cell_ref_regex.exec(cell.value);
+        while (cell_ref_match !== null) {
+          if (document_obj.sheets.hasOwnProperty(cell_ref_match[1])) {
+            if (document_obj.sheets[cell_ref_match[1]].data.hasOwnProperty(cell_ref_match[2])) {
+              var ref_cell_obj = document_obj.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
+              var cell_ref_str = cell_ref_match[1] + "!" + cell_ref_match[2];
+              var formula_str = (ref_cell_obj.formula !== null) ? ref_cell_obj.formula : ref_cell_obj.value;
+
+              document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].value = cell.value.replaceAll(cell_ref_match[0], ref_cell_obj.value);
+              document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].formula = cell.formula.replaceAll(cell_ref_match[0], formula_str);
+              document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].formula = document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].formula.replaceAll(cell_ref_str, formula_str);
+            }
+          }
+
+          cell_ref_match = cell_ref_regex.exec(cell.value);
+        }
+
+        spreadsheet_sheet_names = document_obj.sheets;
 
         if (cell.formula.indexOf("&") >= 0) {
           var cell_concat_result = "";
@@ -2511,13 +2541,14 @@ class Static_File_Analyzer {
             vba_code = vba_code.substring(sub_match.index).trim();
             file_info.scripts.extracted_script += vba_code + "\n\n";
 
-            var document_obj = {
+            document_obj = {
               'type': "spreadsheet",
               'document_properties': document_properties,
               'sheets': spreadsheet_sheet_names,
               'current_sheet_name': "",
               'current_cell': "",
-              'varables': spreadsheet_defined_vars
+              'varables': spreadsheet_defined_vars,
+              'recalc_objs': document_obj.recalc_objs
             };
 
             var vba_results = this.analyze_vba(file_info, document_obj);
@@ -3560,7 +3591,20 @@ class Static_File_Analyzer {
     while (c_index < stack.length && c_index >= 0) {
       if (stack[c_index].type == "operator") {
         if (stack[c_index].value == "-") {
-          var sub_result = stack[c_index-2].value - stack[c_index-1].value;
+          var param1 = stack[c_index-2];
+          var param2 = stack[c_index-1];
+          var sub_result = 0;
+
+          if (param1.type == "number" && param2.type == "number") {
+            sub_result = param1.value - param2.value;
+          } else if (param1.type == "string" && param2.type == "number") {
+            sub_result = param2.value;
+          } else if (param1.type == "number" && param2.type == "string") {
+            sub_result = param1.value ;
+          } else if (param1.type == "reference" || param2.type == "reference") {
+            sub_result = param1.value + " - " + param2.value;
+          }
+
           stack.splice(c_index-2, 3, {
             'value': sub_result,
             'type': "number"
@@ -3669,6 +3713,11 @@ class Static_File_Analyzer {
                   });
                   c_index++;
                 } else if (function_name == "CHAR") {
+                  var sub_result = String.fromCharCode(stack[c_index-1]);
+                  stack.splice(c_index, 2, {
+                    'value': sub_result,
+                    'type': "number"
+                  });
                   c_index++;
                 } else if (function_name == "COUNT") {
                   c_index++;
@@ -3815,6 +3864,29 @@ class Static_File_Analyzer {
                         }
                       } else {
                         workbook.varables[param2.value] = param1.value;
+                      }
+                    }
+                  }
+
+                  if (param1.type == "reference") {
+                    if (param1.value.charAt(0) == "@") {
+                      var sheet_name = workbook.current_sheet_name;
+                      var cell_ref = param1.value
+
+                      if (cell_ref.indexOf("!") > 0) {
+                        sheet_name = cell_ref.split("!")[0].substring(1);
+                        cell_ref = cell_ref.split("!")[1];
+                      }
+
+                      if (workbook.sheets.hasOwnProperty(sheet_name)) {
+                        if (workbook.sheets[sheet_name].data.hasOwnProperty(cell_ref)) {
+                          param1.value = workbook.sheets[sheet_name].data[cell_ref];
+                        } else {
+                          var recalc_cell = workbook.current_sheet_name+"!"+workbook.current_cell;
+                          if (!workbook.recalc_objs.includes(recalc_cell)) {
+                            workbook.recalc_objs.push(recalc_cell);
+                          }
+                        }
                       }
                     }
                   }
