@@ -3568,7 +3568,7 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "+") {
           var sub_result = stack[c_index-2].value + stack[c_index-1].value;
-          stack.splice(c_index-2, 3, ({
+          stack.splice(c_index-2, 3, {
             'value': sub_result,
             'type': "number"
           });
