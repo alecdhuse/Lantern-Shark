@@ -1334,10 +1334,20 @@ class Static_File_Analyzer {
           document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
           console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
         } else if (cell_records[i].record_type == "String") {
+          // Do nothing
+          continue;
+        }
+      }
+
+      // Parse the remaining cells
+      var cell_data_obj;
+      for (var i=0; i<cell_records.length; i++) {
+        break; // TEMP
+        if (cell_records[i].record_type == "String") {
+          // String value of a formula.
+        } else if (cell_records[i].record_type == "Formula") {
 
         }
-
-
       }
 
       // Find DBCell positions
@@ -5318,6 +5328,14 @@ class Static_File_Analyzer {
                 record_type_str = "RK";
                 cell_row = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
                 cell_col = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
+                cell_record_pos += record_size;
+              } else if (record_type_bytes[0] == 0xBE && record_type_bytes[1] == 0x00) {
+                // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
+                // These are blank cells
+                cell_record_pos += record_size;
+              } else {
+                // Unknown record
+                console.log("Unknown record: " + record_type_bytes[0] + " " + record_type_bytes[1]);
                 cell_record_pos += record_size;
               }
 
