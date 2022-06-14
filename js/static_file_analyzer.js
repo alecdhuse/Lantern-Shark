@@ -1321,7 +1321,7 @@ class Static_File_Analyzer {
         'recalc_objs': document_obj.recalc_objs
       };
 
-      var cell_records = this.read_dbcell_records(cmb_obj, document_obj, byte_order);
+      var cell_records = this.read_dbcell_records(file_bytes, document_obj, byte_order);
 
       // Parse the String and Number cells first.
       for (var i=0; i<cell_records.length; i++) {
@@ -6076,115 +6076,105 @@ class Static_File_Analyzer {
   /**
    * Returns an array of DBCell records
    *
-   * @param  {object} cmb_obj - The object representing the CBM file.
+   * @param  {object} file_bytes - The bytes representing the spreadsheet file.
    * @param  {object} document_obj - The object repreasenting the spreadsheet document.
    * @param  {String} byte_order - Optional, default is LITTLE_ENDIAN.
    * @return {array} An array containing all the records raw bytes.
    */
-  read_dbcell_records(cmb_obj, document_obj, byte_order=this.LITTLE_ENDIAN) {
+  read_dbcell_records(file_bytes, document_obj, byte_order=this.LITTLE_ENDIAN) {
     // Find workbook entry
     var cell_records = [];
-    var workbook = null;
     var sheet_name = "";
 
-    for (var c=0; c<cmb_obj.entries.length; c++) {
-      if (cmb_obj.entries[c].entry_name.toLowerCase() == "workbook") {
-        workbook = cmb_obj.entries[c];
-        break;
-      }
-    }
+    for (var i=512; i<file_bytes.length; i++) {
+      if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
+        var record_size1 = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+        var first_row_record = this.get_four_byte_int(file_bytes.slice(i+4, i+8), byte_order);
+        var cell_record_pos = i - first_row_record; // DEBUG - double check this
+        //i += (record_size>0) ? record_size1 -1 : 1;
 
-    if (workbook !== null) {
-      for (var i=0; i<workbook.entry_bytes.length; i++) {
-        if (workbook.entry_bytes[i] == 0xD7 && workbook.entry_bytes[i+1] == 0x00 && workbook.entry_bytes[i+3] == 0x00) {
-          var record_size1 = this.get_two_byte_int(workbook.entry_bytes.slice(i+2,i+4), byte_order);
-          var first_row_record = this.get_four_byte_int(workbook.entry_bytes.slice(i+4, i+8), byte_order);
-          var cell_record_pos = i - first_row_record - workbook.entry_start; // DEBUG - double check this
-          //i += (record_size>0) ? record_size1 -1 : 1;
-
-          if (record_size1 > 4) {
-            while (cell_record_pos > 0 && cell_record_pos < i) {
-              // Derive the current Sheetname
-              var spreadsheet_sheet_indexes = Object.entries(document_obj.sheets);
-              sheet_name = spreadsheet_sheet_indexes[0][1].name;
-              for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
-                if (cell_record_pos > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos < spreadsheet_sheet_indexes[si+1][1].file_pos) {
-                  sheet_name = spreadsheet_sheet_indexes[si][1].name;
-                  break;
-                }
-              }
-
-              var cell_row = 0;
-              var cell_col = 0;
-              var cell_name = "";
-              var record_type_str = "unknown";
-              var record_type_bytes = workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2);
-              cell_record_pos += 2;
-
-              var record_size = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order);
-              cell_record_pos += 2;
-
-              var record_bytes = workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+record_size);
-
-              if (record_type_bytes[0] == 0x00 && record_type_bytes[1] == 0x02) {
-                // Unknown record 0x00 0x02 - Dimensions? - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5fd3837c-9f3d-4952-8a85-ad93ddb37ced
-                cell_record_pos += record_size;
-              } else if (record_type_bytes[0] == 0x08 && record_type_bytes[1] == 0x02) {
-                // Row Record - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4aab09eb-49ed-4d01-a3b1-1d726247d3c2
-                record_type_str = "Row";
-                cell_record_pos += record_size;
-              } else if (record_type_bytes[0] == 0xFD && record_type_bytes[1] == 0x00) {
-                // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
-                record_type_str = "LabelSst";
-                cell_row = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
-                cell_col = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
-                cell_record_pos += record_size;
-              } else if (record_type_bytes[0] == 0x07 && record_type_bytes[1] == 0x02) {
-                // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
-                // This is probably the pre-calculated cell vaue of the previous cell.
-                record_type_str = "String";
-                cell_record_pos += record_size;
-              } else if (record_type_bytes[0] == 0x06 && record_type_bytes[1] == 0x00) {
-                // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
-                record_type_str = "Formula";
-                cell_row = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
-                cell_col = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
-                cell_record_pos += record_size;
-              } else if (record_type_bytes[0] == 0x7E && record_type_bytes[1] == 0x02) {
-                // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
-                // The RK record specifies the numeric data contained in a single cell.
-                record_type_str = "RK";
-                cell_row = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
-                cell_col = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
-                cell_record_pos += record_size;
-              } else if (record_type_bytes[0] == 0xBE && record_type_bytes[1] == 0x00) {
-                // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
-                // These are blank cells
-                cell_record_pos += record_size;
-              } else {
-                // Unknown record
-                var u_rec_int = this.get_two_byte_int([record_type_bytes[0],record_type_bytes[1]], byte_order);
-                console.log("Unknown record: " + u_rec_int + " - " + record_type_bytes[0] + " " + record_type_bytes[1]);
-                cell_record_pos += record_size;
-              }
-
-              if (cell_row != 0 && cell_col != 0) {
-                cell_name = this.convert_xls_column(cell_col) + cell_row;
-              }
-
-              if (record_type_str != "unknown") {
-                cell_records.push({
-                  'sheet_name': sheet_name,
-                  'cell_name': cell_name,
-                  'record_type': record_type_str,
-                  'record_type_bytes': record_type_bytes,
-                  'record_size': record_size,
-                  'record_bytes': record_bytes
-                });
+        if (record_size1 > 4) {
+          while (cell_record_pos > 0 && cell_record_pos < i) {
+            // Derive the current Sheetname
+            var spreadsheet_sheet_indexes = Object.entries(document_obj.sheets);
+            sheet_name = spreadsheet_sheet_indexes[0][1].name;
+            for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
+              if (cell_record_pos > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos < spreadsheet_sheet_indexes[si+1][1].file_pos) {
+                sheet_name = spreadsheet_sheet_indexes[si][1].name;
+                break;
               }
             }
 
+            var cell_row = 0;
+            var cell_col = 0;
+            var cell_name = "";
+            var record_type_str = "unknown";
+            var record_type_bytes = file_bytes.slice(cell_record_pos, cell_record_pos+2);
+            cell_record_pos += 2;
+
+            var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order);
+            cell_record_pos += 2;
+
+            var record_bytes = file_bytes.slice(cell_record_pos, cell_record_pos+record_size);
+
+            if (record_type_bytes[0] == 0x00 && record_type_bytes[1] == 0x02) {
+              // Unknown record 0x00 0x02 - Dimensions? - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5fd3837c-9f3d-4952-8a85-ad93ddb37ced
+              cell_record_pos += record_size;
+            } else if (record_type_bytes[0] == 0x08 && record_type_bytes[1] == 0x02) {
+              // Row Record - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4aab09eb-49ed-4d01-a3b1-1d726247d3c2
+              record_type_str = "Row";
+              cell_record_pos += record_size;
+            } else if (record_type_bytes[0] == 0xFD && record_type_bytes[1] == 0x00) {
+              // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
+              record_type_str = "LabelSst";
+              cell_row = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+              cell_col = this.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
+              cell_record_pos += record_size;
+            } else if (record_type_bytes[0] == 0x07 && record_type_bytes[1] == 0x02) {
+              // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
+              // This is probably the pre-calculated cell vaue of the previous cell.
+              record_type_str = "String";
+              cell_record_pos += record_size;
+            } else if (record_type_bytes[0] == 0x06 && record_type_bytes[1] == 0x00) {
+              // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
+              record_type_str = "Formula";
+              cell_row = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+              cell_col = this.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
+              cell_record_pos += record_size;
+            } else if (record_type_bytes[0] == 0x7E && record_type_bytes[1] == 0x02) {
+              // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
+              // The RK record specifies the numeric data contained in a single cell.
+              record_type_str = "RK";
+              cell_row = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+              cell_col = this.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
+              cell_record_pos += record_size;
+            } else if (record_type_bytes[0] == 0xBE && record_type_bytes[1] == 0x00) {
+              // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
+              // These are blank cells
+              cell_record_pos += record_size;
+            } else {
+              // Unknown record
+              var u_rec_int = this.get_two_byte_int([record_type_bytes[0],record_type_bytes[1]], byte_order);
+              console.log("Unknown record: " + u_rec_int + " - " + record_type_bytes[0] + " " + record_type_bytes[1]);
+              cell_record_pos += record_size;
+            }
+
+            if (cell_row != 0 && cell_col != 0) {
+              cell_name = this.convert_xls_column(cell_col) + cell_row;
+            }
+
+            if (record_type_str != "unknown") {
+              cell_records.push({
+                'sheet_name': sheet_name,
+                'cell_name': cell_name,
+                'record_type': record_type_str,
+                'record_type_bytes': record_type_bytes,
+                'record_size': record_size,
+                'record_bytes': record_bytes
+              });
+            }
           }
+
         }
       }
     }
