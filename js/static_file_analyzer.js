@@ -1354,8 +1354,8 @@ class Static_File_Analyzer {
           var string_val = Static_File_Analyzer.get_string_from_array(cell_records[i].record_bytes.slice(3, string_end));
 
           // DEBUG
-          if (cell_data_obj.value != string_val) {
-            console.log("Cell precalc missmatch - calc: " + cell_data_obj.value + " precalc: " + string_val);
+          if (cell_data_obj.cell_data.value != string_val) {
+            console.log("Cell precalc missmatch - calc: " + cell_data_obj.cell_data.value + " precalc: " + string_val);
           }
 
           //cell_data_obj.value = string_val;
@@ -3834,11 +3834,13 @@ class Static_File_Analyzer {
                   });
                   c_index++;
                 } else if (function_name == "CHAR") {
-                  var sub_result = String.fromCharCode(stack[c_index-1]);
-                  stack.splice(c_index, 2, {
-                    'value': sub_result,
-                    'type': "number"
-                  });
+                  if (c_index > 0) {
+                    var sub_result = String.fromCharCode(stack[c_index-1].value);
+                    stack.splice(c_index-1, 2, {
+                      'value': sub_result,
+                      'type': "number"
+                    });
+                  }
                   c_index++;
                 } else if (function_name == "COUNT") {
                   c_index++;
@@ -5251,6 +5253,8 @@ class Static_File_Analyzer {
           'value': "-",
           'type':  "operator"
         });
+
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x05) {
         // PtgMul - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/52863fc5-3d3c-4874-90e6-a7961902849f
         formula_calc_stack.push({
@@ -5601,7 +5605,9 @@ class Static_File_Analyzer {
             'params': param_count
           });
 
-          var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
+          cell_formula += "=CHAR(" + formula_calc_stack.at(-2).value + ")";
+          cell_value = (cell_value === null) ? "" : cell_value;
+          cell_value += this.execute_excel_stack(formula_calc_stack, document_obj).value;
         } else if (iftab == 0x0082) {
           // t-params
           if (formula_calc_stack.length > 1) {
