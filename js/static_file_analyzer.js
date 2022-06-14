@@ -1363,7 +1363,7 @@ class Static_File_Analyzer {
           cell_data_obj = this.parse_xls_formula_record(cell_records[i], document_obj, file_info, byte_order);
 
           if (cell_data_obj.cell_recalc == false) {
-            //document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
+            document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
             console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
           }
 
@@ -5169,6 +5169,7 @@ class Static_File_Analyzer {
     var cell_value = null;
     var cell_ref_full;
     var cell_recalc = false;
+    var downloaded_files = [];
 
     var cell_ixfe = this.get_two_byte_int(file_bytes.slice(4, 6), byte_order);
 
@@ -5941,6 +5942,10 @@ class Static_File_Analyzer {
         // Non implemented formula_type
         console.log("Unknown formula_type " + formula_type); // DEBUG
       }
+    }
+
+    if (cell_value === null && formula_calc_stack.length > 0) {
+      cell_value = formula_calc_stack[0].value;
     }
 
     return {
