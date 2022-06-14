@@ -1361,8 +1361,12 @@ class Static_File_Analyzer {
           //cell_data_obj.value = string_val;
         } else if (cell_records[i].record_type == "Formula") {
           cell_data_obj = this.parse_xls_formula_record(cell_records[i], document_obj, file_info, byte_order);
-          //document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
-          console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
+
+          if (cell_data_obj.cell_recalc == false) {
+            //document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
+            console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
+          }
+
         }
       }
 
@@ -1975,6 +1979,7 @@ class Static_File_Analyzer {
                       if (formula_calc_stack.length > 1) {
                         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
                         cell_formula = "=T(" + cell_formula + ")";
+                        cell_value = (cell_value === null) ? stack_result : cell_value+stack_result;
                       }
                     } else if (iftab == 0x0096) {
                       // Call Function
@@ -5159,6 +5164,7 @@ class Static_File_Analyzer {
 
     var cell_value = null;
     var cell_ref_full;
+    var cell_recalc = false;
 
     var cell_ixfe = this.get_two_byte_int(file_bytes.slice(4, 6), byte_order);
 
@@ -5247,13 +5253,13 @@ class Static_File_Analyzer {
           'value': "+",
           'type':  "operator"
         });
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x04) {
         // PtgSub - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ee15a1fa-77bb-45e1-8c8c-0e7bef7f7552
         formula_calc_stack.push({
           'value': "-",
           'type':  "operator"
         });
-
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x05) {
         // PtgMul - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/52863fc5-3d3c-4874-90e6-a7961902849f
@@ -5261,18 +5267,21 @@ class Static_File_Analyzer {
           'value': "*",
           'type':  "operator"
         });
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x06) {
         // PtgDiv - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/10585b24-618d-47f4-8ffa-65811d18ad13
         formula_calc_stack.push({
           'value': "/",
           'type':  "operator"
         });
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x07) {
         // PtgPower - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e115b216-5dda-4a5b-95d2-cadf0ada9a82
         formula_calc_stack.push({
           'value': "^",
           'type':  "operator"
         });
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x08) {
         // PtgConcat - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/054d699a-4383-4bbf-9df2-6a4020119c1e
         formula_calc_stack.push({
@@ -5286,6 +5295,7 @@ class Static_File_Analyzer {
           cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
         }
         cell_formula += "&";
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x0B) {
         // PtgEq - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d197275e-cb7f-455c-b9b5-7e968412d470
         formula_calc_stack.push({
@@ -5293,6 +5303,7 @@ class Static_File_Analyzer {
           'type':  "operator"
         });
         cell_formula += "==";
+        //var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x0E) {
         // PtgNe - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0e49033d-5dc7-40f1-8fca-eb3b8b1c2c91
         formula_calc_stack.push({
@@ -5300,6 +5311,7 @@ class Static_File_Analyzer {
           'type':  "operator"
         });
         cell_formula += "!=";
+        //var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x16) {
         // PtgMissArg - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/69352e6c-e712-48d7-92d1-0bf7c1f61f69
         formula_calc_stack.push({
@@ -5462,6 +5474,7 @@ class Static_File_Analyzer {
                 // Add to recalc
                 document_obj.recalc_objs.push(document_obj.current_cell);
                 var_type = "reference";
+                cell_recalc = true;
               }
             }
 
@@ -5562,6 +5575,7 @@ class Static_File_Analyzer {
             // Store the cell names that cant be calculated and go back to recalc after all cells are loaded.
             cell_ref_full = spreadsheet_obj.name + "!" + cell_ref;
             var recalc_cell = cell_record_obj.sheet_name + "!" + cell_record_obj.cell_name;
+            cell_recalc = true;
 
             formula_calc_stack.push({
               'value': "@"+cell_ref_full,
@@ -5613,6 +5627,7 @@ class Static_File_Analyzer {
           if (formula_calc_stack.length > 1) {
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
             cell_formula = "=T(" + cell_formula + ")";
+            cell_value = (cell_value === null) ? stack_result : cell_value+stack_result;
           }
         } else if (iftab == 0x0096) {
           // Call Function
@@ -5896,6 +5911,7 @@ class Static_File_Analyzer {
           // Store the cell names that cant be calculated and go back to recalc after all cells are loaded.
           cell_ref_full = ref_sheet_name + "!" + cell_ref;
           var recalc_cell = cell_record_obj.sheet_name + "!" + cell_record_obj.cell_name;
+          cell_recalc = true;
 
           formula_calc_stack.push({
             'value': "@"+cell_ref_full,
@@ -5925,7 +5941,8 @@ class Static_File_Analyzer {
 
     return {
       'sheet_name': cell_record_obj.sheet_name,
-      'cell_name' : cell_record_obj.cell_name,
+      'cell_name': cell_record_obj.cell_name,
+      'cell_recalc': cell_recalc,
       'cell_data': {
         'formula': cell_formula,
         'value': cell_value
