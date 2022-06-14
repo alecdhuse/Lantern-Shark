@@ -1358,10 +1358,10 @@ class Static_File_Analyzer {
             console.log("Cell precalc missmatch - calc: " + cell_data_obj.value + " precalc: " + string_val);
           }
 
-          cell_data_obj.value = string_val;
+          //cell_data_obj.value = string_val;
         } else if (cell_records[i].record_type == "Formula") {
           cell_data_obj = this.parse_xls_formula_record(cell_records[i], document_obj, file_info, byte_order);
-          document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
+          //document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
           console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
         }
       }
@@ -1786,7 +1786,7 @@ class Static_File_Analyzer {
                         if (cell_ref_match !== null) {
                           // Cell Reference
                           if (document_obj.sheets[cell_ref_match[1]].data.hasOwnProperty(cell_ref_match[2])) {
-                            var ref_cell = workbook.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
+                            var ref_cell = document_obj.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
                             var_value = ref_cell.value;
                             var_type = typeof ref_cell.value;
                           } else {
@@ -6228,12 +6228,22 @@ class Static_File_Analyzer {
 
         try {
           var str_ip = Static_File_Analyzer.get_ip_from_hex(hex_ip_match[1]);
-          found_urls.push(url_match[1].replace(hex_ip_match[1], str_ip));
+          var do_url = url_match[1].replace(hex_ip_match[1], str_ip);
+          do_url = (do_url.endsWith(")")) ? do_url.slice(0,-1) : do_url;
+          found_urls.push(do_url);
         } catch(err) {
-          found_urls.push(url_match[1]);
+          if (url_match[1].endsWith(")")) {
+            found_urls.push(url_match[1].slice(0,-1));
+          } else {
+            found_urls.push(url_match[1]);
+          }
         }
       } else {
-        found_urls.push(url_match[1]);
+        if (url_match[1].endsWith(")")) {
+          found_urls.push(url_match[1].slice(0,-1));
+        } else {
+          found_urls.push(url_match[1]);
+        }
       }
 
       url_match = url_regex.exec(search_text);
