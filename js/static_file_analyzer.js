@@ -5296,8 +5296,13 @@ class Static_File_Analyzer {
 
         // Stack is implemented as Poish notation, if there is no concat already insert one.
         if (cell_formula.indexOf("&") < 0) {
-          var insert_index = cell_formula.indexOf(cell_ref_full);
-          cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
+          if (formula_calc_stack.length > 2) {
+            if (formula_calc_stack.at(-2).hasOwnProperty('ref_name')) {
+              var ref_name = formula_calc_stack.at(-2).ref_name;
+              var insert_index = cell_formula.indexOf(ref_name);
+              cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
+            }
+          }
         }
         cell_formula += "&";
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
@@ -5485,7 +5490,8 @@ class Static_File_Analyzer {
 
             formula_calc_stack.push({
               'value': var_value,
-              'type':  var_type
+              'type':  var_type,
+              'ref_name': var_name.name
             });
           } else {
             formula_calc_stack.push({
@@ -5510,6 +5516,7 @@ class Static_File_Analyzer {
 
         var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
         var spreadsheet_obj = document_obj.sheets[cell_record_obj.sheet_name];
+        var full_cell_name = cell_record_obj.sheet_name + "!" + cell_ref;
 
         // Check to what the next rgce_byte is, as that will affect what action is taken.
         if (rgce_bytes[current_rgce_byte+6] == 0x60) {
@@ -5552,7 +5559,8 @@ class Static_File_Analyzer {
 
           spreadsheet_obj.data[cell_ref] = {
             'value': stack_result,
-            'type':  "string"
+            'type':  "string",
+            'ref_name': full_cell_name
           }
 
           formula_calc_stack.shift();
@@ -5584,7 +5592,8 @@ class Static_File_Analyzer {
 
             formula_calc_stack.push({
               'value': "@"+cell_ref_full,
-              'type':  "reference"
+              'type':  "reference",
+              'ref_name': "@"+cell_ref_full
             });
             cell_formula += cell_ref_full;
 
@@ -5851,7 +5860,8 @@ class Static_File_Analyzer {
           if (document_obj.varables.hasOwnProperty(ref_var_name.name)) {
             formula_calc_stack.push({
               'value': document_obj.varables[ref_var_name.name],
-              'type':  "string"
+              'type':  "string",
+              'ref_name': ref_var_name.name
             });
 
           } else {
@@ -5886,6 +5896,7 @@ class Static_File_Analyzer {
         while (ixti < document_obj.sheet_index_list.length) {
           ref_sheet_name = document_obj.sheet_index_list[ixti];
           spreadsheet_obj = document_obj.sheets[ref_sheet_name];
+          var full_cell_name = ref_sheet_name + "!" + cell_ref;
 
           if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
             ref_found = true;
@@ -5894,7 +5905,8 @@ class Static_File_Analyzer {
               // Cell has a value we can use this.
               formula_calc_stack.push({
                 'value': spreadsheet_obj.data[cell_ref].value,
-                'type':  "string"
+                'type':  "string",
+                'ref_name': full_cell_name
               });
 
               cell_formula += spreadsheet_obj.name + "!" + cell_ref;
@@ -5920,7 +5932,8 @@ class Static_File_Analyzer {
 
           formula_calc_stack.push({
             'value': "@"+cell_ref_full,
-            'type':  "reference"
+            'type':  "reference",
+            'ref_name': "@"+cell_ref_full
           });
           cell_formula += cell_ref_full;
 
