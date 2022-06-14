@@ -1441,10 +1441,6 @@ class Static_File_Analyzer {
                 var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
                 var cell_ref = this.convert_xls_column(cell_col) + cell_row;
 
-                if (cell_ref == "DA13076") {
-                  var debug21=1;
-                }
-
                 var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
 
                 // Derive the current Sheetname
@@ -5280,6 +5276,9 @@ class Static_File_Analyzer {
                 }
               }
 
+              var cell_row = 0;
+              var cell_col = 0;
+              var cell_name = "";
               var record_type_str = "unknown";
               var record_type_bytes = workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2);
               cell_record_pos += 2;
@@ -5299,6 +5298,8 @@ class Static_File_Analyzer {
               } else if (record_type_bytes[0] == 0xFD && record_type_bytes[1] == 0x00) {
                 // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
                 record_type_str = "LabelSst";
+                cell_row = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+                cell_col = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
                 cell_record_pos += record_size;
               } else if (record_type_bytes[0] == 0x07 && record_type_bytes[1] == 0x02) {
                 // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
@@ -5308,17 +5309,26 @@ class Static_File_Analyzer {
               } else if (record_type_bytes[0] == 0x06 && record_type_bytes[1] == 0x00) {
                 // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
                 record_type_str = "Formula";
+                cell_row = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+                cell_col = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
                 cell_record_pos += record_size;
               } else if (record_type_bytes[0] == 0x7E && record_type_bytes[1] == 0x02) {
                 // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
                 // The RK record specifies the numeric data contained in a single cell.
                 record_type_str = "RK";
+                cell_row = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+                cell_col = this.get_two_byte_int(workbook.entry_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
                 cell_record_pos += record_size;
+              }
+
+              if (cell_row != 0 && cell_col != 0) {
+                cell_name = this.convert_xls_column(cell_col) + cell_row;
               }
 
               if (record_type_str != "unknown") {
                 cell_records.push({
                   'sheet_name': sheet_name,
+                  'cell_name': cell_name,
                   'record_type': record_type_str,
                   'record_type_bytes': record_type_bytes,
                   'record_size': record_size,
