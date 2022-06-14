@@ -1439,6 +1439,12 @@ class Static_File_Analyzer {
 
                 var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
                 var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
+                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
+
+                if (cell_ref == "DA13076") {
+                  var debug21=1;
+                }
+
                 var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
 
                 // Derive the current Sheetname
@@ -1626,10 +1632,19 @@ class Static_File_Analyzer {
                     }
 
                     var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));;
-                    formula_calc_stack.push({
-                      'value': string_val,
-                      'type':  "string"
-                    });
+
+                    if (document_obj.varables.hasOwnProperty(string_val)) {
+                      // Reference to a document variable
+                      formula_calc_stack.push({
+                        'value': document_obj.varables[string_val],
+                        'type':  "reference"
+                      });
+                    } else {
+                      formula_calc_stack.push({
+                        'value': string_val,
+                        'type':  "string"
+                      });
+                    }
 
                     current_rgce_byte = string_end;
                   } else if (formula_type == 0x18) {
@@ -1740,10 +1755,35 @@ class Static_File_Analyzer {
 
                     if (var_index-1 < spreadsheet_var_names.length) {
                       var var_name = spreadsheet_var_names[var_index-1];
-                      formula_calc_stack.push({
-                        'value': var_name.name,
-                        'type':  "string"
-                      });
+
+                      if (document_obj.varables.hasOwnProperty(var_name.name)) {
+                        var var_value = document_obj.varables[var_name.name];
+                        var var_type = typeof document_obj.varables[var_name.name];
+
+                        var cell_ref_match = /\@([a-zA-Z0-9]+)\!(\w+[0-9]+)/gm.exec(var_value);
+                        if (cell_ref_match !== null) {
+                          // Cell Reference
+                          if (document_obj.sheets[cell_ref_match[1]].data.hasOwnProperty(cell_ref_match[2])) {
+                            var ref_cell = workbook.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
+                            var_value = ref_cell.value;
+                            var_type = typeof ref_cell.value;
+                          } else {
+                            // Add to recalc
+                            document_obj.recalc_objs.push(document_obj.current_cell);
+                            var_type = "reference";
+                          }
+                        }
+
+                        formula_calc_stack.push({
+                          'value': var_value,
+                          'type':  var_type
+                        });
+                      } else {
+                        formula_calc_stack.push({
+                          'value': var_name.name,
+                          'type':  "string"
+                        });
+                      }
 
                       current_rgce_byte += 4;
                     } else {
@@ -2394,6 +2434,11 @@ class Static_File_Analyzer {
       for (var ro=0; ro<document_obj.recalc_objs.length; ro++) {
         var ref_info = document_obj.recalc_objs[ro].split("!");
         var cell;
+
+        if (!spreadsheet_sheet_names.hasOwnProperty(ref_info[0])) {
+          console.log("Unknown Sheet name: " + ref_info[0]);
+          continue;
+        }
 
         if (spreadsheet_sheet_names[ref_info[0]].data.hasOwnProperty(ref_info[1])) {
           cell = spreadsheet_sheet_names[ref_info[0]].data[ref_info[1]];
@@ -3641,15 +3686,21 @@ class Static_File_Analyzer {
           c_index--;
         } else if (stack[c_index].value == "&") {
           // Concat
-          var val1 = (stack[c_index-2] !== null && stack[c_index-2] !== undefined && stack[c_index-2].value !== null) ? stack[c_index-2].value : "";
-          var val2 = (stack[c_index-1] !== null && stack[c_index-1] !== undefined && stack[c_index-1].value !== null) ? stack[c_index-1].value : "";
-          var sub_result = String(val1) + String(val2);
+          if (c_index > 1) {
+            var val1 = (stack[c_index-2] !== null && stack[c_index-2] !== undefined && stack[c_index-2].value !== null) ? stack[c_index-2].value : "";
+            var val2 = (stack[c_index-1] !== null && stack[c_index-1] !== undefined && stack[c_index-1].value !== null) ? stack[c_index-1].value : "";
+            var sub_result = String(val1) + String(val2);
 
-          stack.splice(c_index-2, 3, {
-            'value': sub_result,
-            'type': "string"
-          });
-          c_index--;
+            stack.splice(c_index-2, 3, {
+              'value': sub_result,
+              'type': "string"
+            });
+            c_index--;
+          } else {
+            // Wrong argument number, skip for now
+            c_index++;
+          }
+
         } else if (stack[c_index].value == "==") {
           // comparison
           if (c_index == 0) {
@@ -3691,7 +3742,29 @@ class Static_File_Analyzer {
 
           }
        } else if (stack[c_index].value == "=") {
-         // Skip for now
+         // Assigment, this works the same way as SET.NAME but the stack order is different.
+         if (c_index == 0) {
+           if (stack.length >= 3) {
+             var param1 = stack[c_index+1];
+             var param2 = stack[c_index+2];
+             var formula = "";
+
+             if (param1.type == "string" || param1.type == "reference") {
+               workbook.varables[param1.value] = param2.value;
+               formula = "SET.NAME(" + param1.value + ", " + param2.value + ")";
+               stack.splice(c_index, 3, {
+                 'value': formula ,
+                 'type': "string"
+               });
+
+               if (c_index+1 < stack.length && stack[c_index+1].value == "_xlfn.SET.NAME") {
+                 stack.splice(c_index+1, 1);
+               }
+               // TODO check for references in param2
+             }
+           }
+         }
+
          c_index++;
        } else {
           console.log("Unknown Operator: " + stack[c_index].value);
@@ -3928,7 +4001,22 @@ class Static_File_Analyzer {
                   c_index++;
                 }
               } else {
+                var cell_ref_match = /\@([a-zA-Z0-9]+)\!(\w+[0-9]+)/gm.exec(stack[c_index]);
+                if (cell_ref_match !== null) {
+                  // Cell Reference
+                  if (workbook.sheets[cell_ref_match[1]].data.hasOwnProperty(cell_ref_match[2])) {
+                    var ref_cell = workbook.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
+                    stack.splice(c_index, 1, {
+                      'value': ref_cell.value,
+                      'type': "string"
+                    });
+                  } else {
+                    // Add to recalc
+                    workbook.recalc_objs.push(workbook.current_cell);
+                  }
+                }
                 // Skip other stirngs for now
+
                 c_index++;
               }
             } catch(err) {
