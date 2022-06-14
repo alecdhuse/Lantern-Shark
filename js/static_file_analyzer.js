@@ -3381,6 +3381,10 @@ class Static_File_Analyzer {
     var c;
     var char_rem = col_index;
 
+    if (col_index == 0) {
+      return "A";
+    }
+
     while (char_rem > 0) {
       c = ((char_rem) % 26);
       var t = String.fromCharCode(c+65);
@@ -6129,7 +6133,7 @@ class Static_File_Analyzer {
             }
 
             var cell_row = 0;
-            var cell_col = 0;
+            var cell_col = -1;
             var cell_name = "";
             var record_type_str = "unknown";
             var record_type_bytes = file_bytes.slice(cell_record_pos, cell_record_pos+2);
@@ -6182,7 +6186,7 @@ class Static_File_Analyzer {
               cell_record_pos += record_size;
             }
 
-            if (cell_row != 0 && cell_col != 0) {
+            if (cell_row != 0 && cell_col >= 0) {
               cell_name = this.convert_xls_column(cell_col) + cell_row;
             }
 
