@@ -2659,6 +2659,8 @@ class Static_File_Analyzer {
              var param2 = stack[c_index+2];
              var formula = "";
 
+             param2 = (param2.length > 0) ? param2 : "\"\"";
+
              if (param1.type == "string" || param1.type == "reference") {
                workbook.varables[param1.value] = param2.value;
                formula = "SET.NAME(" + param1.value + ", " + param2.value + ")";
@@ -2890,16 +2892,32 @@ class Static_File_Analyzer {
                   c_index++;
                 } else if (function_name == "USERFUNCTION") {
                   // TODO finish implementation of user defined functions
-                  if (stack.length > 1) {
-                    if (stack[c_index-1].type == "number") {
-                      // skip;
-                    } else if (stack[c_index-1].type == "string") {
-                      // Evaluate string as macro
-                      var debug_stop=1;
-                    } else if (stack[c_index-1].type == "reference") {
-                      var sub_result = "_xlfn.USERFUNCTION(" + stack[c_index-1].value + ")";
-                      stack.splice(c_index-1, c_index+1);
-                      stack.unshift({
+                  if (stack.length > stack[c_index].params) {
+                    var params = stack.slice(c_index - stack[c_index].params, c_index);
+                    var params2 = [];
+                    var user_func_name = params[0].value;
+                    var ref_name = "";
+
+                    if (params.length > 1) {
+                      for (var pi=1; pi<params.length; pi++) {
+                        params2.push(params[pi].value);
+                      }
+                    }
+
+                    var user_func_name = (params[0].hasOwnProperty("ref_name")) ? params[0].ref_name : params[0].value;
+                    var sub_result = user_func_name + "(" + params2.join(",") + ")";
+
+                    if (params[0].hasOwnProperty("ref_name")) {
+                      user_func_name = params[0].ref_name;
+                      ref_name = params[0].ref_name;
+
+                      stack.splice(c_index-params.length, c_index+1, {
+                        'value': sub_result,
+                        'type': "string",
+                        'ref_name': ref_name
+                      });
+                    } else {
+                      stack.splice(c_index-params.length, c_index+1, {
                         'value': sub_result,
                         'type': "string"
                       });
@@ -4017,6 +4035,8 @@ class Static_File_Analyzer {
    */
   parse_xls_formula_record(cell_record_obj, document_obj, file_info, byte_order=this.LITTLE_ENDIAN) {
     document_obj.current_sheet_name = cell_record_obj.sheet_name;
+    document_obj.current_cell = cell_record_obj.cell_name;
+
     var file_bytes = cell_record_obj.record_bytes;
     var cell_ref = cell_record_obj.cell_name;
 
@@ -4463,7 +4483,7 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value': "@"+cell_ref_full,
               'type':  "reference",
-              'ref_name': "@"+cell_ref_full
+              'ref_name': cell_ref_full
             });
             cell_formula += cell_ref_full;
 
@@ -4629,11 +4649,14 @@ class Static_File_Analyzer {
             });
           } else if (tab_int == 0xFF) {
             // User Defined Function
-            //formula_calc_stack.push({
-            //  'value': "_xlfn.USERFUNCTION",
-            //  'type':  "string",
-            //'params': param_count
-            //});
+            formula_calc_stack.push({
+              'value': "_xlfn.USERFUNCTION",
+              'type':  "string",
+            'params': param_count
+            });
+
+            var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+            cell_formula = stack_result.value;
           } else {
             console.log("Unknown PtgFuncVar: " + tab_int); // DEBUG
           }
@@ -4854,7 +4877,7 @@ class Static_File_Analyzer {
           formula_calc_stack.push({
             'value': "@"+cell_ref_full,
             'type':  "reference",
-            'ref_name': "@"+cell_ref_full
+            'ref_name': cell_ref_full
           });
           cell_formula += cell_ref_full;
 
