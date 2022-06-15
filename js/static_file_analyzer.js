@@ -2657,16 +2657,31 @@ class Static_File_Analyzer {
            if (stack.length >= 3) {
              var param1 = stack[c_index+1];
              var param2 = stack[c_index+2];
+             var param2_val = param2.value;
              var formula = "";
+             var var_name = "";
 
-             param2 = (param2.length > 0) ? param2 : "\"\"";
+             if (param2.type == "string") {
+               param2_val = (param2.value.length > 0) ? param2.value : "\"\"";
+             }
+
+             if (param1.type == "reference") {
+               if (param1.hasOwnProperty('ref_name')) {
+                 var_name = param1.ref_name;
+               } else {
+                 var_name = param1.value;
+               }
+             } else if (param1.type == "string") {
+               var_name = param1.value;
+             }
 
              if (param1.type == "string" || param1.type == "reference") {
-               workbook.varables[param1.value] = param2.value;
-               formula = "SET.NAME(" + param1.value + ", " + param2.value + ")";
+               workbook.varables[var_name] = param2.value;
+               formula = "SET.NAME(" + var_name + ", " + param2_val + ")";
                stack.splice(c_index, 3, {
-                 'value': formula ,
-                 'type': "string"
+                 'value': param2.value,
+                 'formula': formula,
+                 'type': param2.type
                });
 
                if (c_index+1 < stack.length && stack[c_index+1].value == "_xlfn.SET.NAME") {
@@ -2712,6 +2727,11 @@ class Static_File_Analyzer {
                 } else if (function_name == "COUNTA") {
                   // COUNTA - counts the number of cells that are not empty in a range. Two params start_cell, end_cell
                   c_index++;
+                } else if (function_name == "END.IF") {
+                  stack.splice(c_index, c_index+1, {
+                    'value': "END.IF",
+                    'type': "string"
+                  });
                 } else if (function_name == "EXEC") {
                   var param_count = stack[c_index].params;
                   var exec_cmd = "";
@@ -2823,14 +2843,16 @@ class Static_File_Analyzer {
 
                   var ref_match = /R\[?(\-?\d+)?\]?C\[?(\-?\d+)?\]?/gmi.exec(param2.value);
                   if (ref_match !== null) {
-                    var row_shift = (ref_match[1] !== undefined) ? ref_match[1] : 0;
-                    var col_shift = (ref_match[2] !== undefined) ? ref_match[2] : 0;
-
+                    var row_shift = (ref_match[1] !== undefined) ? parseInt(ref_match[1]) : 0;
+                    var col_shift = (ref_match[2] !== undefined) ? parseInt(ref_match[2]) : 0;
                     var new_cell_ref = this.get_shifted_cell_name(workbook.current_cell,row_shift,col_shift);
+
                     if (workbook.sheets[workbook.current_sheet_name].data.hasOwnProperty(new_cell_ref)) {
                       param2 = workbook.sheets[workbook.current_sheet_name].data[new_cell_ref];
                     } else {
                       param2 = "@" + workbook.current_sheet_name + "!" + new_cell_ref;
+                      cell_recalc = true;
+                      workbook.recalc_objs.push(cell_record_obj.cell_name);
                     }
                   }
 
@@ -4123,6 +4145,10 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
+    if (document_obj.current_cell == "DA13077") {
+      var debug221=1;
+    }
+
     while (current_rgce_byte < rgce_bytes.length) {
       // Ptg / formula_type - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/9310c3bb-d73f-4db0-8342-28e1e0fcb68f
       formula_type = rgce_bytes[current_rgce_byte];
@@ -4222,17 +4248,41 @@ class Static_File_Analyzer {
 
         var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));;
 
-        if (document_obj.varables.hasOwnProperty(string_val)) {
-          // Reference to a document variable
+        var ref_match = /R\[?(\-?\d+)?\]?C\[?(\-?\d+)?\]?/gmi.exec(string_val);
+        if (ref_match !== null) {
+          var row_shift = (ref_match[1] !== undefined) ? parseInt(ref_match[1]) : 0;
+          var col_shift = (ref_match[2] !== undefined) ? parseInt(ref_match[2]) : 0;
+          var new_cell_ref = this.get_shifted_cell_name(cell_record_obj.cell_name, row_shift,col_shift);
+          var new_cell_ref_full = cell_record_obj.sheet_name + "!" + new_cell_ref;
+          var cell_value2;
+
+          if (document_obj.sheets[cell_record_obj.sheet_name].data.hasOwnProperty(new_cell_ref)) {
+            cell_value2 = document_obj.sheets[cell_record_obj.sheet_name].data[new_cell_ref];
+          } else {
+            cell_value2 = "@" + cell_record_obj.sheet_name + "!" + new_cell_ref;
+            cell_recalc = true;
+            document_obj.recalc_objs.push(new_cell_ref_full);
+          }
+
           formula_calc_stack.push({
-            'value': document_obj.varables[string_val],
-            'type':  "reference"
+            'value': cell_value2,
+            'type':  "reference",
+            'ref_name': new_cell_ref_full
           });
         } else {
-          formula_calc_stack.push({
-            'value': string_val,
-            'type':  "string"
-          });
+          if (document_obj.varables.hasOwnProperty(string_val)) {
+            // Reference to a document variable
+            formula_calc_stack.push({
+              'value': document_obj.varables[string_val],
+              'type':  "reference",
+              'ref_name': string_val
+            });
+          } else {
+            formula_calc_stack.push({
+              'value': string_val,
+              'type':  "string"
+            });
+          }
         }
 
         current_rgce_byte = string_end;
@@ -4460,9 +4510,11 @@ class Static_File_Analyzer {
           if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
             if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
               // Cell has a value we can use this.
+              var var_type = typeof spreadsheet_obj.data[cell_ref].value;
+
               formula_calc_stack.push({
                 'value': spreadsheet_obj.data[cell_ref].value,
-                'type':  "string"
+                'type':  var_type
               });
 
               cell_formula += spreadsheet_obj.name + "!" + cell_ref;
@@ -4538,6 +4590,15 @@ class Static_File_Analyzer {
           console.log("Call function not implemented.");
         } else if (iftab == 0x00E1) {
           // End IF
+          formula_calc_stack.push({
+            'value': "_xlfn.END.IF",
+            'type':  "string",
+          'params': param_count
+          });
+
+          var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+          cell_formula = stack_result.value;
+          cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
         } else {
           // Non implemented function
           console.log("Unknown function " + iftab); // DEBUG
@@ -4599,7 +4660,7 @@ class Static_File_Analyzer {
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
             cell_formula += stack_result.formula;
-            cell_value = stack_result.value;
+            cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
           } else if (tab_int == 0x6C) {
             // STDEVPA - Calculates standard deviation
           } else if (tab_int == 0x6E) {
@@ -4647,6 +4708,17 @@ class Static_File_Analyzer {
               'type':   "string",
               'params': param_count
             });
+          } else if (tab_int == 0xE1) {
+            // END.IF
+            formula_calc_stack.push({
+              'value': "_xlfn.END.IF",
+              'type':  "string",
+            'params': param_count
+            });
+
+            var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+            cell_formula = stack_result.value;
+            cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
           } else if (tab_int == 0xFF) {
             // User Defined Function
             formula_calc_stack.push({
@@ -4672,7 +4744,7 @@ class Static_File_Analyzer {
             // Execute the stack, if it's length is greater than 1.
             if (formula_calc_stack.length > 1) {
               stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-              cell_value = stack_result.value;
+              cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
             }
 
             if (stack_result.hasOwnProperty("formula") && stack_result.formula != "") {
@@ -4902,6 +4974,10 @@ class Static_File_Analyzer {
     }
 
     if (formula_calc_stack.length > 0 && cell_value === null) {
+      if (formula_calc_stack.length > 1) {
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
+      }
+
       cell_value = formula_calc_stack[0].value;
     }
 
