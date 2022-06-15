@@ -1314,6 +1314,7 @@ class Static_File_Analyzer {
         'document_properties': document_properties,
         'sheets': spreadsheet_sheet_names,
         'sheet_index_list': sheet_index_list,
+        'sheet_indexes': Array(sheet_index_list.length),
         'current_sheet_name': Object.entries(spreadsheet_sheet_names)[0],
         'current_cell': "",
         'defined_names': spreadsheet_var_names,
@@ -1330,11 +1331,11 @@ class Static_File_Analyzer {
         if (cell_records[i].record_type == "LabelSst") {
           cell_data_obj = this.parse_xls_label_set_record(cell_records[i], string_constants, byte_order);
           document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
-          console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
+          console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
         } else if (cell_records[i].record_type == "RK") {
           cell_data_obj = this.parse_xls_rk_record(cell_records[i], byte_order);
           document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
-          console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
+          console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
         } else if (cell_records[i].record_type == "String") {
           // Do nothing
           continue;
@@ -1344,7 +1345,7 @@ class Static_File_Analyzer {
       // Parse the remaining cells
       var cell_data_obj;
       for (var i=0; i<cell_records.length; i++) {
-        break; // TEMP
+        //break; // TEMP
         if (cell_records[i].record_type == "String") {
           // String value of a formula.
           var string_size = this.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
@@ -1355,1209 +1356,62 @@ class Static_File_Analyzer {
 
           // DEBUG
           if (cell_data_obj.cell_data.value != string_val) {
-            console.log("Cell precalc missmatch - calc: " + cell_data_obj.cell_data.value + " precalc: " + string_val);
-          }
+            console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " Cell precalc missmatch - calc: " + cell_data_obj.cell_data.value + " precalc: " + string_val);
 
-          //cell_data_obj.value = string_val;
+            cell_data_obj.cell_data.value = string_val;
+            cell_data_obj.cell_recalc = false;
+
+            var full_cell_name = cell_data_obj.sheet_name + "!" + cell_data_obj.cell_name;
+            var recalc_index = document_obj.recalc_objs.indexOf(full_cell_name);
+
+            if (recalc_index >= 0) {
+              document_obj.recalc_objs.splice(recalc_index, 1);
+            }
+
+            document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
+          }
         } else if (cell_records[i].record_type == "Formula") {
           cell_data_obj = this.parse_xls_formula_record(cell_records[i], document_obj, file_info, byte_order);
 
           if (cell_data_obj.cell_recalc == false) {
             document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
-            console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
-          }
-
-        }
-      }
-
-      // Find DBCell positions
-      for (var i=current_byte; i<file_bytes.length; i++) {
-        if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
-          var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
-          var first_row_record = this.get_four_byte_int(file_bytes.slice(i+4, i+8), byte_order);
-          var cell_record_pos = i - first_row_record; // DEBUG - double check this
-
-          if (record_size > 4) {
-            var current_dbcell_byte = 8;
-            var cell_record_pos2 = cell_record_pos;
-
-            while (cell_record_pos2 < i) {
-              var object_id = file_bytes.slice(cell_record_pos2, cell_record_pos2+2);
-              cell_record_pos2 += 2;
-
-              if (object_id[0] == 0x00 && object_id[1] == 0x02) {
-                // Unknown record 0x00 0x02 - Dimensions? - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5fd3837c-9f3d-4952-8a85-ad93ddb37ced
-                var u_record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
-                var u_record_bytes = file_bytes.slice(cell_record_pos2+2, cell_record_pos2+2+u_record_size);
-                cell_record_pos2 += u_record_size + 2;
-              } else if (object_id[0] == 0x08 && object_id[1] == 0x02) {
-                // Row Record - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4aab09eb-49ed-4d01-a3b1-1d726247d3c2
-                var row_record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
-                var row_index = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
-                var col_min = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4,cell_record_pos2+6), byte_order);
-                var col_max = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6,cell_record_pos2+8), byte_order);
-                var row_height = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+8,cell_record_pos2+10), byte_order);
-                var reserved1 = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+10,cell_record_pos2+12), byte_order);
-                var unused1 = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+12,cell_record_pos2+14), byte_order);
-                var row_prop1_bits = this.get_bin_from_int(file_bytes.slice(cell_record_pos2+14,cell_record_pos2+16));
-                var row_prop2_bits = this.get_bin_from_int(file_bytes.slice(cell_record_pos2+16,cell_record_pos2+18));
-                cell_record_pos2 += row_record_size + 2;
-
-                /*
-                console.log({
-                  'row_index': row_index,
-                  'col_min': col_min,
-                  'col_max': col_max
-                });
-                */
-              } else if (object_id[0] == 0xFD && object_id[1] == 0x00) {
-                // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
-                var label_set_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+0,cell_record_pos2+2), byte_order); // should be 10
-
-                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
-                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
-                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
-
-                var isst = this.get_four_byte_int(file_bytes.slice(cell_record_pos2+8, cell_record_pos2+12), byte_order);
-                var cell_val = string_constants[isst];
-
-                cell_record_pos2 += label_set_size + 2;
-
-                // Derive sheetname
-                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
-                var sheet_name = "";
-                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
-                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
-                    sheet_name = spreadsheet_sheet_indexes[si][1].name;
-                    break;
-                  }
-                }
-                if (sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
-
-                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
-                if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
-                  spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
-                    'formula': "",
-                    'value': cell_val
-                  };
-                }
-              } else if (object_id[0] == 0x07 && object_id[1] == 0x02) {
-                // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
-                // This is probably the pre-calculated cell vaue of the previous cell.
-                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
-
-                var string_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
-                var byte_option_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+4]);
-                var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
-                var string_end;
-
-                if (double_byte_chars) {
-                  // Characters are two bytes each.
-                  string_end = cell_record_pos2 + 5 + (string_size * 2);
-                } else {
-                  // Characters are one byte each.
-                  string_end = cell_record_pos2 + 5 + string_size;
-                }
-
-                var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(cell_record_pos2+5, string_end));;
-                console.log("Unassociated String - Value " + string_val); // DEBUG
-
-                cell_record_pos2 += record_size + 2;
-              } else if (object_id[0] == 0x06 && object_id[1] == 0x00) {
-                // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
-                var formula_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
-
-                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
-                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
-                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
-
-                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
-
-                // Derive the current Sheetname
-                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
-                var current_sheet_name = "";
-                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
-                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
-                    current_sheet_name = spreadsheet_sheet_indexes[si][1].name;
-                    break;
-                  }
-                }
-
-                if (current_sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
-
-                var current_sheet_index = 0;
-                for (var si=0; si<sheet_index_list.length-1; si++) {
-                  if (sheet_index_list[si] == current_sheet_name) {
-                    current_sheet_index = si;
-                    break;
-                  }
-                }
-
-                // FormulaValue - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/39a0757a-c7bb-4e85-b144-3e7837b059d7
-                var formula_byte1 = file_bytes[cell_record_pos2+8];
-                var formula_byte2 = file_bytes[cell_record_pos2+9];
-                var formula_byte3 = file_bytes[cell_record_pos2+10];
-                var formula_byte4 = file_bytes[cell_record_pos2+11];
-                var formula_byte5 = file_bytes[cell_record_pos2+12];
-                var formula_byte6 = file_bytes[cell_record_pos2+13];
-                var formula_expr  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+14, cell_record_pos2+16), byte_order);
-
-                var cell_value = null;
-                var cell_ref_full;
-
-                if (formula_expr == 65535) {
-                  if (formula_byte1 == 0) {
-                    // String Value
-                    // Ignore byte3
-                  } else if (formula_byte1 == 1) {
-                    // Boolean Value
-                    cell_value = (formula_byte3 == 0) ? false : true;
-                  } else if (formula_byte1 == 2) {
-                    // Error value
-                    // BErr - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/91beb411-d175-4c4e-b65f-e3bfbc53064c
-                    if (formula_byte3 == 0x00) {
-                      cell_value = "#NULL!";
-                    } else if (formula_byte3 == 0x07) {
-                      cell_value = "#DIV/0!";
-                    } else if (formula_byte3 == 0x0F) {
-                      cell_value = "#VALUE!";
-                    } else if (formula_byte3 == 0x17) {
-                      cell_value = "#REF!";
-                    } else if (formula_byte3 == 0x1D) {
-                      cell_value = "#NAME?";
-                    } else if (formula_byte3 == 0x24) {
-                      cell_value = "#NUM!";
-                    } else if (formula_byte3 == 0x2A) {
-                      cell_value = "#N/A";
-                    }
-                  } else if (formula_byte1 == 3) {
-                    // Blank String
-                    cell_value = "";
-                  } else {
-                    // Error
-                  }
-                } else {
-                  // Xnum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f4aa5725-5bb8-46a9-9fb5-7f0393070a4c
-                  var buf = new ArrayBuffer(8);
-                  var view = new DataView(buf);
-
-                  view.setUint8(0, formula_byte1);
-                  view.setUint8(1, formula_byte2);
-                  view.setUint8(2, formula_byte3);
-                  view.setUint8(3, formula_byte4);
-                  view.setUint8(4, formula_byte5);
-                  view.setUint8(5, formula_byte6);
-                  view.setUint8(6, file_bytes[cell_record_pos2+14]);
-                  view.setUint8(7, file_bytes[cell_record_pos2+15]);
-
-                  cell_value = view.getFloat64(0, true);
-                }
-
-                var formula_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+16]);
-                var always_calc = (formula_bits[0] == 1) ? true : false;
-                var shared_formula = (formula_bits[3] == 1) ? true : false;
-
-                var reserved3 = file_bytes[cell_record_pos2+17];
-                var cache = file_bytes.slice(cell_record_pos2+18, cell_record_pos2+22);
-
-                // CellParsedFormula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/7dd67f0a-671d-4905-b87b-4cc07295e442
-                var rgce_byte_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+22, cell_record_pos2+24), byte_order);
-                var rgce_bytes = file_bytes.slice(cell_record_pos2+24, cell_record_pos2+24+rgce_byte_size);
-
-                // Rgce - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6cdf7d38-d08c-4e56-bd2f-6c82b8da752e
-                var current_rgce_byte = 0;
-                var formula_type = 0;
-                var cell_formula = "";
-                var formula_calc_stack = [];
-
-                while (current_rgce_byte < rgce_bytes.length) {
-                  var cell_formula_debug = Static_File_Analyzer.get_string_from_array(rgce_bytes); // temp / debug
-
-                  // Ptg / formula_type - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/9310c3bb-d73f-4db0-8342-28e1e0fcb68f
-                  var last_formula_type = formula_type; // For DEBUG
-                  formula_type = rgce_bytes[current_rgce_byte];
-                  current_rgce_byte += 1;
-
-                  if (formula_type == 0x03) {
-                    // PtgAdd - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/27db2f45-11e8-4238-94ed-92fd9c5721fb
-                    formula_calc_stack.push({
-                      'value': "+",
-                      'type':  "operator"
-                    });
-                  } else if (formula_type == 0x04) {
-                    // PtgSub - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ee15a1fa-77bb-45e1-8c8c-0e7bef7f7552
-                    formula_calc_stack.push({
-                      'value': "-",
-                      'type':  "operator"
-                    });
-                  } else if (formula_type == 0x05) {
-                    // PtgMul - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/52863fc5-3d3c-4874-90e6-a7961902849f
-                    formula_calc_stack.push({
-                      'value': "*",
-                      'type':  "operator"
-                    });
-                  } else if (formula_type == 0x06) {
-                    // PtgDiv - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/10585b24-618d-47f4-8ffa-65811d18ad13
-                    formula_calc_stack.push({
-                      'value': "/",
-                      'type':  "operator"
-                    });
-                  } else if (formula_type == 0x07) {
-                    // PtgPower - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e115b216-5dda-4a5b-95d2-cadf0ada9a82
-                    formula_calc_stack.push({
-                      'value': "^",
-                      'type':  "operator"
-                    });
-                  } else if (formula_type == 0x08) {
-                    // PtgConcat - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/054d699a-4383-4bbf-9df2-6a4020119c1e
-                    formula_calc_stack.push({
-                      'value': "&",
-                      'type':  "operator"
-                    });
-
-                    // Stack is implemented as Poish notation, if there is no concat already insert one.
-                    if (cell_formula.indexOf("&") < 0) {
-                      var insert_index = cell_formula.indexOf(cell_ref_full);
-                      cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
-                    }
-                    cell_formula += "&";
-                  } else if (formula_type == 0x0B) {
-                    // PtgEq - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d197275e-cb7f-455c-b9b5-7e968412d470
-                    formula_calc_stack.push({
-                      'value': "==",
-                      'type':  "operator"
-                    });
-                    cell_formula += "==";
-                  } else if (formula_type == 0x0E) {
-                    // PtgNe - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0e49033d-5dc7-40f1-8fca-eb3b8b1c2c91
-                    formula_calc_stack.push({
-                      'value': "!=",
-                      'type':  "operator"
-                    });
-                    cell_formula += "!=";
-                  } else if (formula_type == 0x16) {
-                    // PtgMissArg - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/69352e6c-e712-48d7-92d1-0bf7c1f61f69
-                    formula_calc_stack.push({
-                      'value': "",
-                      'type':  "string"
-                    });
-                    cell_formula += "\"\"";
-                  } else if (formula_type == 0x17) {
-                    // String
-                    var string_size = rgce_bytes[current_rgce_byte];
-                    var byte_option_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte+1]);
-                    var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
-                    var string_end;
-
-                    if (double_byte_chars) {
-                      // Characters are two bytes each.
-                      string_end = current_rgce_byte + 2 + (string_size * 2);
-                    } else {
-                      // Characters are one byte each.
-                      string_end = current_rgce_byte + 2 + string_size;
-                    }
-
-                    var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));;
-
-                    if (document_obj.varables.hasOwnProperty(string_val)) {
-                      // Reference to a document variable
-                      formula_calc_stack.push({
-                        'value': document_obj.varables[string_val],
-                        'type':  "reference"
-                      });
-                    } else {
-                      formula_calc_stack.push({
-                        'value': string_val,
-                        'type':  "string"
-                      });
-                    }
-
-                    current_rgce_byte = string_end;
-                  } else if (formula_type == 0x18) {
-                    if (rgce_bytes[current_rgce_byte] == 0x01) {
-                      // PtgElfLel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/67784d96-e87d-4f97-b643-f8f2176a6148
-                    } else if (rgce_bytes[current_rgce_byte] == 0x02) {
-                      // PtgElfRw - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/20348be6-68c6-4506-b744-fd38ec0aa675
-                    } else if (rgce_bytes[current_rgce_byte] == 0x03) {
-                      // PtgElfCol - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/c76517f7-6a4e-47e8-8087-6e927758bbed
-                    } else if (rgce_bytes[current_rgce_byte] == 0x06) {
-                      // PtgElfRwV - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/42e28815-da53-45ba-80f2-2a68ddbbfcf9
-                    } else if (rgce_bytes[current_rgce_byte] == 0x07) {
-                      // PtgElfColV - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/167409e7-9363-4b61-9434-47e559e80f2d
-                    } else if (rgce_bytes[current_rgce_byte] == 0x0A) {
-                      // PtgElfRadical - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/dc352cde-62fc-4c68-99fd-186d6bc4d610
-                    } else if (rgce_bytes[current_rgce_byte] == 0x0B) {
-                      // PtgElfRadicalS - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e3112a89-f771-4043-82a9-18b3d4c1e137
-                    } else if (rgce_bytes[current_rgce_byte] == 0x0D) {
-                      // PtgElfColS - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cc02acdf-f404-4318-9847-8d4cbf523966
-                    } else if (rgce_bytes[current_rgce_byte] == 0x0F) {
-                      // PtgElfColSV - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6ed51fe3-4baf-4163-8851-888de8477525
-                    } else if (rgce_bytes[current_rgce_byte] == 0x10) {
-                      // PtgElfRadicalLel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/304191e6-2c82-4542-8477-a1ffd548442e
-                    } else if (rgce_bytes[current_rgce_byte] == 0x1D) {
-                      // PtgSxName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/aa0ebf5c-29d2-4ec5-8639-46f844e7647d
-                    }
-
-                    // All the above records are the same size.
-                    current_rgce_byte += 5;
-                  } else if (formula_type == 0x19) {
-                    if (rgce_bytes[current_rgce_byte] == 0x01) {
-                      // PtgAttrSemi - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/615c5518-010a-4268-b71b-b60074bdb11b
-                      // next two bytes unused, should be zero
-                      current_rgce_byte += 3;
-                    } else if (rgce_bytes[current_rgce_byte] == 0x02) {
-                      // PtgAttrIf - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d81e5fb4-3004-409a-9a31-1a60662d9e59
-                      var offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
-                      current_rgce_byte += 3;
-                    } else if (rgce_bytes[current_rgce_byte] == 0x04) {
-                      // PtgAttrChoose - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/24fb579c-c65d-4771-94a8-4380cecdc8c8
-                      var c_offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order) + 1;
-                      var rgOffset_bytes = rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+3+c_offset);
-                      current_rgce_byte += 3 + c_offset;
-                    } else if (rgce_bytes[current_rgce_byte] == 0x08) {
-                      // PtgAttrGoto - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/081e17b9-02a6-4e78-ad28-09538f35a312
-                      var offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
-                      current_rgce_byte += 3;
-                    } else if (rgce_bytes[current_rgce_byte] == 0x10) {
-                      // PtgAttrSum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/79ef57f6-27ab-4fec-b893-7dd727e771d1
-                      // next two bytes unused, should be zero
-                      current_rgce_byte += 3;
-                    } else if (rgce_bytes[current_rgce_byte] == 0x20 || rgce_bytes[current_rgce_byte] == 0x21) {
-                      // PtgAttrBaxcel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fcd76e10-6072-4dcf-b591-47edc8822792
-                      // This is my implementaiton, not based on MS / Excel.
-                      formula_calc_stack.push({
-                        'value': "=",
-                        'type':  "operator"
-                      });
-                      // next two bytes unused, should be zero
-                      current_rgce_byte += 3;
-                    } else if (rgce_bytes[current_rgce_byte] == 0x40) {
-                      // PtgAttrSpace - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/38a4d7be-040b-4206-b078-62f5aeec72f3
-                      var ptg_attr_space_type = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
-                      current_rgce_byte += 3;
-                    } else if (rgce_bytes[current_rgce_byte] == 0x41) {
-                      // PtgAttrSpaceSemi - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d8c3df5-9be5-46d9-8105-a1a19ceca3d4
-                      var type = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
-                      current_rgce_byte += 3;
-                    } else {
-                      // error
-                      current_rgce_byte += 1;
-                    }
-                  } else if (formula_type == 0x1E) {
-                    // PtgInt - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/508ecf18-3b81-4628-95b3-7a9d2a295bca
-                    var ptg_int_val = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
-                    formula_calc_stack.push({
-                      'value': ptg_int_val,
-                      'type':  "number"
-                    });
-                    current_rgce_byte += 2;
-                  } else if (formula_type == 0x1F) {
-                    // PtgNum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/40e69183-2cd3-4051-87ba-2f3ccb82bcfa
-                    var float_bytes = rgce_bytes.slice(current_rgce_byte,current_rgce_byte+8);
-                    var buf = new ArrayBuffer(8);
-                    var view = new DataView(buf);
-
-                    view.setUint8(0, float_bytes[0]);
-                    view.setUint8(1, float_bytes[1]);
-                    view.setUint8(2, float_bytes[2]);
-                    view.setUint8(3, float_bytes[3]);
-                    view.setUint8(4, float_bytes[4]);
-                    view.setUint8(5, float_bytes[5]);
-                    view.setUint8(6, float_bytes[6]);
-                    view.setUint8(7, float_bytes[7]);
-
-                    var float_val = view.getFloat64(0, true);
-
-                    formula_calc_stack.push({
-                      'value': float_val,
-                      'type':  "number"
-                    });
-
-                    current_rgce_byte += 8;
-                  } else if (formula_type == 0x23) {
-                    // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
-                    // reference to a defined name
-                    var var_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
-
-                    if (var_index-1 < spreadsheet_var_names.length) {
-                      var var_name = spreadsheet_var_names[var_index-1];
-
-                      if (document_obj.varables.hasOwnProperty(var_name.name)) {
-                        var var_value = document_obj.varables[var_name.name];
-                        var var_type = typeof document_obj.varables[var_name.name];
-
-                        var cell_ref_match = /\@([a-zA-Z0-9]+)\!(\w+[0-9]+)/gm.exec(var_value);
-                        if (cell_ref_match !== null) {
-                          // Cell Reference
-                          if (document_obj.sheets[cell_ref_match[1]].data.hasOwnProperty(cell_ref_match[2])) {
-                            var ref_cell = document_obj.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
-                            var_value = ref_cell.value;
-                            var_type = typeof ref_cell.value;
-                          } else {
-                            // Add to recalc
-                            document_obj.recalc_objs.push(document_obj.current_cell);
-                            var_type = "reference";
-                          }
-                        }
-
-                        formula_calc_stack.push({
-                          'value': var_value,
-                          'type':  var_type
-                        });
-                      } else {
-                        formula_calc_stack.push({
-                          'value': var_name.name,
-                          'type':  "string"
-                        });
-                      }
-
-                      current_rgce_byte += 4;
-                    } else {
-                      current_rgce_byte += 1;
-                    }
-                  } else if (formula_type == 0x24 || formula_type == 0x44) {
-                    // PtgRef - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc7c380b-d793-4219-a897-e47e13c4e055
-                    // The PtgRef operand specifies a reference to a single cell in this sheet.
-                    var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
-                    var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
-                    var col_rel_bits = this.get_bin_from_int(col_rel);
-                    var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
-                    var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
-                    var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
-
-                    var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
-                    var spreadsheet_obj = null;
-                    var spreadsheet_sheet_list = Object.entries(spreadsheet_sheet_names);
-                    for (var ssi=0; ssi<spreadsheet_sheet_list.length; ssi++) {
-                      if (spreadsheet_sheet_list[ssi][1].name == current_sheet_name) {
-                        spreadsheet_obj = spreadsheet_sheet_list[ssi][1];
-                        break;
-                      }
-                    }
-
-                    document_obj = {
-                      'type': "spreadsheet",
-                      'document_properties': document_properties,
-                      'sheets': spreadsheet_sheet_names,
-                      'current_sheet_name': current_sheet_name,
-                      'current_cell': this.convert_xls_column(cell_col) + cell_row,
-                      'varables': spreadsheet_defined_vars,
-                      'recalc_objs': document_obj.recalc_objs
-                    };
-
-                    // Check to what the next rgce_byte is, as that will affect what action is taken.
-                    if (rgce_bytes[current_rgce_byte+6] == 0x60) {
-                      // Put reference
-                      // Calculate the stack.
-                      var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
-                      stack_result = stack_result.replaceAll(/\\?[\"\']&\\?[\"\']/gm, "");
-
-                      if (stack_result.charAt(0) == "=") {
-                        // This is an Excel formula or macro
-                        var c_formula_name = stack_result.split("(")[0].toUpperCase();
-
-                        if (c_formula_name == "=CALL" || c_formula_name == "=EXEC" || c_formula_name == "=IF") {
-                          file_info.scripts.script_type = "Excel 4.0 Macro";
-                          file_info.scripts.extracted_script += stack_result + "\n\n";
-
-                          // Keep a list of downloaded file names.
-                          var file_dl_match = /\=CALL\s*\(\s*[\"\']urlmon[\"\']\s*,[^\,]+\,[^\,]+\,[^\,]+\,[^\,]+\,[\"\'][\.\\]+([^\"\']+)[\"\']/gmi.exec(stack_result);
-                          if (file_dl_match !== null) {
-                            downloaded_files.push(file_dl_match[1]);
-                          }
-
-                          // Check EXEC for usage of downloaded files.
-                          if (c_formula_name == "=EXEC") {
-                            for (var dl=0; dl<downloaded_files.length; dl++) {
-                              if (stack_result.indexOf(downloaded_files[dl]) > 0) {
-                                var new_finding = "SUSPICIOUS - Macro Execution of a Downloaded File";
-                                if (!file_info.analytic_findings.includes(new_finding)) {
-                                  file_info.analytic_findings.push(new_finding);
-                                }
-                                break;
-                              }
-                            }
-                          }
-
-                          // Check for IoCs
-                          file_info = this.search_for_iocs(stack_result, file_info);
-                        }
-                      }
-
-                      spreadsheet_obj.data[cell_ref] = {
-                        'value': stack_result,
-                        'type':  "string"
-                      }
-
-                      formula_calc_stack.shift();
-                      current_rgce_byte += 8;
-                    } else {
-                      // Get reference
-                      if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
-                        if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
-                          // Cell has a value we can use this.
-                          formula_calc_stack.push({
-                            'value': spreadsheet_obj.data[cell_ref].value,
-                            'type':  "string"
-                          });
-
-                          cell_formula += spreadsheet_obj.name + "!" + cell_ref;
-                        } else {
-                          // No cell value, calculate formula
-                          // TODO: not yet implemented
-                        }
-
-                        break;
-                      } else {
-                        // Cell reference was not found or hasn't been loaded yet.
-                        // This may mean that cells are stored in the file in a different order than need to be calculated.
-                        // Store the cell names that cant be calculated and go back to recalc after all cells are loaded.
-                        cell_ref_full = spreadsheet_obj.name + "!" + cell_ref;
-                        var recalc_cell = current_sheet_name + "!" + this.convert_xls_column(cell_col) + cell_row;
-
-                        formula_calc_stack.push({
-                          'value': "@"+cell_ref_full,
-                          'type':  "reference"
-                        });
-                        cell_formula += cell_ref_full;
-
-                        if (!document_obj.recalc_objs.includes(recalc_cell)) document_obj.recalc_objs.push(recalc_cell);
-                      }
-
-                      current_rgce_byte += 4;
-                    }
-                  } else if (formula_type == 0x41 || formula_type == 0x21) {
-                    // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
-                    var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
-                    var iftab = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
-
-                    document_obj = {
-                      'type': "spreadsheet",
-                      'document_properties': document_properties,
-                      'sheets': spreadsheet_sheet_names,
-                      'current_sheet_name': current_sheet_name,
-                      'current_cell': this.convert_xls_column(cell_col) + cell_row,
-                      'varables': spreadsheet_defined_vars,
-                      'recalc_objs': document_obj.recalc_objs
-                    };
-
-                    // Execute a function - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00b5dd7d-51ca-4938-b7b7-483fe0e5933b
-                    if (iftab == 0x0000) {
-                      // COUNT
-                    } else if (iftab == 0x0001) {
-                      // IF
-                    } else if (iftab == 0x0030) {
-                      // Text
-                      // TODO - this is a hack and not really implemented.
-                      cell_formula = "=TEXT(" + cell_formula + ")";
-                      formula_calc_stack.splice(-1, 2, {
-                        'value': formula_calc_stack.splice(-2, 1)[0].value,
-                        'type':  "string"
-                      });
-                    } else if (iftab == 0x004F) {
-                      // ABSREF - Returns the absolute reference of the cells that are offset from a reference by a specified amount
-
-                    } else if (iftab == 0x005A) {
-                      // DEREF - Reference another cell
-                      cell_formula += "=";
-                    } else if (iftab == 0x006F) {
-                      // CHAR
-                      formula_calc_stack.push({
-                        'value':  "_xlfn.CHAR",
-                        'type':   "string",
-                        'params': param_count
-                      });
-
-                      var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
-                      //cell_formula += "CHAR(" + stack_result + ")";
-                      //formula_calc_stack.splice(-1, 1, {
-                      //  'value': String.fromCharCode(stack_result),
-                      //  'type':  "string"
-                      //});
-                    } else if (iftab == 0x0082) {
-                      // t-params = (ref / val)
-                      if (formula_calc_stack.length > 1) {
-                        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
-                        cell_formula = "=T(" + cell_formula + ")";
-                        cell_value = (cell_value === null) ? stack_result : cell_value+stack_result;
-                      }
-                    } else if (iftab == 0x0096) {
-                      // Call Function
-                      console.log("Call function not implemented.");
-                    } else if (iftab == 0x00E1) {
-                      // End IF
-                    } else {
-                      // Non implemented function
-                      console.log("Unknown function " + iftab); // DEBUG
-                      console.log("^ Last function: " + last_formula_type); // DEBUG
-                    }
-
-                    current_rgce_byte += 2;
-                  } else if (formula_type == 0x42) {
-                    // PtgFuncVar - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d105171-6b73-4f40-a7cd-6bf2aae15e83
-                    var param_count = rgce_bytes[current_rgce_byte];
-                    var tab_bits = this.get_binary_array(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
-                    var tab_int = rgce_bytes[current_rgce_byte+1];
-                    //var tab_int = this.get_int_from_bin(tab_bits.slice(0,15), this.LITTLE_ENDIAN);
-                    current_rgce_byte += 3;
-
-                    document_obj = {
-                      'type': "spreadsheet",
-                      'document_properties': document_properties,
-                      'sheets': spreadsheet_sheet_names,
-                      'current_sheet_name': current_sheet_name,
-                      'current_cell': this.convert_xls_column(cell_col) + cell_row,
-                      'varables': spreadsheet_defined_vars,
-                      'recalc_objs': document_obj.recalc_objs
-                    };
-
-                    if (tab_bits[15] == 0) {
-                      // Ftab value - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00b5dd7d-51ca-4938-b7b7-483fe0e5933b
-                      if (tab_int == 0x00) {
-                        // COUNT
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.COUNT",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0x01) {
-                        // IF
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.IF",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0x1A) {
-                        // SIGN - https://support.microsoft.com/en-us/office/sign-function-109c932d-fcdc-4023-91f1-2dd0e916a1d8
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.SIGN",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0x36) {
-                        // HALT
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.HALT",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0x37) {
-                        // RETURN
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.RETURN",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0x58) {
-                        // SET.NAME
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.SET.NAME",
-                          'type':   "string",
-                          'params': param_count
-                        });
-
-                        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-                        cell_formula += stack_result.formula;
-                        cell_val = stack_result.value;
-                      } else if (tab_int == 0x6C) {
-                        // STDEVPA - Calculates standard deviation
-                      } else if (tab_int == 0x6E) {
-                        // EXEC
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.EXEC",
-                          'type':   "string",
-                          'params': param_count
-                        });
-
-                        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-                        file_info.scripts.script_type = "Excel 4.0 Macro";
-                        file_info = this.analyze_excel_macro(file_info, spreadsheet_sheet_names, stack_result.value);
-                      } else if (tab_int == 0x6F) {
-                        // CHAR
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.CHAR",
-                          'type':   "string",
-                          'params': param_count
-                        });
-
-                        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-                      } else if (tab_int == 0x80) {
-                        // ISNUMBER
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.ISNUMBER",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0x95) {
-                        // REGISTER
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.REGISTER",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0xA9) {
-                        // COUNTA - counts the number of cells that are not empty in a range.
-                        // https://support.microsoft.com/en-us/office/counta-function-7dc98875-d5c1-46f1-9a82-53f3219e2509
-                        formula_calc_stack.push({
-                          'value':  "_xlfn.COUNTA",
-                          'type':   "string",
-                          'params': param_count
-                        });
-                      } else if (tab_int == 0xFF) {
-                        // User Defined Function
-                        //formula_calc_stack.push({
-                        //  'value': "_xlfn.USERFUNCTION",
-                        //  'type':  "string",
-                        //'params': param_count
-                        //});
-                      } else {
-                        console.log("Unknown PtgFuncVar: " + tab_int); // DEBUG
-                      }
-                    } else {
-                      // Cetab value - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0b8acba5-86d2-4854-836e-0afaee743d44
-                    }
-
-                    // Execute formula_calc_stack
-                    for (var c=0; c<formula_calc_stack.length; c++) {
-                      if (param_count == 1 && formula_calc_stack.length > 1) {
-                        function_name = "";
-                        var stack_result = {};
-                        // Execute the stack, if it's length is greater than 1.
-                        if (formula_calc_stack.length > 1) {
-                          stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-                          cell_value = stack_result.value;
-                        }
-
-                        if (stack_result.hasOwnProperty("formula") && stack_result.formula != "") {
-                          cell_formula += stack_result.formula;
-                        } else {
-                          cell_formula += function_name + "(" + cell_formula + ")";
-                        }
-
-                        break;
-                      } else if (param_count >= 2) {
-                        if (formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
-                          if (formula_calc_stack[c].value == "=") {
-                            // c + 1 is the varable name, c + 2 is the value.
-                            if (formula_calc_stack.length > 2) {
-                              document_obj.varables[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
-
-                              //Set a human readable value for this cell
-                              cell_formula += formula_calc_stack[c+1].value + "=" + "\"" + formula_calc_stack[c+2].value  + "\"";
-                              formula_calc_stack = formula_calc_stack.slice(3);
-                            } else if (formula_calc_stack.length == 2) {
-                              if (c == 0) {
-                                document_obj.varables[formula_calc_stack[c+1].value] = "";
-                                cell_formula += formula_calc_stack[c+1].value + "=" + "\"\"";
-                                formula_calc_stack = formula_calc_stack.slice(2);
-                              }
-                            }
-
-                          } else if (formula_calc_stack[c].value.length > 6 && formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
-                            // Execute an Excel function.
-                            var function_name = formula_calc_stack[c].value.substring(6);
-
-                            if (c+1 < formula_calc_stack.length) {
-                              cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
-                            } else {
-                              cell_formula += function_name + "(" + formula_calc_stack[c].value + ")";
-                            }
-
-                            var cal_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-                          }
-                        }
-                      }
-                    }
-
-                    if (formula_calc_stack.length > 1) {
-                      // Check to see if formula_calc_stack consists of only strings
-                      var is_all_strings = true;
-                      var string_concat = "";
-                      for (var c=0; c<formula_calc_stack.length; c++) {
-                        if (formula_calc_stack[c].type != "string") {
-                          is_all_strings = false;
-                          break;
-                        } else {
-                          string_concat += formula_calc_stack[c].value;
-                        }
-                      }
-
-                      if (is_all_strings) {
-                        // Concat
-                        formula_calc_stack = [{
-                          'type':  "string",
-                          'value': string_concat
-                        }];
-                        cell_value = string_concat;
-                      }
-                    }
-
-                  } else if (formula_type == 0x43) {
-                    // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
-                    var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
-
-                    // PtgDataType - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/80d504ba-eb5d-4a0f-a5da-3dcc792dd78e
-                    var data_type_int = this.get_int_from_bin(ptg_bits.slice(5,7));
-                    var name_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
-
-                    if (name_index <= spreadsheet_var_names.length) {
-                      var ref_var_name = spreadsheet_var_names[name_index-1];
-
-                      if (document_obj.varables.hasOwnProperty(ref_var_name.name)) {
-                        formula_calc_stack.push({
-                          'value': document_obj.varables[ref_var_name.name],
-                          'type':  "string"
-                        });
-
-                      } else {
-                        // Probably definning the variable
-                        formula_calc_stack.push({
-                          'value': ref_var_name.name,
-                          'type':  "reference"
-                        });
-                      }
-                    } else {
-                      // error looking up varable.
-                    }
-
-                    current_rgce_byte += 4;
-                  } else if (formula_type == 0x5A) {
-                    // PtgRef3d - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1ca817be-8df3-4b80-8d35-46b5eb753577
-                    // The PtgRef3d operand specifies a reference to a single cell on one or more sheets.
-                    var ixti = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
-                    var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
-                    var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+4,current_rgce_byte+6), byte_order);
-                    var col_rel_bits = this.get_bin_from_int(col_rel);
-                    var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
-                    var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
-                    var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
-
-                    var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
-                    var ref_found = false;
-                    var ixti_org = ixti;
-                    var ref_sheet_name;
-                    var spreadsheet_obj;
-
-                    while (ixti < sheet_index_list.length) {
-                      ref_sheet_name = sheet_index_list[ixti];
-                      spreadsheet_obj = spreadsheet_sheet_names[ref_sheet_name];
-
-                      if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
-                        ref_found = true;
-
-                        if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
-                          // Cell has a value we can use this.
-                          formula_calc_stack.push({
-                            'value': spreadsheet_obj.data[cell_ref].value,
-                            'type':  "string"
-                          });
-
-                          cell_formula += spreadsheet_obj.name + "!" + cell_ref;
-                        } else {
-                          // No cell value, calculate formula
-                          // TODO: not yet implemented
-                        }
-
-                        break;
-                      } else {
-                        // This loop is a hack, TODO make sure the spreadsheet indexes line up.
-                        ixti++;
-                      }
-                    }
-
-                    if (ref_found == false) {
-                      // Cell reference was not found or hasn't been loaded yet.
-                      // This may mean that cells are stored in the file in a different order than need to be calculated.
-                      // Store the cell names that cant be calculated and go back to recalc after all cells are loaded.
-                      ref_sheet_name = sheet_index_list[current_sheet_index + 1 + ixti_org];
-                      cell_ref_full = ref_sheet_name + "!" + cell_ref;
-                      var recalc_cell = current_sheet_name + "!" + this.convert_xls_column(cell_col) + cell_row;
-
-                      formula_calc_stack.push({
-                        'value': "@"+cell_ref_full,
-                        'type':  "reference"
-                      });
-                      cell_formula += cell_ref_full;
-
-                      if (!document_obj.recalc_objs.includes(recalc_cell)) document_obj.recalc_objs.push(recalc_cell);
-                    }
-
-                    current_rgce_byte += 6;
-                  } else if (formula_type == 0x60) {
-                    // PtgArray - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/61167ac8-b0ca-42e5-b82c-41a25d12324c
-                    // Maybe just one unused byte?
-                    // TODO: Implement this.
-
-                    var data_type = this.get_bin_from_int(formula_type).slice(5,7);
-
-                    formula_calc_stack.push({
-                      'value': "[]",
-                      'type':  "operator"
-                    });
-
-                    current_rgce_byte += 1;
-                  } else {
-                    // Non implemented formula_type
-                    console.log("Unknown formula_type " + formula_type); // DEBUG
-                  }
-                }
-
-                if (formula_calc_stack.length > 1) {
-                  var stack_result2 = this.execute_excel_stack(formula_calc_stack, document_obj);
-                  //console.log("Call Stack Debug: " + formula_calc_stack.join(""));
-                  //console.log("Call Stack Result Debug:");
-                  //console.log(stack_result2);
-                  var rr=0; // DEBUG
-                }
-
-                // Derive sheetname
-                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
-                var sheet_name = "";
-                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
-                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
-                    sheet_name = spreadsheet_sheet_indexes[si][1].name;
-                    break;
-                  }
-                }
-
-                if (sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
-
-                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
-                if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
-                  spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
-                    'formula': cell_formula,
-                    'value': (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : ""
-                  };
-
-                  var cellval_debug = (formula_calc_stack.length > 0) ? formula_calc_stack[0].value : "";
-                  console.log(cell_ref + " - " + cell_formula + " - " + cellval_debug); // DEBUG
-                }
-
-                cell_record_pos2 += formula_size + 2;
-
-                // Check if next record is a string. As that will probably mean it's the pre-calculated value of this cell.
-                if (this.array_equals(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), [0x07,0x02])) {
-                  // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
-                  var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2,cell_record_pos2+4), byte_order);
-                  var string_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4,cell_record_pos2+6), byte_order);
-
-                  var byte_option_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+6]);
-                  var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
-                  var string_end;
-
-                  if (double_byte_chars) {
-                    // Characters are two bytes each.
-                    string_end = cell_record_pos2 + 7 + (string_size * 2);
-                  } else {
-                    // Characters are one byte each.
-                    string_end = cell_record_pos2 + 7 + string_size;
-                  }
-
-                  var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(cell_record_pos2+7, string_end));;
-
-                  if (string_val == spreadsheet_sheet_names[sheet_name].data[cell_ref].value) {
-                    // Nothing to do
-                  } else {
-                    console.log("Calculated value and pre-calculated value miss match.");
-                    console.log("Cal: " + spreadsheet_sheet_names[sheet_name].data[cell_ref].value);
-                    console.log("Precal: " + string_val);
-
-                    spreadsheet_sheet_names[sheet_name].data[cell_ref].value = string_val;
-                  }
-
-                  cell_record_pos2 += record_size + 4;
-                }
-              } else if (object_id[0] == 0x7E && object_id[1] == 0x02) {
-                // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
-                // The RK record specifies the numeric data contained in a single cell.
-                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
-
-                var cell_row  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+2, cell_record_pos2+4), byte_order) + 1;
-                var cell_col  = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+4, cell_record_pos2+6), byte_order);
-                var cell_ixfe = this.get_two_byte_int(file_bytes.slice(cell_record_pos2+6, cell_record_pos2+8), byte_order);
-
-                // RkNumber - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/04fa5340-122f-49db-93ea-00cc75501efc
-                var rk_number_bits = this.get_binary_array(file_bytes.slice(cell_record_pos2+8, cell_record_pos2+12), byte_order);
-                var cell_value = 0;
-                var rk_bits = this.get_bin_from_int(file_bytes[cell_record_pos2+8]);
-
-                if (rk_bits[1] == 0) {
-                  // rk_number is the 30 most significant bits of a 64-bit binary floating-point number as defined in [IEEE754]. The remaining 34-bits of the floating-point number MUST be 0.
-                  var rk_bytes = file_bytes.slice(cell_record_pos2+9, cell_record_pos2+12).reverse();
-
-                  rk_bits[0] = 0;
-                  rk_bits[1] = 0;
-                  rk_bytes.push(this.get_int_from_bin(rk_bits.reverse()));
-
-                  var buf = new ArrayBuffer(8);
-                  var view = new DataView(buf);
-
-                  view.setUint8(0, rk_bytes[0]);
-                  view.setUint8(1, rk_bytes[1]);
-                  view.setUint8(2, rk_bytes[2]);
-                  view.setUint8(3, rk_bytes[3]);
-                  view.setUint8(4, 0);
-                  view.setUint8(5, 0);
-                  view.setUint8(6, 0);
-                  view.setUint8(7, 0);
-
-                  cell_value = view.getFloat64(0, false);
-
-                } else {
-                  // rk_number is a signed integer.
-                  var rk_number = this.get_int_from_bin(rk_number_bits.slice(3), byte_order);
-                  cell_value = (rk_number_bits[2] == 1) ? rk_number * -1 : rk_number;
-                }
-
-                if (rk_bits[0] == 1) {
-                  // The value of RkNumber is the value of rk_number divided by 100.
-                  cell_value = cell_value / 100;
-                }
-
-                // Derive sheetname
-                var spreadsheet_sheet_indexes = Object.entries(spreadsheet_sheet_names);
-                var sheet_name = "";
-                for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
-                  if (cell_record_pos2 > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos2 < spreadsheet_sheet_indexes[si+1][1].file_pos) {
-                    sheet_name = spreadsheet_sheet_indexes[si][1].name;
-                    break;
-                  }
-                }
-
-                if (sheet_name == "") current_sheet_name = spreadsheet_sheet_indexes.slice(-1)[0][1].name;
-
-                var cell_ref = this.convert_xls_column(cell_col) + cell_row;
-                if (spreadsheet_sheet_names.hasOwnProperty(sheet_name)) {
-                  spreadsheet_sheet_names[sheet_name].data[cell_ref] = {
-                    'formula': null,
-                    'value': cell_value
-                  };
-                }
-
-                console.log(cell_ref + " - [No Formula] - " + cell_value); // DEBUG
-
-                cell_record_pos2 += record_size + 2;
-              } else if (object_id[0] == 0xBE && object_id[1] == 0x00) {
-                // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
-                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
-                // These are blank cells, not implementing at this time.
-                cell_record_pos2 += record_size;
-              } else {
-                // Unknown record
-                var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos2,cell_record_pos2+2), byte_order);
-                var cell_id = "";
-                //console.log("Unknown record: " + object_id[0] + " " + object_id[1]);
-
-                cell_record_pos2 += record_size;
-              }
-            }
-
+            console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
           }
 
         }
       }
 
       console.log("~~Recalc cells") // DEBUG
-
+      var last_recalc_len = document_obj.recalc_objs.length;
       // Re-parse cells needing recalculation.
-      var cell_data_obj;
-      var recalc_objects = document_obj.recalc_objs.slice();
-      for (var ro=0; ro<recalc_objects.length; ro++) {
-        break; // temp
-        var recalc_cell_name = recalc_objects[ro];
+      while (document_obj.recalc_objs.length > 0) {
+        var cell_data_obj;
+        var recalc_objects = document_obj.recalc_objs.slice();
+        document_obj.recalc_objs = [];
+        for (var ro=0; ro<recalc_objects.length; ro++) {
+          //break; // temp
+          var recalc_cell_name = recalc_objects[ro];
 
-        for (var i=0; i<cell_records.length; i++) {
-          var full_cell_name = cell_records[i].sheet_name + "!" + cell_records[i].cell_name;
-          if (recalc_cell_name == full_cell_name) {
-            if (cell_records[i].record_type == "Formula") {
-              cell_data_obj = this.parse_xls_formula_record(cell_records[i], document_obj, file_info, byte_order);
-              document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
-              console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
-            }
-          }
-        }
-      }
+          for (var i=0; i<cell_records.length; i++) {
+            var full_cell_name = cell_records[i].sheet_name + "!" + cell_records[i].cell_name;
+            if (recalc_cell_name == full_cell_name) {
+              if (cell_records[i].record_type == "Formula") {
+                cell_data_obj = this.parse_xls_formula_record(cell_records[i], document_obj, file_info, byte_order);
+                document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
 
+                if (cell_data_obj.cell_recalc == false) {
+                  console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
+                } else {
+                  var debug45=54;
+                }
 
-
-
-      for (var ro=0; ro<document_obj.recalc_objs.length; ro++) {
-        var ref_info = document_obj.recalc_objs[ro].split("!");
-        var cell;
-
-        if (!spreadsheet_sheet_names.hasOwnProperty(ref_info[0])) {
-          console.log("Unknown Sheet name: " + ref_info[0]);
-          continue;
-        }
-
-        if (spreadsheet_sheet_names[ref_info[0]].data.hasOwnProperty(ref_info[1])) {
-          cell = spreadsheet_sheet_names[ref_info[0]].data[ref_info[1]];
-        } else {
-          for (const [key, value] of Object.entries(spreadsheet_sheet_names)) {
-            if (spreadsheet_sheet_names[key].data.hasOwnProperty(ref_info[1])) {
-              cell = spreadsheet_sheet_names[key].data[ref_info[1]];
-              break;
-            }
-          }
-        }
-
-        // DEBUG
-        console.log("Cell: " + document_obj.recalc_objs[ro]);
-        console.log("Formula: " + cell.formula + " Value: " + cell.value);
-
-        // Replace cell references
-        var cell_ref_regex = /\@?([a-zA-Z0-9]+)\!(\w+[0-9]+)/gm;
-        var cell_ref_match = cell_ref_regex.exec(cell.value);
-        while (cell_ref_match !== null) {
-          if (document_obj.sheets.hasOwnProperty(cell_ref_match[1])) {
-            if (document_obj.sheets[cell_ref_match[1]].data.hasOwnProperty(cell_ref_match[2])) {
-              var ref_cell_obj = document_obj.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
-              var cell_ref_str = cell_ref_match[1] + "!" + cell_ref_match[2];
-              var formula_str = (ref_cell_obj.formula !== null) ? ref_cell_obj.formula : ref_cell_obj.value;
-
-              document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].value = cell.value.replaceAll(cell_ref_match[0], ref_cell_obj.value);
-              document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].formula = cell.formula.replaceAll(cell_ref_match[0], formula_str);
-              document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].formula = document_obj.sheets[cell_ref_match[1]].data[ref_info[1]].formula.replaceAll(cell_ref_str, formula_str);
-            }
-          }
-
-          cell_ref_match = cell_ref_regex.exec(cell.value);
-        }
-
-        spreadsheet_sheet_names = document_obj.sheets;
-
-        if (!spreadsheet_sheet_names[ref_info[0]].data.hasOwnProperty(ref_info[1])) continue;
-
-        console.log("Formula: " + spreadsheet_sheet_names[ref_info[0]].data[ref_info[1]].formula  + " Value: " + spreadsheet_sheet_names[ref_info[0]].data[ref_info[1]].value);
-
-        if (cell.formula.indexOf("&") >= 0) {
-          var cell_concat_result = "";
-          var cell_concats = cell.formula.split("&");
-          var cell_ref_arr;
-          var sheet = sheet_index_list[0];
-
-          for (var cc=0; cc<cell_concats.length; cc++) {
-            var cell_ref_str = cell_concats[cc];
-
-            if (cell_ref_str .startsWith("==")) {
-              cell_ref_str = cell_ref_str.substring(2);
-            }
-
-            // Error correction for missing concat
-            var ref_match = /([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)/gm.exec(cell_ref_str);
-            if (ref_match !== null) {
-              for (var ecc=1; ecc<=2; ecc++) {
-                cell_concat_result += this.get_xls_cell(ref_match[ecc], spreadsheet_sheet_names).value;
               }
-
-              continue;
             }
-
-            cell_concat_result += this.get_xls_cell(cell_ref_str, spreadsheet_sheet_names).value;
           }
+        }
 
-          cell.value = cell_concat_result;
-          file_info = this.analyze_excel_macro(file_info, spreadsheet_sheet_names, cell.value);
+        if (document_obj.recalc_objs.length == last_recalc_len) {
+          break;
         }
       }
 
@@ -5183,6 +4037,7 @@ class Static_File_Analyzer {
     var formula_expr  = this.get_two_byte_int(file_bytes.slice(12, 14), byte_order);
 
     if (formula_expr == 65535) {
+      /*
       if (formula_byte1 == 0) {
         // String Value
         // Ignore byte3
@@ -5212,6 +4067,7 @@ class Static_File_Analyzer {
       } else {
         // Error
       }
+      */
     } else {
       // Xnum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f4aa5725-5bb8-46a9-9fb5-7f0393070a4c
       var buf = new ArrayBuffer(8);
@@ -5477,12 +4333,12 @@ class Static_File_Analyzer {
             if (cell_ref_match !== null) {
               // Cell Reference
               if (document_obj.sheets[cell_ref_match[1]].data.hasOwnProperty(cell_ref_match[2])) {
-                var ref_cell = workbook.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
+                var ref_cell = document_obj.sheets[cell_ref_match[1]].data[cell_ref_match[2]];
                 var_value = ref_cell.value;
                 var_type = typeof ref_cell.value;
               } else {
                 // Add to recalc
-                document_obj.recalc_objs.push(document_obj.current_cell);
+                document_obj.recalc_objs.push(cell_record_obj.sheet_name + "!" + cell_record_obj.cell_name);
                 var_type = "reference";
                 cell_recalc = true;
               }
@@ -5531,12 +4387,25 @@ class Static_File_Analyzer {
 
             if (c_formula_name == "=CALL" || c_formula_name == "=EXEC" || c_formula_name == "=IF") {
               file_info.scripts.script_type = "Excel 4.0 Macro";
-              file_info.scripts.extracted_script += stack_result + "\n\n";
+
+              if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
+                file_info.scripts.extracted_script += stack_result + "\n\n";
+              }
 
               // Keep a list of downloaded file names.
-              var file_dl_match = /\=CALL\s*\(\s*[\"\']urlmon[\"\']\s*,[^\,]+\,[^\,]+\,[^\,]+\,[^\,]+\,[\"\'][\.\\]+([^\"\']+)[\"\']/gmi.exec(stack_result);
+              var file_dl_match = /\=?CALL\s*\(\s*[\"\']urlmon[\"\']\s*,[^\,]+\,[^\,]+\,[^\,]+\,([^\,]+)(?:\,([^\,]+))?(?:\,([^\,]+))?/gmi.exec(stack_result);
               if (file_dl_match !== null) {
-                downloaded_files.push(file_dl_match[1]);
+                if (file_dl_match[1].charAt(0) == "\"") {
+                  downloaded_files.push(file_dl_match[1].slice(1,-1));
+                }
+
+                if (file_dl_match[2].charAt(0) == "\"") {
+                  downloaded_files.push(file_dl_match[2].slice(1,-1));
+                }
+
+                if (file_dl_match[2].charAt(0) == "\"") {
+                  downloaded_files.push(file_dl_match[3].slice(1,-1));
+                }
               }
 
               // Check EXEC for usage of downloaded files.
@@ -5557,10 +4426,11 @@ class Static_File_Analyzer {
             }
           }
 
+          cell_value = (cell_value === null) ? stack_result : cell_value + stack_result;
+
           spreadsheet_obj.data[cell_ref] = {
-            'value': stack_result,
-            'type':  "string",
-            'ref_name': full_cell_name
+            'value': cell_value,
+            'formula': cell_formula
           }
 
           formula_calc_stack.shift();
@@ -5888,37 +4758,88 @@ class Static_File_Analyzer {
         var is_row_relative = (col_rel_bits[15] == 1) ? true : false;
 
         var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
+        var full_cell_name;
         var ref_found = false;
         var ixti_org = ixti;
-        var ref_sheet_name;
+        var ref_sheet_name = "";
         var spreadsheet_obj;
 
-        while (ixti < document_obj.sheet_index_list.length) {
-          ref_sheet_name = document_obj.sheet_index_list[ixti];
-          spreadsheet_obj = document_obj.sheets[ref_sheet_name];
-          var full_cell_name = ref_sheet_name + "!" + cell_ref;
+        var possible_sheet_names = [];
+        for (var si=0; si<document_obj.sheet_index_list.length; si++) {
+          var p_sheet_name = document_obj.sheet_index_list[si];
+          if (document_obj.sheets[p_sheet_name].data.hasOwnProperty(cell_ref)) {
+            possible_sheet_names.push(p_sheet_name);
+          }
+        }
 
-          if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
+        if (possible_sheet_names.length == 1) {
+          if (document_obj.sheet_indexes[ixti] === null || document_obj.sheet_indexes[ixti] === undefined) {
+            document_obj.sheet_indexes[ixti] = possible_sheet_names[0];
+            ref_sheet_name = document_obj.sheet_indexes[ixti];
+            spreadsheet_obj = document_obj.sheets[ref_sheet_name];
+            full_cell_name = ref_sheet_name + "!" + cell_ref;
             ref_found = true;
-
-            if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
-              // Cell has a value we can use this.
-              formula_calc_stack.push({
-                'value': spreadsheet_obj.data[cell_ref].value,
-                'type':  "string",
-                'ref_name': full_cell_name
-              });
-
-              cell_formula += spreadsheet_obj.name + "!" + cell_ref;
-            } else {
-              // No cell value, calculate formula
-              // TODO: not yet implemented
-            }
-
-            break;
           } else {
-            // This loop is a hack, TODO make sure the spreadsheet indexes line up.
-            ixti++;
+            if (document_obj.sheet_indexes[ixti] != possible_sheet_names[0]) {
+              // missmatach
+              if (document_obj.sheet_indexes.indexOf(possible_sheet_names[0]) >= 0) {
+                // Only match is already indexed, so that means the desired cell isn't loaded yet.
+                ref_sheet_name = document_obj.sheet_indexes[ixti];
+                spreadsheet_obj = document_obj.sheets[ref_sheet_name];
+                full_cell_name = ref_sheet_name + "!" + cell_ref;
+                ref_found = false;
+              } else {
+                // Possible bad data loaded, reset index.
+                document_obj.sheet_indexes[ixti] == null;
+              }
+
+              cell_recalc = true;
+            } else {
+              ref_sheet_name = document_obj.sheet_indexes[ixti];
+              spreadsheet_obj = document_obj.sheets[ref_sheet_name];
+              full_cell_name = ref_sheet_name + "!" + cell_ref;
+              ref_found = true;
+            }
+          }
+        } else {
+          if (document_obj.sheet_indexes[ixti] !== null && document_obj.sheet_indexes[ixti] !== undefined) {
+            ref_sheet_name = document_obj.sheet_indexes[ixti];
+            spreadsheet_obj = document_obj.sheets[ref_sheet_name];
+            full_cell_name = ref_sheet_name + "!" + cell_ref;
+
+            if (spreadsheet_obj.data.hasOwnProperty(cell_ref)) {
+              ref_found = true;
+            } else {
+              ref_found = false;
+            }
+          } else {
+            cell_recalc = true;
+          }
+        }
+
+        if (cell_ref == "F10") {
+          var debug90=0;
+        } else if (cell_record_obj.cell_name == "E4") {
+          var debug90=0;
+        }
+
+        if (spreadsheet_obj === null || spreadsheet_obj === undefined) {
+          var debug90=0;
+        }
+
+        if (ref_found == true) {
+          if (spreadsheet_obj.data[cell_ref].value !== null || spreadsheet_obj.data[cell_ref].value !== undefined) {
+            // Cell has a value we can use this.
+            formula_calc_stack.push({
+              'value': spreadsheet_obj.data[cell_ref].value,
+              'type':  "string",
+              'ref_name': full_cell_name
+            });
+
+            cell_formula += spreadsheet_obj.name + "!" + cell_ref;
+          } else {
+            // No cell value, calculate formula
+            // TODO: not yet implemented
           }
         }
 
@@ -5957,7 +4878,7 @@ class Static_File_Analyzer {
       }
     }
 
-    if (cell_value === null && formula_calc_stack.length > 0) {
+    if (formula_calc_stack.length > 0 && cell_value === null) {
       cell_value = formula_calc_stack[0].value;
     }
 
@@ -6142,7 +5063,7 @@ class Static_File_Analyzer {
           while (cell_record_pos > 0 && cell_record_pos < i) {
             // Derive the current Sheetname
             var spreadsheet_sheet_indexes = Object.entries(document_obj.sheets);
-            sheet_name = spreadsheet_sheet_indexes[0][1].name;
+            sheet_name = spreadsheet_sheet_indexes.at(-1)[1].name;
             for (var si=0; si<spreadsheet_sheet_indexes.length-1; si++) {
               if (cell_record_pos > spreadsheet_sheet_indexes[si][1].file_pos && cell_record_pos < spreadsheet_sheet_indexes[si+1][1].file_pos) {
                 sheet_name = spreadsheet_sheet_indexes[si][1].name;
@@ -6197,10 +5118,11 @@ class Static_File_Analyzer {
               // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
               // These are blank cells
               cell_record_pos += record_size;
+              console.log("MulBlank"); // DEBUG
             } else {
               // Unknown record
               var u_rec_int = this.get_two_byte_int([record_type_bytes[0],record_type_bytes[1]], byte_order);
-              console.log("Unknown record: " + u_rec_int + " - " + record_type_bytes[0] + " " + record_type_bytes[1]);
+              //console.log("Unknown record: " + u_rec_int + " - " + record_type_bytes[0] + " " + record_type_bytes[1]);
               cell_record_pos += record_size;
             }
 
