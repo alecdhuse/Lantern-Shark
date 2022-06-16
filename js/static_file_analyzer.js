@@ -1462,6 +1462,8 @@ class Static_File_Analyzer {
 
         if (document_obj.recalc_objs.length == last_recalc_len) {
           break;
+        } else {
+          last_recalc_len = document_obj.recalc_objs.length;
         }
       }
 
