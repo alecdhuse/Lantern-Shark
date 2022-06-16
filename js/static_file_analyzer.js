@@ -1155,6 +1155,8 @@ class Static_File_Analyzer {
           var boundsheet_length = file_bytes[i+2];
           var stream_pos = this.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
 
+          if (boundsheet_length < 4 || stream_pos > file_bytes.length) continue;
+
           // 0 - visible, 1 - hidden, 2 - very hidden.
           var sheet_state_val = file_bytes[i+8];
 
@@ -1166,13 +1168,15 @@ class Static_File_Analyzer {
           var sheet_type = file_bytes[i+8];
           var sheet_name = Static_File_Analyzer.get_string_from_array(file_bytes.slice(i+12, i+boundsheet_length+4));
 
-          spreadsheet_sheet_names[sheet_name] = {
-            'name': sheet_name,
-            'state': sheet_state,
-            'sheet_type': sheet_type,
-            'file_pos': stream_pos + stream_start,
-            'data': {}
-          };
+          if (sheet_name !== null) {
+            spreadsheet_sheet_names[sheet_name] = {
+              'name': sheet_name,
+              'state': sheet_state,
+              'sheet_type': sheet_type,
+              'file_pos': stream_pos + stream_start,
+              'data': {}
+            };            
+          }
 
           i += boundsheet_length+3;
         }
@@ -2721,7 +2725,7 @@ class Static_File_Analyzer {
 
              if (param1.type == "string" || param1.type == "reference") {
                workbook.varables[var_name] = param2.value;
-               formula = "SET.NAME(" + var_name + ", " + param2_val + ")";
+               formula = "=SET.NAME(" + var_name + ", " + param2_val + ")";
                stack.splice(c_index, 3, {
                  'value': param2.value,
                  'formula': formula,
@@ -5250,6 +5254,10 @@ class Static_File_Analyzer {
                 sheet_name = spreadsheet_sheet_indexes[si][1].name;
                 break;
               }
+            }
+
+            if (sheet_name == "") {
+              var debug123=123;
             }
 
             var cell_row = 0;
