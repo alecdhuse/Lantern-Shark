@@ -1325,7 +1325,8 @@ class Static_File_Analyzer {
         'indexed_cells': {},
         'defined_names': spreadsheet_var_names,
         'varables': spreadsheet_defined_vars,
-        'recalc_objs': document_obj.recalc_objs
+        'recalc_objs': document_obj.recalc_objs,
+        'unknown_cells_are_blank': false
       };
 
       var cell_records = this.read_dbcell_records(file_bytes, document_obj, byte_order);
@@ -1461,7 +1462,8 @@ class Static_File_Analyzer {
         }
 
         if (document_obj.recalc_objs.length == last_recalc_len) {
-          break;
+          document_obj.unknown_cells_are_blank = true;
+          //break;
         } else {
           last_recalc_len = document_obj.recalc_objs.length;
         }
@@ -3625,13 +3627,23 @@ class Static_File_Analyzer {
    */
   get_xls_cell_ref(cell_ref, sheet, document_obj, parent_cell_obj, file_info, byte_order) {
     var ref_cell_full_name = sheet + "!" + cell_ref;
+    var return_obj;
 
-    var return_obj = {
-      'value': "@"+ref_cell_full_name,
-      'formula': ref_cell_full_name,
-      'type':  "reference",
-      'ref_name': ref_cell_full_name
-    };
+    if (document_obj.unknown_cells_are_blank == true) {
+      return_obj = {
+        'value': "",
+        'formula': null,
+        'type':  "reference",
+        'ref_name': ref_cell_full_name
+      };
+    } else {
+      return_obj = {
+        'value': "@"+ref_cell_full_name,
+        'formula': ref_cell_full_name,
+        'type':  "reference",
+        'ref_name': ref_cell_full_name
+      };
+    }
 
     if (document_obj.sheets[sheet].data.hasOwnProperty(cell_ref)) {
       // Cell reference found
@@ -3671,7 +3683,7 @@ class Static_File_Analyzer {
         }
       }
 
-      if (recalc_cell == true) {
+      if (recalc_cell == true && document_obj.unknown_cells_are_blank == false) {
         var parent_cell_name_full = parent_cell_obj.sheet_name + "!" + parent_cell_obj.cell_name;
         if (!document_obj.recalc_objs.includes(parent_cell_name_full)) document_obj.recalc_objs.push(parent_cell_name_full);
       }
@@ -4625,9 +4637,13 @@ class Static_File_Analyzer {
             if (c_formula_name == "=CALL" || c_formula_name == "=EXEC" || c_formula_name == "=IF") {
               file_info.scripts.script_type = "Excel 4.0 Macro";
 
-              if (stack_result != c_formula_name) {
-                if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
-                  file_info.scripts.extracted_script += stack_result + "\n\n";
+              var at_ref_match = /@([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)/gmi.exec(stack_result);
+
+              if (at_ref_match === null) {
+                if (stack_result != c_formula_name) {
+                  if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
+                    file_info.scripts.extracted_script += stack_result + "\n\n";
+                  }
                 }
               }
 
