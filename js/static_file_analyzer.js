@@ -1175,7 +1175,7 @@ class Static_File_Analyzer {
               'sheet_type': sheet_type,
               'file_pos': stream_pos + stream_start,
               'data': {}
-            };            
+            };
           }
 
           i += boundsheet_length+3;
@@ -4483,6 +4483,16 @@ class Static_File_Analyzer {
           // error
           current_rgce_byte += 1;
         }
+      } else if (formula_type == 0x1D) {
+        // Selection - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00131ced-fe32-403b-9be4-d9c234fde7d4
+        //TODO this is incomplete.
+        var pane_type = rgce_bytes[current_rgce_byte];
+        var ac_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+        var ac_col = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+5), byte_order);
+        var ref_u_index = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+5,current_rgce_byte+7), byte_order);
+        var cref = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+7,current_rgce_byte+9), byte_order);
+
+        current_rgce_byte += 9;
       } else if (formula_type == 0x1E) {
         // PtgInt - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/508ecf18-3b81-4628-95b3-7a9d2a295bca
         var ptg_int_val = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
