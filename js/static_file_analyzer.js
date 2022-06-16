@@ -4760,6 +4760,16 @@ class Static_File_Analyzer {
               'params': param_count
             });
 
+            if (cell_formula.length > 0) {
+              for (var ci=0; ci<formula_calc_stack.length; ci++) {
+                if (formula_calc_stack[ci].hasOwnProperty("ref_name")) {
+                   if (cell_formula.indexOf(formula_calc_stack[ci].ref_name) >= 0) {
+                     cell_formula = cell_formula.replaceAll(formula_calc_stack[ci].ref_name, "");
+                   }
+                }
+              }
+            }
+
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
             cell_formula += stack_result.formula;
             cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
