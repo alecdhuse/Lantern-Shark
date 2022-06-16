@@ -1349,6 +1349,21 @@ class Static_File_Analyzer {
           document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
           formula_cell_name  = "";
           console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
+        } else if (cell_records[i].record_type == "MulBlank") {
+          var blank_cell_name;
+          var row = this.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
+          var col_first = this.get_two_byte_int(cell_records[i].record_bytes.slice(2, 4), byte_order);
+          var col_last = this.get_two_byte_int(cell_records[i].record_bytes.slice(-2), byte_order);
+
+          for (var bcell_index=col_first; bcell_index <= col_last; bcell_index++) {
+            blank_cell_name = this.convert_xls_column(bcell_index) + row;
+            document_obj.sheets[cell_records[i].sheet_name].data[blank_cell_name] = {
+              'formula': null,
+              'value': ""
+            }
+            console.log(cell_records[i].sheet_name + " " + blank_cell_name + " - [blank]");
+          }
+
         } else if (cell_records[i].record_type == "RK") {
           cell_data_obj = this.parse_xls_rk_record(cell_records[i], byte_order);
           document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
@@ -5316,8 +5331,8 @@ class Static_File_Analyzer {
             } else if (record_type_bytes[0] == 0xBE && record_type_bytes[1] == 0x00) {
               // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
               // These are blank cells
+              record_type_str = "MulBlank";
               cell_record_pos += record_size;
-              console.log("MulBlank"); // DEBUG
             } else {
               // Unknown record
               var u_rec_int = this.get_two_byte_int([record_type_bytes[0],record_type_bytes[1]], byte_order);
