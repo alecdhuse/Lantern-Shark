@@ -1366,7 +1366,7 @@ class Static_File_Analyzer {
 
             formula_cell_name  = "";
           }
-          
+
           continue;
         } else {
           formula_cell_name  = "";
@@ -4266,7 +4266,7 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "BF52692") {
+    if (document_obj.current_cell == "B3") {
       var debug773=33;
     }
 
@@ -4323,7 +4323,9 @@ class Static_File_Analyzer {
             if (formula_calc_stack.at(-2).hasOwnProperty('ref_name')) {
               var ref_name = formula_calc_stack.at(-2).ref_name;
               var insert_index = cell_formula.indexOf(ref_name);
-              cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
+              if (insert_index > 0) {
+                cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
+              }
             }
           }
         }
@@ -4570,6 +4572,7 @@ class Static_File_Analyzer {
         }
 
         var ref_cell_obj = this.get_xls_cell_ref(cell_ref, cell_record_obj.sheet_name, document_obj, cell_record_obj, file_info, byte_order);
+        cell_formula += cell_record_obj.sheet_name + "!" + cell_ref;
 
         // Check to what the next rgce_byte is, as that will affect what action is taken.
         if (rgce_bytes[current_rgce_byte+6] == 0x60) {
@@ -5019,6 +5022,7 @@ class Static_File_Analyzer {
         if (ref_sheet_name !== null && ref_sheet_name !== undefined && ref_sheet_name != "") {
           var ref_cell_obj = this.get_xls_cell_ref(cell_ref, ref_sheet_name, document_obj, cell_record_obj, file_info, byte_order);
           formula_calc_stack.push(ref_cell_obj);
+          cell_formula += ref_sheet_name + "!" + cell_ref;
         } else {
           var this_cell_name_full = cell_record_obj.sheet_name + "!" + cell_record_obj.cell_name;
           if (!document_obj.recalc_objs.includes(this_cell_name_full)) document_obj.recalc_objs.push(this_cell_name_full);
