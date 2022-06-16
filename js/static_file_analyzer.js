@@ -4285,7 +4285,7 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "B3") {
+    if (document_obj.current_cell == "D1") {
       var debug773=33;
     }
 
@@ -4342,6 +4342,12 @@ class Static_File_Analyzer {
             if (formula_calc_stack.at(-2).hasOwnProperty('ref_name')) {
               var ref_name = formula_calc_stack.at(-2).ref_name;
               var insert_index = cell_formula.indexOf(ref_name);
+              if (insert_index > 0) {
+                cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
+              }
+            } else if (formula_calc_stack.at(-2).formula !== null) {
+              var formula_text = formula_calc_stack.at(-2).formula;
+              var insert_index = cell_formula.indexOf(formula_text);
               if (insert_index > 0) {
                 cell_formula = cell_formula.slice(0,insert_index) + "&" + cell_formula.slice(insert_index);
               }
@@ -4704,7 +4710,8 @@ class Static_File_Analyzer {
 
           cell_formula += "=CHAR(" + formula_calc_stack.at(-2).value + ")";
           cell_value = (cell_value === null) ? "" : cell_value;
-          cell_value += this.execute_excel_stack(formula_calc_stack, document_obj).value;
+          var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+          cell_value += formula_calc_stack.at(-1).value;
         } else if (iftab == 0x0082) {
           // t-params
           if (formula_calc_stack.length > 1) {
@@ -4729,7 +4736,6 @@ class Static_File_Analyzer {
         } else {
           // Non implemented function
           console.log("Unknown function " + iftab); // DEBUG
-          console.log("^ Last function: " + last_formula_type); // DEBUG
         }
 
         current_rgce_byte += 2;
@@ -5054,7 +5060,7 @@ class Static_File_Analyzer {
         }
 
 
-        if (cell_ref == "B3") {
+        if (cell_ref == "D1") {
           var debug567 = 0;
         }
 
