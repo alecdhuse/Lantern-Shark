@@ -2719,42 +2719,46 @@ class Static_File_Analyzer {
 
           }
        } else if (stack[c_index].value == "=") {
-         // Assigment, this works the same way as SET.NAME but the stack order is different.
-         if (c_index == 0) {
-           if (stack.length >= 3) {
-             var param1 = stack[c_index+1];
-             var param2 = stack[c_index+2];
-             var param2_val = param2.value;
-             var formula = "";
-             var var_name = "";
+         // Assigment, this works the same way as SET.NAME but the rest of stack needs to be resolved
+         if (stack.length > 3 && (stack.length - c_index > 1)) {
+           // Skip for now
+         } else {
+           if (c_index == 0) {
+             if (stack.length >= 3) {
+               var param1 = stack[c_index+1];
+               var param2 = stack[c_index+2];
+               var param2_val = param2.value;
+               var formula = "";
+               var var_name = "";
 
-             if (param2.type == "string") {
-               param2_val = (param2.value.length > 0) ? param2.value : "\"\"";
-             }
+               if (param2.type == "string") {
+                 param2_val = (param2.value.length > 0) ? param2.value : "\"\"";
+               }
 
-             if (param1.type == "reference") {
-               if (param1.hasOwnProperty('ref_name')) {
-                 var_name = param1.ref_name;
-               } else {
+               if (param1.type == "reference") {
+                 if (param1.hasOwnProperty('ref_name')) {
+                   var_name = param1.ref_name;
+                 } else {
+                   var_name = param1.value;
+                 }
+               } else if (param1.type == "string") {
                  var_name = param1.value;
                }
-             } else if (param1.type == "string") {
-               var_name = param1.value;
-             }
 
-             if (param1.type == "string" || param1.type == "reference") {
-               workbook.varables[var_name] = param2.value;
-               formula = "=SET.NAME(" + var_name + ", " + param2_val + ")";
-               stack.splice(c_index, 3, {
-                 'value': param2.value,
-                 'formula': formula,
-                 'type': param2.type
-               });
+               if (param1.type == "string" || param1.type == "reference") {
+                 workbook.varables[var_name] = param2.value;
+                 formula = "=SET.NAME(" + var_name + ", " + param2_val + ")";
+                 stack.splice(c_index, 3, {
+                   'value': param2.value,
+                   'formula': formula,
+                   'type': param2.type
+                 });
 
-               if (c_index+1 < stack.length && stack[c_index+1].value == "_xlfn.SET.NAME") {
-                 stack.splice(c_index+1, 1);
+                 if (c_index+1 < stack.length && stack[c_index+1].value == "_xlfn.SET.NAME") {
+                   stack.splice(c_index+1, 1);
+                 }
+                 // TODO check for references in param2
                }
-               // TODO check for references in param2
              }
            }
          }
@@ -2800,8 +2804,9 @@ class Static_File_Analyzer {
                   c_index++;
                 } else if (function_name == "END.IF") {
                   stack.splice(c_index, c_index+1, {
-                    'value': "END.IF",
-                    'type': "string"
+                    'value': "=END.IF()",
+                    'type': "string",
+                    'formula': "=END.IF()"
                   });
                 } else if (function_name == "EXEC") {
                   var param_count = stack[c_index].params;
@@ -2861,7 +2866,15 @@ class Static_File_Analyzer {
                   });
 
                   c_index++;
+                } else if (function_name == "IPMT") {
+                  var param_count = stack[c_index].params;
+                  var f_params = stack.slice(c_index-param_count, c_index);
+
+                  c_index++;
                 } else if (function_name == "ISNUMBER") {
+                  c_index++;
+                } else if (function_name == "NEXT") {
+                  stack[c_index].formula = "=NEXT()";
                   c_index++;
                 } else if (function_name == "REGISTER") {
                   var sub_result = "=REGISTER(";
@@ -2997,6 +3010,7 @@ class Static_File_Analyzer {
                     var params = stack.slice(c_index - stack[c_index].params, c_index);
                     var params2 = [];
                     var user_func_name = params[0].value;
+                    var function_value = params[0].value;
                     var ref_name = "";
 
                     if (params.length > 1) {
@@ -3013,8 +3027,9 @@ class Static_File_Analyzer {
                       ref_name = params[0].ref_name;
 
                       stack.splice(c_index-params.length, c_index+1, {
-                        'value': sub_result,
+                        'value': function_value,
                         'type': "string",
+                        'formula': sub_result,
                         'ref_name': ref_name
                       });
                     } else {
@@ -3067,7 +3082,49 @@ class Static_File_Analyzer {
     }
 
     if (stack.length > 1) {
-      // If the stack still has multiple items, something is wrong.
+      if (stack[0].value == "=" && stack[0].type == "operator") {
+        // Stack result is an assignment, re-runstack.
+        c_index = 0;
+
+        // Check to see if the end of the stack is all strings and concat if they are.
+        var str_concat_val = "";
+        var str_concat_funct = "";
+        var stack_end_is_strings = false;
+
+        for (var i2=2; i2<stack.length; i2++) {
+          if (stack[i2].type == "string") {
+            stack_end_is_strings = true;
+            str_concat_val += (stack[i2].value != "\x00") ? stack[i2].value : "";
+
+            if (stack[i2].hasOwnProperty('formula')) {
+              str_concat_funct += stack[i2].formula;
+              str_concat_funct += (stack[i2].formula.length > 0) ? "&" : "";
+            } else if (stack[i2].hasOwnProperty('ref_name')) {
+              str_concat_funct += stack[i2].ref_name;
+              str_concat_funct += (stack[i2].ref_name.length > 0) ? "&" : "";
+            } else {
+              str_concat_funct += (stack[i2].value != "\x00") ? stack[i2].value : "";
+            }
+          } else {
+            stack_end_is_strings = false;
+            break;
+          }
+        }
+
+        if (stack_end_is_strings == true) {
+          str_concat_funct = (str_concat_funct.at(-1) == "&") ? str_concat_funct.slice(0,-1) : str_concat_funct;
+          str_concat_funct = (str_concat_funct.at(0) == "&") ? str_concat_funct.slice(1) : str_concat_funct;
+          stack.splice(2, stack.length, {
+            'value': str_concat_val,
+            'type': "string",
+            'formula': str_concat_funct
+          });
+        }
+
+        return this.execute_excel_stack(stack, workbook);
+      } else {
+        // If the stack still has multiple items, something is wrong.
+      }
     }
 
     return stack[0];
@@ -4299,7 +4356,7 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "D1") {
+    if (document_obj.current_cell == "IN13266") {
       var debug773=33;
     }
 
@@ -4740,12 +4797,26 @@ class Static_File_Analyzer {
         } else if (iftab == 0x0096) {
           // Call Function
           console.log("Call function not implemented.");
+        } else if (iftab == 0x00A7) {
+          // IPMT - https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ipmt-function
+          console.log("IPMT function not implemented.");
+        } else if (iftab == 0x00AE) {
+          // NEXT
+          formula_calc_stack.push({
+            'value': "_xlfn.NEXT",
+            'type':  "string",
+            'params': param_count
+          });
+
+          var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+          cell_formula = stack_result.formula;
+          cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
         } else if (iftab == 0x00E1) {
           // End IF
           formula_calc_stack.push({
             'value': "_xlfn.END.IF",
             'type':  "string",
-          'params': param_count
+            'params': param_count
           });
 
           var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -4865,6 +4936,16 @@ class Static_File_Analyzer {
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
             cell_formula = stack_result.formula;
+          } else if (tab_int == 0xA7) {
+            // IPMT - https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ipmt-function
+            formula_calc_stack.push({
+              'value':  "_xlfn.IPMT",
+              'type':   "string",
+              'params': param_count
+            });
+
+            var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+            cell_formula = stack_result.formula;
           } else if (tab_int == 0xA9) {
             // COUNTA - counts the number of cells that are not empty in a range.
             // https://support.microsoft.com/en-us/office/counta-function-7dc98875-d5c1-46f1-9a82-53f3219e2509
@@ -4893,7 +4974,22 @@ class Static_File_Analyzer {
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-            cell_formula = stack_result.value;
+
+            if (stack_result.hasOwnProperty("formula")) {
+              if (cell_formula === null) {
+                cell_formula = stack_result.formula;
+              } else {
+                if (cell_formula == stack_result.ref_name) {
+                  cell_formula = stack_result.formula;
+                } else {
+                  cell_formula += stack_result.formula;
+                }
+              }
+
+              cell_value = (cell_value === null) ? stack_result.value : cell_value+stack_result.value;
+            } else {
+              cell_formula = stack_result.value;
+            }
           } else {
             console.log("Unknown PtgFuncVar: " + tab_int); // DEBUG
           }
