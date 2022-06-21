@@ -3716,20 +3716,25 @@ class Static_File_Analyzer {
   get_xls_cell_ref(cell_ref, sheet, document_obj, parent_cell_obj, file_info, byte_order) {
     var ref_cell_full_name = sheet + "!" + cell_ref;
     var return_obj;
+    var xname = "PtgRef3d";
+
+    if (document_obj.current_sheet_name == sheet) xname = "PtgRef";
 
     if (document_obj.unknown_cells_are_blank == true) {
       return_obj = {
         'value': "",
         'formula': null,
         'type':  "reference",
-        'ref_name': ref_cell_full_name
+        'ref_name': ref_cell_full_name,
+        'xname': xname
       };
     } else {
       return_obj = {
         'value': "@"+ref_cell_full_name,
         'formula': ref_cell_full_name,
         'type':  "reference",
-        'ref_name': ref_cell_full_name
+        'ref_name': ref_cell_full_name,
+        'xname': xname
       };
     }
 
@@ -4400,42 +4405,48 @@ class Static_File_Analyzer {
         // PtgAdd - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/27db2f45-11e8-4238-94ed-92fd9c5721fb
         formula_calc_stack.push({
           'value': "+",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgAdd"
         });
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x04) {
         // PtgSub - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ee15a1fa-77bb-45e1-8c8c-0e7bef7f7552
         formula_calc_stack.push({
           'value': "-",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgSub"
         });
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x05) {
         // PtgMul - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/52863fc5-3d3c-4874-90e6-a7961902849f
         formula_calc_stack.push({
           'value': "*",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgMul"
         });
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x06) {
         // PtgDiv - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/10585b24-618d-47f4-8ffa-65811d18ad13
         formula_calc_stack.push({
           'value': "/",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgDiv"
         });
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x07) {
         // PtgPower - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e115b216-5dda-4a5b-95d2-cadf0ada9a82
         formula_calc_stack.push({
           'value': "^",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgPower"
         });
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
       } else if (formula_type == 0x08) {
         // PtgConcat - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/054d699a-4383-4bbf-9df2-6a4020119c1e
         formula_calc_stack.push({
           'value': "&",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgConcat"
         });
 
         // Stack is implemented as Poish notation, if there is no concat already insert one.
@@ -4462,7 +4473,8 @@ class Static_File_Analyzer {
         // PtgEq - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d197275e-cb7f-455c-b9b5-7e968412d470
         formula_calc_stack.push({
           'value': "==",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgEq"
         });
         cell_formula += "==";
         //var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
@@ -4470,7 +4482,8 @@ class Static_File_Analyzer {
         // PtgNe - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0e49033d-5dc7-40f1-8fca-eb3b8b1c2c91
         formula_calc_stack.push({
           'value': "!=",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgNe"
         });
         cell_formula += "!=";
         //var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
@@ -4478,7 +4491,8 @@ class Static_File_Analyzer {
         // PtgMissArg - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/69352e6c-e712-48d7-92d1-0bf7c1f61f69
         formula_calc_stack.push({
           'value': "",
-          'type':  "string"
+          'type':  "string",
+          'xname': "PtgMissArg"
         });
         cell_formula += "\"\"";
       } else if (formula_type == 0x17) {
@@ -4517,7 +4531,8 @@ class Static_File_Analyzer {
           formula_calc_stack.push({
             'value': cell_value2,
             'type':  "reference",
-            'ref_name': new_cell_ref_full
+            'ref_name': new_cell_ref_full,
+            'xname': "PtgString"
           });
         } else {
           if (string_val.length > 0 && document_obj.varables.hasOwnProperty(string_val)) {
@@ -4525,12 +4540,14 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value': document_obj.varables[string_val],
               'type':  "reference",
-              'ref_name': string_val
+              'ref_name': string_val,
+              'xname': "PtgString"
             });
           } else {
             formula_calc_stack.push({
               'value': string_val,
-              'type':  "string"
+              'type':  "string",
+              'xname': "PtgString"
             });
           }
         }
@@ -4594,7 +4611,8 @@ class Static_File_Analyzer {
           formula_calc_stack.push({
             'value': "=",
             'type':  "operator",
-            'volatile': is_volatile
+            'volatile': is_volatile,
+            'xname': "PtgAttrBaxcel"
           });
           // next two bytes unused, should be zero
           current_rgce_byte += 3;
@@ -4625,7 +4643,8 @@ class Static_File_Analyzer {
         var ptg_int_val = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
         formula_calc_stack.push({
           'value': ptg_int_val,
-          'type':  "number"
+          'type':  "number",
+          'xname': "PtgInt"
         });
         current_rgce_byte += 2;
       } else if (formula_type == 0x1F) {
@@ -4647,7 +4666,8 @@ class Static_File_Analyzer {
 
         formula_calc_stack.push({
           'value': float_val,
-          'type':  "number"
+          'type':  "number",
+          'xname': "PtgNum"
         });
 
         current_rgce_byte += 8;
@@ -4681,12 +4701,14 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value': var_value,
               'type':  var_type,
-              'ref_name': var_name.name
+              'ref_name': var_name.name,
+              'xname': "PtgName"
             });
           } else {
             formula_calc_stack.push({
               'value': var_name.name,
-              'type':  "string"
+              'type':  "string",
+              'xname': "PtgName"
             });
           }
 
@@ -4773,7 +4795,8 @@ class Static_File_Analyzer {
 
           spreadsheet_obj.data[cell_ref] = {
             'value': cell_value,
-            'formula': cell_formula
+            'formula': cell_formula,
+            'xname': "PtgRef"
           }
 
           formula_calc_stack.shift();
@@ -4873,35 +4896,40 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value':  "_xlfn.COUNT",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
           } else if (tab_int == 0x01) {
             // IF
             formula_calc_stack.push({
               'value':  "_xlfn.IF",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
           } else if (tab_int == 0x1A) {
             // SIGN - https://support.microsoft.com/en-us/office/sign-function-109c932d-fcdc-4023-91f1-2dd0e916a1d8
             formula_calc_stack.push({
               'value':  "_xlfn.SIGN",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
           } else if (tab_int == 0x36) {
             // HALT
             formula_calc_stack.push({
               'value':  "_xlfn.HALT",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
           } else if (tab_int == 0x37) {
             // RETURN
             formula_calc_stack.push({
               'value':  "_xlfn.RETURN",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -4912,7 +4940,8 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value':  "_xlfn.SET.NAME",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             if (cell_formula.length > 0) {
@@ -4935,7 +4964,8 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value':  "_xlfn.EXEC",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -4946,7 +4976,8 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value':  "_xlfn.CHAR",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -4955,14 +4986,16 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value':  "_xlfn.ISNUMBER",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
           } else if (tab_int == 0x95) {
             // REGISTER
             formula_calc_stack.push({
               'value':  "_xlfn.REGISTER",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -4972,7 +5005,8 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value':  "_xlfn.IPMT",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -4983,14 +5017,16 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value':  "_xlfn.COUNTA",
               'type':   "string",
-              'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
           } else if (tab_int == 0xE1) {
             // END.IF
             formula_calc_stack.push({
               'value': "_xlfn.END.IF",
               'type':  "string",
-            'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -5001,7 +5037,8 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value': "_xlfn.USERFUNCTION",
               'type':  "string",
-            'params': param_count
+              'params': param_count,
+              'xname': "PtgFuncVar"
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -5118,7 +5155,8 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value': document_obj.varables[ref_var_name.name],
               'type':  "string",
-              'ref_name': ref_var_name.name
+              'ref_name': ref_var_name.name,
+              'xname': "PtgName"
             });
 
           } else {
@@ -5126,7 +5164,8 @@ class Static_File_Analyzer {
             formula_calc_stack.push({
               'value': ref_var_name.name,
               'type':  "reference",
-              'ref_name': ref_var_name.name
+              'ref_name': ref_var_name.name,
+              'xname': "PtgName"
             });
           }
         } else {
@@ -5221,7 +5260,8 @@ class Static_File_Analyzer {
 
         formula_calc_stack.push({
           'value': "[]",
-          'type':  "operator"
+          'type':  "operator",
+          'xname': "PtgArray"
         });
 
         current_rgce_byte += 1;
