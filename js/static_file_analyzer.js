@@ -2745,6 +2745,10 @@ class Static_File_Analyzer {
                  var_name = param1.value;
                }
 
+               if (var_name == "UhHIirE") {
+                 var debug650=0;
+               }
+
                if (param1.type == "string" || param1.type == "reference") {
                  workbook.varables[var_name] = param2.value;
                  formula = "=SET.NAME(" + var_name + ", " + param2_val + ")";
@@ -2759,6 +2763,9 @@ class Static_File_Analyzer {
                  }
                  // TODO check for references in param2
                }
+             } else if (stack.length == 2) {
+               workbook.sheets[workbook.current_sheet_name].data[workbook.current_cell] = stack[c_index+1];
+               stack.shift();
              }
            }
          }
@@ -2915,6 +2922,7 @@ class Static_File_Analyzer {
                   var param1 = {'value': null, 'type': "string"};
                   var param2 = {'value': null, 'type': "string"};
                   var op_stack_length = 1;
+                  var set_var_name;
 
                   if (stack[c_index].params == 2) {
                     if (stack.length >= 3) {
@@ -2943,6 +2951,29 @@ class Static_File_Analyzer {
                     }
                   }
 
+                  if (param2.type == "reference") {
+                    if (param2.hasOwnProperty('ref_name')) {
+                      set_var_name = param2.ref_name;
+                    } else {
+                      set_var_name = param2.value;
+                    }
+                  } else if (param2.type == "string") {
+                    set_var_name = param2.value;
+                  }
+
+                  if (set_var_name !== null) {
+                    workbook.varables[set_var_name] = param1.value;
+                  } else {
+                    if (!workbook.recalc_objs.includes(workbook.current_cell)) {
+                      workbook.recalc_objs.push(workbook.current_cell);
+                    }
+                  }
+
+                  if (set_var_name == "UhHIirE") {
+                    var debug650=0;
+                  }
+
+                  /* // This may still be needed
                   if (param2.value !== null) {
                     if (param2.type == "string") {
                       workbook.varables[param2.value] = param1.value;
@@ -2969,6 +3000,7 @@ class Static_File_Analyzer {
 
                     }
                   }
+                  */
 
                   if (param1.type == "reference") {
                     if (param1.value.charAt(0) == "@") {
@@ -2993,9 +3025,8 @@ class Static_File_Analyzer {
                     }
                   }
 
-                  var formula = "=SET.NAME(" + param2.value + ", " + param1.value + ")";
-                  stack.splice(c_index-op_stack_length, c_index+1);
-                  stack.unshift({
+                  var formula = "=SET.NAME(" + set_var_name + ", " + param1.value + ")";
+                  stack.splice(c_index-op_stack_length+1, c_index+1, {
                     'value':   param1.value,
                     'type':    param1.type,
                     'formula': formula
@@ -4356,7 +4387,7 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "IN13266") {
+    if (document_obj.current_cell == "DA13076") {
       var debug773=33;
     }
 
@@ -4489,7 +4520,7 @@ class Static_File_Analyzer {
             'ref_name': new_cell_ref_full
           });
         } else {
-          if (document_obj.varables.hasOwnProperty(string_val)) {
+          if (string_val.length > 0 && document_obj.varables.hasOwnProperty(string_val)) {
             // Reference to a document variable
             formula_calc_stack.push({
               'value': document_obj.varables[string_val],
@@ -4557,9 +4588,13 @@ class Static_File_Analyzer {
         } else if (rgce_bytes[current_rgce_byte] == 0x20 || rgce_bytes[current_rgce_byte] == 0x21) {
           // PtgAttrBaxcel - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fcd76e10-6072-4dcf-b591-47edc8822792
           // This is my implementaiton, not based on MS / Excel.
+          var baxcel_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte+1]);
+          var is_volatile = (baxcel_bits[0] == 1) ? true : false;
+
           formula_calc_stack.push({
             'value': "=",
-            'type':  "operator"
+            'type':  "operator",
+            'volatile': is_volatile
           });
           // next two bytes unused, should be zero
           current_rgce_byte += 3;
@@ -4672,10 +4707,6 @@ class Static_File_Analyzer {
         var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
         var spreadsheet_obj = document_obj.sheets[cell_record_obj.sheet_name];
         var full_cell_name = cell_record_obj.sheet_name + "!" + cell_ref;
-
-        if (cell_ref == "GL54038") {
-          var debug567 = 0;
-        }
 
         var ref_cell_obj = this.get_xls_cell_ref(cell_ref, cell_record_obj.sheet_name, document_obj, cell_record_obj, file_info, byte_order);
         cell_formula += cell_record_obj.sheet_name + "!" + cell_ref;
@@ -5094,7 +5125,8 @@ class Static_File_Analyzer {
             // Probably definning the variable
             formula_calc_stack.push({
               'value': ref_var_name.name,
-              'type':  "reference"
+              'type':  "reference",
+              'ref_name': ref_var_name.name
             });
           }
         } else {
@@ -5171,11 +5203,6 @@ class Static_File_Analyzer {
           } else {
             cell_recalc = true;
           }
-        }
-
-
-        if (cell_ref == "D1") {
-          var debug567 = 0;
         }
 
         if (ref_sheet_name !== null && ref_sheet_name !== undefined && ref_sheet_name != "") {
