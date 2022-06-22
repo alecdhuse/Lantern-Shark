@@ -7,9 +7,15 @@
     </head>
 
     <body>
+      <div id="toolbar">
+        <div id="toolbar_open" class="toolbar_button">
+          <div><img src="img/open_file.svg" alt="Open File"/></div>
+          <div>Open File</div>
+        </div>
+      </div>
+
       <div id="main_div">
         <div id="left_col_div">
-          <div><input type="file" id="open_file" value="Open File"/></div>
           <ul id="file_tree">
           </ul>
         </div>
@@ -41,8 +47,8 @@
                   <td id="summary_file_encrypted_td" class="tab_summary_value capitalize">
                     <span id="summary_file_encrypted"></span>
                     <span id="summary_file_encrypted_password">
-                      <img src="img/decrypt.svg" id="summary_file_encrypted_password_img"  />
-                      <input type="text" id="summary_file_encrypted_password_txt" placeholder="Password"/>                      
+                      <img src="img/decrypt.svg" id="summary_file_encrypted_password_img" alt="Decrypt File"/>
+                      <input type="text" id="summary_file_encrypted_password_txt" placeholder="Password"/>
                     </span>
                   </td>
                 </tr>
@@ -115,6 +121,7 @@
         </div>
       </div>
 
+      <input type="file" id="open_file" value="Open File"/>
     </body>
 
     <script type="text/javascript" src="js/jquery-3.4.1.min.js"></script>

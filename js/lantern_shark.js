@@ -3,10 +3,12 @@ var file_byte_array = [];
 var file_password = null;
 
 window.addEventListener('load', (event) => {
-  document.getElementById('open_file').addEventListener('change', read_file, false);
   document.getElementById('tab_summary').addEventListener('click', change_tab, false);
   document.getElementById('tab_text').addEventListener('click', change_tab, false);
   document.getElementById('summary_file_encrypted_password_img').addEventListener('click', decrypt_file, false);
+
+  document.getElementById('open_file').addEventListener('change', read_file, false);
+  document.getElementById('toolbar_open').addEventListener('click', function(){document.getElementById('open_file').click()}, false);
 
 });
 

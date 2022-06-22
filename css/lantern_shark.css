@@ -2,6 +2,7 @@ body {
   font-family: "Verdana";
   height: 100%;
   width: 100%;
+  margin: 0px;
 }
 
 .capitalize {
@@ -38,13 +39,14 @@ body {
 }
 
 #open_file {
-
+  visibility: hidden;
 }
 
 #main_div {
   display: flex;
   height: 100%;
   width: 100%;
+  padding: 8px;
 }
 
 .monospace_text {
@@ -60,7 +62,7 @@ body {
 }
 
 #summary_file_encrypted {
-  
+
 }
 
 #summary_file_encrypted_password {
@@ -123,6 +125,26 @@ body {
 
 .table_align {
   padding-left: 3px;
+}
+
+#toolbar {
+  background-color: #eee;
+  font-size: 11px;
+  height: 64px;
+  width: 100%;
+  padding-left: 8px;
+  padding-top: 8px;
+  text-align: center;
+  top: 0px;
+}
+
+.toolbar_button {
+  cursor: pointer;
+  width: 60px;
+}
+
+#toolbar_open {
+
 }
 
 .top_space {
