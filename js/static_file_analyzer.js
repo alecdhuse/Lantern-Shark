@@ -2669,12 +2669,41 @@ class Static_File_Analyzer {
         } else if (stack[c_index].value == "&") {
           // Concat
           if (c_index > 1) {
-            var val1 = (stack[c_index-2] !== null && stack[c_index-2] !== undefined && stack[c_index-2].value !== null) ? stack[c_index-2].value : "";
-            var val2 = (stack[c_index-1] !== null && stack[c_index-1] !== undefined && stack[c_index-1].value !== null) ? stack[c_index-1].value : "";
+            var form1 = "";
+            var form2 = "";
+            var val1 = "";
+            var val2 = "";
+
+            if (stack[c_index-2] !== null && stack[c_index-2] !== undefined) {
+              val1 = stack[c_index-2].value;
+
+              if (stack[c_index-2].hasOwnProperty("formula")) {
+                form1 = stack[c_index-2].formula;
+              } else if (stack[c_index-2].hasOwnProperty("ref_name")) {
+                form1 = stack[c_index-2].ref_name;
+              } else {
+                form1 = val1;
+              }
+            }
+
+            if (stack[c_index-1] !== null && stack[c_index-1] !== undefined) {
+              val2 = stack[c_index-1].value;
+
+              if (stack[c_index-1].hasOwnProperty("formula")) {
+                form2 = stack[c_index-1].formula;
+              } else if (stack[c_index-1].hasOwnProperty("ref_name")) {
+                form2 = stack[c_index-1].ref_name;
+              } else {
+                form2 = val2;
+              }
+            }
+
             var sub_result = String(val1) + String(val2);
+            var form_result = form1 + "&" + form2;
 
             stack.splice(c_index-2, 3, {
               'value': sub_result,
+              'formula': form_result,
               'type': "string"
             });
             c_index--;
@@ -2750,13 +2779,11 @@ class Static_File_Analyzer {
                  var_name = param1.value;
                }
 
-               if (var_name == "UsyuH") {
-                 var debug650=0;
-               }
+               var param2_form = (param2.hasOwnProperty("formula")) ? param2.formula: param2_val;
 
                if (param1.type == "string" || param1.type == "reference") {
                  workbook.varables[var_name] = param2.value;
-                 formula = "=SET.NAME(" + var_name + ", " + param2_val + ")";
+                 formula = "=SET.NAME(" + var_name + ", " + param2_form + ")";
                  stack.splice(c_index, 3, {
                    'value': param2.value,
                    'formula': formula,
@@ -2975,25 +3002,32 @@ class Static_File_Analyzer {
                     set_var_name = param2.value;
                   }
 
+                  var double_set_name = false;
+
                   if (set_var_name !== null) {
                     workbook.varables[set_var_name] = param1_val;
                   } else {
-                    if (!workbook.recalc_objs.includes(workbook.current_cell)) {
-                      workbook.recalc_objs.push(workbook.current_cell);
+                    if (param1.hasOwnProperty("formula") && param1.formula.startsWith("=SET.NAME")) {
+                      // TODO this is a bad fix, need to fix stack operation.
+                      double_set_name = true;
+                    } else {
+                      if (!workbook.recalc_objs.includes(workbook.current_cell)) {
+                        workbook.recalc_objs.push(workbook.current_cell);
+                      }
                     }
                   }
 
-                  if (set_var_name == "UsyuH") {
-                    var debug650=0;
+                  if (double_set_name == false) {
+                    var formula = "=SET.NAME(" + set_var_name + ", " + param1_val + ")";
+                    stack.splice(c_index-op_stack_length+1, c_index+1, {
+                      'value':   param1_val,
+                      'type':    param1.type,
+                      'formula': formula
+                    });
+                    c_index++;
+                  } else {
+                    stack.splice(c_index, 1);
                   }
-
-                  var formula = "=SET.NAME(" + set_var_name + ", " + param1_val + ")";
-                  stack.splice(c_index-op_stack_length+1, c_index+1, {
-                    'value':   param1_val,
-                    'type':    param1.type,
-                    'formula': formula
-                  });
-                  c_index++;
                 } else if (function_name == "SIGN") {
                   // Determines the sign of a number. Returns 1 if the number is positive, zero (0) if the number is 0, and -1 if the number is negative.
                   c_index++;
@@ -3019,21 +3053,21 @@ class Static_File_Analyzer {
                       user_func_name = params[0].ref_name;
                       ref_name = params[0].ref_name;
 
-                      stack.splice(c_index-params.length, c_index+1, {
+                      stack.splice(c_index-params.length, params.length+1, {
                         'value': function_value,
                         'type': "string",
                         'formula': sub_result,
                         'ref_name': ref_name
                       });
                     } else {
-                      stack.splice(c_index-params.length, c_index+1, {
+                      stack.splice(c_index-params.length, params.length+1, {
                         'value': sub_result,
                         'type': "string"
                       });
                     }
                   }
 
-                  c_index++;
+                  //c_index++;
                 } else {
                   // Unknown function
                   console.log("Unknown Function");
@@ -4395,7 +4429,7 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "DA13076") {
+    if (document_obj.current_cell == "IN13266") {
       var debug773=33;
     }
 
@@ -4899,6 +4933,7 @@ class Static_File_Analyzer {
         var param_count = rgce_bytes[current_rgce_byte];
         var tab_bits = this.get_binary_array(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
         var tab_int = rgce_bytes[current_rgce_byte+1];
+        var exec_stack = true;
         current_rgce_byte += 3;
 
         if (tab_bits[15] == 0) {
@@ -5053,6 +5088,8 @@ class Static_File_Analyzer {
               'xname': "PtgFuncVar"
             });
 
+            exec_stack = false;
+            /*
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
 
             if (stack_result.hasOwnProperty("formula")) {
@@ -5070,6 +5107,7 @@ class Static_File_Analyzer {
             } else {
               cell_formula = stack_result.value;
             }
+            */
           } else {
             console.log("Unknown PtgFuncVar: " + tab_int); // DEBUG
           }
@@ -5077,78 +5115,80 @@ class Static_File_Analyzer {
           // Cetab value - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0b8acba5-86d2-4854-836e-0afaee743d44
         }
 
-        // Execute formula_calc_stack
-        for (var c=0; c<formula_calc_stack.length; c++) {
-          if (param_count == 1 && formula_calc_stack.length > 1) {
-            function_name = "";
-            var stack_result = {};
-            // Execute the stack, if it's length is greater than 1.
-            if (formula_calc_stack.length > 1) {
-              stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-              cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
-            }
+        if (exec_stack == true) {
+          // Execute formula_calc_stack
+          for (var c=0; c<formula_calc_stack.length; c++) {
+            if (param_count == 1 && formula_calc_stack.length > 1) {
+              function_name = "";
+              var stack_result = {};
+              // Execute the stack, if it's length is greater than 1.
+              if (formula_calc_stack.length > 1) {
+                stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+                cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
+              }
 
-            if (stack_result.hasOwnProperty("formula") && stack_result.formula != "") {
-              cell_formula += stack_result.formula;
-            } else {
-              cell_formula += function_name + "(" + cell_formula + ")";
-            }
+              if (stack_result.hasOwnProperty("formula") && stack_result.formula != "") {
+                cell_formula += stack_result.formula;
+              } else {
+                cell_formula += function_name + "(" + cell_formula + ")";
+              }
 
-            break;
-          } else if (param_count >= 2) {
-            if (formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
-              if (formula_calc_stack[c].value == "=") {
-                // c + 1 is the varable name, c + 2 is the value.
-                if (formula_calc_stack.length > 2) {
-                  document_obj.varables[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
+              break;
+            } else if (param_count >= 2) {
+              if (formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
+                if (formula_calc_stack[c].value == "=") {
+                  // c + 1 is the varable name, c + 2 is the value.
+                  if (formula_calc_stack.length > 2) {
+                    document_obj.varables[formula_calc_stack[c+1].value] = formula_calc_stack[c+2].value;
 
-                  //Set a human readable value for this cell
-                  cell_formula += formula_calc_stack[c+1].value + "=" + "\"" + formula_calc_stack[c+2].value  + "\"";
-                  formula_calc_stack = formula_calc_stack.slice(3);
-                } else if (formula_calc_stack.length == 2) {
-                  if (c == 0) {
-                    document_obj.varables[formula_calc_stack[c+1].value] = "";
-                    cell_formula += formula_calc_stack[c+1].value + "=" + "\"\"";
-                    formula_calc_stack = formula_calc_stack.slice(2);
+                    //Set a human readable value for this cell
+                    cell_formula += formula_calc_stack[c+1].value + "=" + "\"" + formula_calc_stack[c+2].value  + "\"";
+                    formula_calc_stack = formula_calc_stack.slice(3);
+                  } else if (formula_calc_stack.length == 2) {
+                    if (c == 0) {
+                      document_obj.varables[formula_calc_stack[c+1].value] = "";
+                      cell_formula += formula_calc_stack[c+1].value + "=" + "\"\"";
+                      formula_calc_stack = formula_calc_stack.slice(2);
+                    }
                   }
+
+                } else if (formula_calc_stack[c].value.length > 6 && formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
+                  // Execute an Excel function.
+                  var function_name = formula_calc_stack[c].value.substring(6);
+
+                  if (c+1 < formula_calc_stack.length) {
+                    cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
+                  } else {
+                    cell_formula += function_name + "(" + formula_calc_stack[c].value + ")";
+                  }
+
+                  var cal_result = this.execute_excel_stack(formula_calc_stack, document_obj);
                 }
-
-              } else if (formula_calc_stack[c].value.length > 6 && formula_calc_stack[c].value.substring(0, 6).toLowerCase() == "_xlfn.") {
-                // Execute an Excel function.
-                var function_name = formula_calc_stack[c].value.substring(6);
-
-                if (c+1 < formula_calc_stack.length) {
-                  cell_formula += function_name + "(" + formula_calc_stack[c+1].value + ")";
-                } else {
-                  cell_formula += function_name + "(" + formula_calc_stack[c].value + ")";
-                }
-
-                var cal_result = this.execute_excel_stack(formula_calc_stack, document_obj);
               }
             }
           }
-        }
 
-        if (formula_calc_stack.length > 1) {
-          // Check to see if formula_calc_stack consists of only strings
-          var is_all_strings = true;
-          var string_concat = "";
-          for (var c=0; c<formula_calc_stack.length; c++) {
-            if (formula_calc_stack[c].type != "string") {
-              is_all_strings = false;
-              break;
-            } else {
-              string_concat += formula_calc_stack[c].value;
+          if (formula_calc_stack.length > 1) {
+            // Check to see if formula_calc_stack consists of only strings
+            var is_all_strings = true;
+            var string_concat = "";
+            for (var c=0; c<formula_calc_stack.length; c++) {
+              if (formula_calc_stack[c].type != "string") {
+                is_all_strings = false;
+                break;
+              } else {
+                string_concat += formula_calc_stack[c].value;
+              }
             }
-          }
 
-          if (is_all_strings) {
-            // Concat
-            formula_calc_stack = [{
-              'type':  "string",
-              'value': string_concat
-            }];
-            cell_value = string_concat;
+            if (is_all_strings) {
+              // Concat
+              formula_calc_stack = [{
+                'type':  "string",
+                'value': string_concat
+              }];
+              cell_value = string_concat;
+            }
           }
         }
 
