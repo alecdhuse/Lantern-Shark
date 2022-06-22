@@ -907,7 +907,7 @@ class Static_File_Analyzer {
           new_object_type = create_object_match[1].split(".");
 
           if (document_obj.varables.hasOwnProperty(new_object_type[0])) {
-            var varable_obj = document_obj.varables[new_object_type[0]];
+            var varable_obj = this.get_xls_var_ref(new_object_type[0], document_obj, file_info);
 
             if (new_object_type.length > 1) {
               var item_index_match = /Item\s*\((\d+)\s*\)/gmi.exec(new_object_type[1]);
@@ -1043,6 +1043,7 @@ class Static_File_Analyzer {
 
     var document_obj = {
       'type': "spreadsheet",
+      'byte_order': this.LITTLE_ENDIAN,
       'document_properties': document_properties,
       'sheets': spreadsheet_sheet_names,
       'current_sheet_name': "",
@@ -1090,8 +1091,9 @@ class Static_File_Analyzer {
 
     file_info.file_format_ver = cmb_obj.format_version_major;
     var byte_order = cmb_obj.byte_order; // Byte order LITTLE_ENDIAN or BIG_ENDIAN
-    var sector_size = cmb_obj.sector_size; // Size in bytes
+    document_obj.byte_order = byte_order;
 
+    var sector_size = cmb_obj.sector_size; // Size in bytes
     var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), byte_order);
     var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), byte_order);
     var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), byte_order);
@@ -1316,6 +1318,7 @@ class Static_File_Analyzer {
 
       document_obj = {
         'type': "spreadsheet",
+        'byte_order': byte_order,
         'document_properties': document_properties,
         'sheets': spreadsheet_sheet_names,
         'sheet_index_list': sheet_index_list,
@@ -1549,6 +1552,7 @@ class Static_File_Analyzer {
 
             document_obj = {
               'type': "spreadsheet",
+              'byte_order': byte_order,
               'document_properties': document_properties,
               'sheets': spreadsheet_sheet_names,
               'current_sheet_name': "",
@@ -2217,6 +2221,7 @@ class Static_File_Analyzer {
 
         var document_obj = {
           'type': "spreadsheet",
+          'byte_order': this.LITTLE_ENDIAN,
           'document_properties': {},
           'sheets': spreadsheet_sheet_names,
           'current_sheet_name': "",
@@ -2745,7 +2750,7 @@ class Static_File_Analyzer {
                  var_name = param1.value;
                }
 
-               if (var_name == "UhHIirE") {
+               if (var_name == "UsyuH") {
                  var debug650=0;
                }
 
@@ -2951,6 +2956,15 @@ class Static_File_Analyzer {
                     }
                   }
 
+                  // TODO - store references to cells as references and recalc when used.
+                  var param1_val = param1.value;
+
+                  if (param1.type == "reference" && param1.hasOwnProperty("ref_name")) {
+                    if (param1.value.charAt(0) != "@") {
+                      param1_val = "@" + param1.ref_name;
+                    }
+                  }
+
                   if (param2.type == "reference") {
                     if (param2.hasOwnProperty('ref_name')) {
                       set_var_name = param2.ref_name;
@@ -2962,72 +2976,20 @@ class Static_File_Analyzer {
                   }
 
                   if (set_var_name !== null) {
-                    workbook.varables[set_var_name] = param1.value;
+                    workbook.varables[set_var_name] = param1_val;
                   } else {
                     if (!workbook.recalc_objs.includes(workbook.current_cell)) {
                       workbook.recalc_objs.push(workbook.current_cell);
                     }
                   }
 
-                  if (set_var_name == "UhHIirE") {
+                  if (set_var_name == "UsyuH") {
                     var debug650=0;
                   }
 
-                  /* // This may still be needed
-                  if (param2.value !== null) {
-                    if (param2.type == "string") {
-                      workbook.varables[param2.value] = param1.value;
-                    } else if (param2.type == "reference") {
-                      if (typeof param2.value == "string") {
-                        if (param2.value.charAt(0) == "@") {
-                          var sheet_name = workbook.current_sheet_name;
-                          var cell_ref = param2.value
-
-                          if (param2.value.indexOf("!") > 0) {
-                            sheet_name = param2.value.split("!")[0];
-                            cell_ref = param2.value.split("!")[1];
-                          }
-
-                          if (workbook.sheets.hasOwnProperty(sheet_name)) {
-                            workbook.sheets[sheet_name].data[cell_ref] = param1.value;
-                          }
-                        } else {
-                          workbook.varables[param2.value] = param1.value;
-                        }
-                      } else {
-                        var debug73=2;
-                      }
-
-                    }
-                  }
-                  */
-
-                  if (param1.type == "reference") {
-                    if (param1.value.charAt(0) == "@") {
-                      var sheet_name = workbook.current_sheet_name;
-                      var cell_ref = param1.value
-
-                      if (cell_ref.indexOf("!") > 0) {
-                        sheet_name = cell_ref.split("!")[0].substring(1);
-                        cell_ref = cell_ref.split("!")[1];
-                      }
-
-                      if (workbook.sheets.hasOwnProperty(sheet_name)) {
-                        if (workbook.sheets[sheet_name].data.hasOwnProperty(cell_ref)) {
-                          param1.value = workbook.sheets[sheet_name].data[cell_ref];
-                        } else {
-                          var recalc_cell = workbook.current_sheet_name+"!"+workbook.current_cell;
-                          if (!workbook.recalc_objs.includes(recalc_cell)) {
-                            workbook.recalc_objs.push(recalc_cell);
-                          }
-                        }
-                      }
-                    }
-                  }
-
-                  var formula = "=SET.NAME(" + set_var_name + ", " + param1.value + ")";
+                  var formula = "=SET.NAME(" + set_var_name + ", " + param1_val + ")";
                   stack.splice(c_index-op_stack_length+1, c_index+1, {
-                    'value':   param1.value,
+                    'value':   param1_val,
                     'type':    param1.type,
                     'formula': formula
                   });
@@ -3708,12 +3670,15 @@ class Static_File_Analyzer {
   /**
    * Gets the content an XLS cell.
    *
-   * @param {string}  cell_ref     A string in the form of ColumnRow
-   * @param {string}  sheet        The sheet containing the cell_ref
-   * @param {object}  document_obj The object containing all the spreadsheet info.
+   * @param {string}  cell_ref        A string in the form of ColumnRow
+   * @param {string}  sheet           The sheet containing the cell_ref
+   * @param {object}  document_obj    The object containing all the spreadsheet info.
+   * @param {object}  parent_cell_obj Optional reference if the cell has a parent reference.
+   * @param {object}  file_info    The object for collecting output of static file analysis.
    * @return {Object} The found cell object.
    */
-  get_xls_cell_ref(cell_ref, sheet, document_obj, parent_cell_obj, file_info, byte_order) {
+  get_xls_cell_ref(cell_ref, sheet, document_obj, parent_cell_obj, file_info) {
+    var byte_order = document_obj.byte_order;
     var ref_cell_full_name = sheet + "!" + cell_ref;
     var return_obj;
     var xname = "PtgRef3d";
@@ -3776,13 +3741,51 @@ class Static_File_Analyzer {
         }
       }
 
-      if (recalc_cell == true && document_obj.unknown_cells_are_blank == false) {
+      if (parent_cell_obj !== null && recalc_cell == true && document_obj.unknown_cells_are_blank == false) {
         var parent_cell_name_full = parent_cell_obj.sheet_name + "!" + parent_cell_obj.cell_name;
         if (!document_obj.recalc_objs.includes(parent_cell_name_full)) document_obj.recalc_objs.push(parent_cell_name_full);
       }
     }
 
     return return_obj;
+  }
+
+  /**
+   * Gets the variable value or resolved reference of a stored varable name.
+   *
+   * @param {string}  var_name     The varable name to get the value of
+   * @param {object}  document_obj The object containing all the spreadsheet info.
+   * @param {object}  file_info    The object for collecting output of static file analysis.
+   * @return {Object} The found cell object.
+   */
+  get_xls_var_ref(var_name, document_obj, file_info={}) {
+    var var_value = document_obj.varables[var_name];
+
+    if (var_value !== null && var_value !== undefined) {
+      if (var_value.length > 0 && var_value.charAt(0) == "@") {
+        // This is a reference to a cell, we should re-calculate this are return the value.
+        if (document_obj.indexed_cells.hasOwnProperty(var_value.substring(1))) {
+          // The raw cell was found in the document pre-parse.
+          var raw_cell = document_obj.indexed_cells[var_value.substring(1)];
+          var parsed_cell;
+
+          if (raw_cell.record_type == "Formula") {
+            parsed_cell = this.parse_xls_formula_record(raw_cell, document_obj, file_info, document_obj.byte_order);
+          } else if (cell_records[i].record_type == "LabelSst") {
+            parsed_cell = this.parse_xls_label_set_record(raw_cell, [], document_obj.byte_order);
+          }
+
+          var_value = parsed_cell.cell_data.value;
+        }
+
+      } else {
+        // Just return the value;
+      }
+    } else{
+      var_value = "";
+    }
+
+    return var_value;
   }
 
   /**
@@ -4537,8 +4540,10 @@ class Static_File_Analyzer {
         } else {
           if (string_val.length > 0 && document_obj.varables.hasOwnProperty(string_val)) {
             // Reference to a document variable
+            var var_val = this.get_xls_var_ref(string_val, document_obj, file_info);
+
             formula_calc_stack.push({
-              'value': document_obj.varables[string_val],
+              'value': var_val,
               'type':  "reference",
               'ref_name': string_val,
               'xname': "PtgString"
@@ -4680,8 +4685,8 @@ class Static_File_Analyzer {
           var var_name = document_obj.defined_names[var_index-1];
 
           if (document_obj.varables.hasOwnProperty(var_name.name)) {
-            var var_value = document_obj.varables[var_name.name];
-            var var_type = typeof document_obj.varables[var_name.name];
+            var var_value = this.get_xls_var_ref(var_name.name, document_obj, file_info);
+            var var_type = typeof var_value;
 
             var cell_ref_match = /\@([a-zA-Z0-9]+)\!(\w+[0-9]+)/gm.exec(var_value);
             if (cell_ref_match !== null) {
@@ -4837,9 +4842,16 @@ class Static_File_Analyzer {
             'params': param_count
           });
 
-          cell_formula += "=CHAR(" + formula_calc_stack.at(-2).value + ")";
-          cell_value = (cell_value === null) ? "" : cell_value;
+          var cell_formula_prov = "=CHAR(" + formula_calc_stack.at(-2).value + ")";
           var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+
+          if (formula_calc_stack.at(-1).hasOwnProperty("formula")) {
+            cell_formula += formula_calc_stack.at(-1).formula;
+          } else {
+            cell_formula += cell_formula_prov;
+          }
+
+          cell_value = (cell_value === null) ? "" : cell_value;
           cell_value += formula_calc_stack.at(-1).value;
         } else if (iftab == 0x0082) {
           // t-params
@@ -5152,8 +5164,10 @@ class Static_File_Analyzer {
           var ref_var_name = document_obj.defined_names[name_index-1];
 
           if (document_obj.varables.hasOwnProperty(ref_var_name.name)) {
+            var var_val = this.get_xls_var_ref(ref_var_name.name, document_obj, file_info);
+
             formula_calc_stack.push({
-              'value': document_obj.varables[ref_var_name.name],
+              'value': var_val,
               'type':  "string",
               'ref_name': ref_var_name.name,
               'xname': "PtgName"
