@@ -2970,18 +2970,34 @@ class Static_File_Analyzer {
                     var op_param1 = stack[c_index-3];
                     var op_param2 = stack[c_index-2];
 
+                    var op_param1_form;
+                    var op_param1_val;
+
+                    if (op_param1.hasOwnProperty("xname") && op_param1.xname == "PtgName") {
+                      op_param1_form = op_param1.ref_name;
+                      op_param1_val = this.get_xls_var_ref(op_param1.ref_name, workbook, {});
+                    } else {
+                      op_param1_val = op_param1.value;
+
+                      if (op_param1.hasOwnProperty("formula") && op_param1.formula !== null) {
+                        op_param1_form = op_param1.formula;
+                      } else {
+                        op_param1_form = op_param1.value;
+                      }
+                    }
+
                     if (stack[c_index-1].value == "==") {
-                      formula += op_param1.value + " == " + op_param2.value;
-                      sub_result = (op_param1.value == op_param2);
+                      formula += op_param1_form + " == " + op_param2.value;
+                      sub_result = (op_param1_val == op_param2);
                     } else if (stack[c_index-1].value == "!=") {
-                      formula += op_param1.value + " != " + op_param2.value;
-                      sub_result = (op_param1.value != op_param2);
+                      formula += op_param1_form + " != " + op_param2.value;
+                      sub_result = (op_param1_val != op_param2);
                     } else if (stack[c_index-1].value == "<") {
-                      formula += op_param1.value + " < " + op_param2.value;
-                      sub_result = (op_param1.value < op_param2);
+                      formula += op_param1_form + " < " + op_param2.value;
+                      sub_result = (op_param1_val < op_param2);
                     } else if (stack[c_index-1].value == ">") {
-                      formula += op_param1.value + " > " + op_param2.value;
-                      sub_result = (op_param1.value > op_param2);
+                      formula += op_param1_form + " > " + op_param2.value;
+                      sub_result = (op_param1_val > op_param2);
                     }
                   } if (stack[c_index-1].type == "boolean") {
                     formula += stack[c_index-1].value;
