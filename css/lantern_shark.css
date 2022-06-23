@@ -140,11 +140,34 @@ body {
 
 .toolbar_button {
   cursor: pointer;
+  display: inline-block;
+  float: left;
   width: 60px;
+}
+
+.toolbar_button_arrow {
+  stroke-width: 0.025;
+}
+
+.toolbar_button_file {
+  stroke-width: 0.025;
 }
 
 #toolbar_open {
 
+}
+
+#toolbar_save_svg {
+  fill: #999;
+  height: 30px;
+  width: 30px;
+  margin-top: 4px;
+  margin-bottom: 6px;
+  transform: scale(1.3333);
+}
+
+#toolbar_save_caption {
+  color: #999;
 }
 
 .top_space {

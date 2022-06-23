@@ -1,6 +1,8 @@
 var analyzer_results = {};
 var file_byte_array = [];
 var file_password = null;
+var selected_file_component = 0;
+var zip_file_extentions = ["docx", "docm", "pptx", "pptm", "xlsb", "xlsx", "xlsm", "zip"];
 
 window.addEventListener('load', (event) => {
   document.getElementById('tab_summary').addEventListener('click', change_tab, false);
@@ -9,7 +11,7 @@ window.addEventListener('load', (event) => {
 
   document.getElementById('open_file').addEventListener('change', read_file, false);
   document.getElementById('toolbar_open').addEventListener('click', function(){document.getElementById('open_file').click()}, false);
-
+  document.getElementById('toolbar_save').addEventListener('click', save_selected, false);
 });
 
 /**
@@ -126,6 +128,13 @@ function read_file(e) {
     $("#file_tree").html("");
     $("#file_components_list").html("");
 
+    // Clear password field.
+    $("#summary_file_encrypted_password_txt").val("");
+
+    // Disable save toolbar item
+    $("#toolbar_save_svg").css("fill", "#999");
+    $("#toolbar_save_caption").css("color", "#999");
+
     // Add new file info.
     $("#file_tree").append("<li id='top_level_file' class='file_tree_item_selected'>" + file.name + "</li>");
     $("#top_level_file").append("<ul class='nested_item' id='file_components_list'></ul>");
@@ -166,6 +175,30 @@ function read_file(e) {
 }
 
 /**
+ * Handles the UX click for the toolbar save selected button.
+ * @async
+ * @param {Event}  e The event triggered from clicking the tab.
+ */
+async function save_selected(e) {
+  if (analyzer_results.file_components[selected_file_component].type == "zip") {
+    var file_name = analyzer_results.file_components[selected_file_component].name;
+    var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, selected_file_component, file_password);
+    var base64_encoded = Static_File_Analyzer.base64_encode_array(component_bytes);
+
+    var hidden_element = document.createElement('a');
+    hidden_element.href = 'data:application/octet-stream;base64,' + base64_encoded;
+    hidden_element.target = '_blank';
+    hidden_element.download = file_name;
+
+    document.body.appendChild(hidden_element);
+    hidden_element.click();
+    document.body.removeChild(hidden_element);
+  } else {
+    // Code for other componets
+  }
+}
+
+/**
  * Event triggered when the user clicks a file component from the file tree.
  * @async
  * @param {Event}   e The event triggered from the user click.
@@ -175,11 +208,10 @@ async function select_file_component(e, component_index=null) {
   if (e !== null) {
     var component_id = e.currentTarget.id;
     var component_index = parseInt(component_id.split("_")[1]);
+    selected_file_component = component_index;
   }
 
   if (component_index !== null) {
-    var zip_file_extentions = ["docx", "docm", "pptx", "pptm", "xlsb", "xlsx", "xlsm", "zip"];
-
     // Change UI to show selected component
     $("#top_level_file").removeClass("file_tree_item_selected");
 
@@ -194,8 +226,16 @@ async function select_file_component(e, component_index=null) {
       file_password = ($("#summary_file_encrypted_password_txt").val().length > 0) ? $("#summary_file_encrypted_password_txt").val() : null;
       var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
       $("#file_text").val(get_file_text(component_bytes));
+
+      // Enable save toolbar item
+      $("#toolbar_save_svg").css("fill", "#000");
+      $("#toolbar_save_caption").css("color", "#000");
     } else {
       // Code for other componets
+
+      // Disable save toolbar item
+      $("#toolbar_save_svg").css("fill", "#999");
+      $("#toolbar_save_caption").css("color", "#999");
     }
   }
 
