@@ -2815,7 +2815,55 @@ class Static_File_Analyzer {
                 // Execute an Excel function.
                 var function_name = stack[c_index].value.substring(6);
 
-                if (function_name == "ARABIC") {
+                if (function_name == "ABSREF") {
+                  var param1 = stack[c_index-2];
+                  var param2 = stack[c_index-1];
+                  var ref_cell = (param2.hasOwnProperty("ref_name")) ? param2.ref_name : param2.value;
+
+                  var base_match = /\@?([^\r\n\!]+)\!([a-zA-Z]+\d+)/gmi.exec(ref_cell);
+                  if (base_match === null) {
+                    if (workbook.varables.hasOwnProperty(ref_cell)) {
+                      base_match = /\@?([^\r\n\!]+)\!([a-zA-Z]+\d+)/gmi.exec(workbook.varables[ref_cell]);
+                    }
+                  }
+
+                  if (base_match !== null) {
+                    var ref_match = /R\[?(\-?\d+)?\]?C\[?(\-?\d+)?\]?/gmi.exec(param1.value);
+                    if (ref_match !== null) {
+                      var row_shift = (ref_match[1] !== undefined) ? parseInt(ref_match[1]) : 0;
+                      var col_shift = (ref_match[2] !== undefined) ? parseInt(ref_match[2]) : 0;
+
+                      var new_cell_ref = this.get_shifted_cell_name(base_match[2], row_shift, col_shift);
+                      var new_cell_ref_full = workbook.current_sheet_name + "!" + new_cell_ref;
+
+                      var formula = "=ABSREF(\"" + param1.value + "\"," + base_match[2] + ")";
+                      var cell_ref_value;
+
+                      if (workbook.sheets[workbook.current_sheet_name].data.hasOwnProperty(new_cell_ref)) {
+                        cell_ref_value = workbook.sheets[workbook.current_sheet_name].data[new_cell_ref];
+                      } else {
+                        cell_ref_value = "@" + new_cell_ref_full;
+                      }
+
+                      stack.splice(c_index-2, 3, {
+                        'value': cell_ref_value.value,
+                        'type': "reference",
+                        'formula': formula,
+                        'ref_name': new_cell_ref_full,
+                      });
+
+                      c_index--;
+                    }
+                  } else {
+                    // Value is not a base cell reference.
+                    var recalc_cell = workbook.current_sheet_name + "!" + workbook.current_cell;
+                    if (!workbook.recalc_objs.includes(recalc_cell)) {
+                      workbook.recalc_objs.push(recalc_cell);
+                    }
+
+                    c_index++;
+                  }
+                } else if (function_name == "ARABIC") {
                   var sub_result = Static_File_Analyzer.convert_roman_numeral_to_int(stack[c_index+1].value);
                   stack.splice(c_index, 2);
                   stack.unshift({
@@ -2969,6 +3017,7 @@ class Static_File_Analyzer {
                     }
                   }
 
+                  /*
                   var ref_match = /R\[?(\-?\d+)?\]?C\[?(\-?\d+)?\]?/gmi.exec(param2.value);
                   if (ref_match !== null) {
                     var row_shift = (ref_match[1] !== undefined) ? parseInt(ref_match[1]) : 0;
@@ -2982,13 +3031,18 @@ class Static_File_Analyzer {
                         workbook.recalc_objs.push(workbook.current_cell);
                     }
                   }
+                  */
 
                   // TODO - store references to cells as references and recalc when used.
                   var param1_val = param1.value;
 
-                  if (param1.type == "reference" && param1.hasOwnProperty("ref_name")) {
-                    if (param1.value.charAt(0) != "@") {
-                      param1_val = "@" + param1.ref_name;
+                  if (param1.type == "reference" || (param1.hasOwnProperty("xname") && param1.xname == "PtgRef")) {
+                    if (param1.hasOwnProperty("ref_name")) {
+                      if (param1.ref_name.charAt(0) != "@") {
+                        param1_val = "@" + param1.ref_name;
+                      } else {
+                        param1_val = param1.ref_name;
+                      }
                     }
                   }
 
@@ -3018,7 +3072,8 @@ class Static_File_Analyzer {
                   }
 
                   if (double_set_name == false) {
-                    var formula = "=SET.NAME(" + set_var_name + ", " + param1_val + ")";
+                    var param1_form = (param1.hasOwnProperty("formula") && param1.formula !== null) ? param1.formula : param1_val;
+                    var formula = "=SET.NAME(" + set_var_name + ", " + param1_form + ")";
                     stack.splice(c_index-op_stack_length+1, c_index+1, {
                       'value':   param1_val,
                       'type':    param1.type,
@@ -3740,7 +3795,7 @@ class Static_File_Analyzer {
     if (document_obj.sheets[sheet].data.hasOwnProperty(cell_ref)) {
       // Cell reference found
       if (document_obj.sheets[sheet].data[cell_ref].formula !== null) {
-        if (document_obj.sheets[sheet].data[cell_ref].formula.toUpperCase().startsWith("=RETURN")) {
+        if (document_obj.sheets[sheet].data[cell_ref].formula.toUpperCase().startsWith("=")) {
           // recalculate cell
           var ref_cell_raw = document_obj.indexed_cells[ref_cell_full_name];
           var cell_data_obj = this.parse_xls_formula_record(ref_cell_raw, document_obj, file_info, byte_order);
@@ -3805,8 +3860,10 @@ class Static_File_Analyzer {
 
           if (raw_cell.record_type == "Formula") {
             parsed_cell = this.parse_xls_formula_record(raw_cell, document_obj, file_info, document_obj.byte_order);
-          } else if (cell_records[i].record_type == "LabelSst") {
+          } else if (raw_cell.record_type == "LabelSst") {
             parsed_cell = this.parse_xls_label_set_record(raw_cell, [], document_obj.byte_order);
+          } else if (raw_cell.record_type == "RK") {
+            parsed_cell = this.parse_xls_rk_record(raw_cell, document_obj.byte_order);
           }
 
           var_value = parsed_cell.cell_data.value;
@@ -4429,7 +4486,7 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "IN13266") {
+    if (document_obj.current_cell == "W54030") {
       var debug773=33;
     }
 
@@ -4549,7 +4606,9 @@ class Static_File_Analyzer {
 
         var string_val = Static_File_Analyzer.get_string_from_array(rgce_bytes.slice(current_rgce_byte+2, string_end));;
 
+
         var ref_match = /R\[?(\-?\d+)?\]?C\[?(\-?\d+)?\]?/gmi.exec(string_val);
+        ref_match = null; // DEBUG
         if (ref_match !== null) {
           var row_shift = (ref_match[1] !== undefined) ? parseInt(ref_match[1]) : 0;
           var col_shift = (ref_match[2] !== undefined) ? parseInt(ref_match[2]) : 0;
@@ -4621,7 +4680,8 @@ class Static_File_Analyzer {
         current_rgce_byte += 5;
       } else if (formula_type == 0x19) {
         if (rgce_bytes[current_rgce_byte] == 0x01) {
-          // PtgAttrSemi - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/615c5518-010a-4268-b71b-b60074bdb11b
+          // PtgAttrSemi - Specifies that this Rgce is volatile.
+          // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/615c5518-010a-4268-b71b-b60074bdb11b
           // next two bytes unused, should be zero
           current_rgce_byte += 3;
         } else if (rgce_bytes[current_rgce_byte] == 0x02) {
@@ -4865,6 +4925,12 @@ class Static_File_Analyzer {
           });
         } else if (iftab == 0x004F) {
           // ABSREF - Returns the absolute reference of the cells that are offset from a reference by a specified amount
+          // See - https://xlladdins.github.io/Excel4Macros/absref.html
+          formula_calc_stack.push({
+            'value':  "_xlfn.ABSREF",
+            'type':   "string",
+            'params': 2
+          });
         } else if (iftab == 0x005A) {
           // DEREF - Reference another cell
           cell_formula += "=";
