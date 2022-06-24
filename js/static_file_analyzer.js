@@ -1046,6 +1046,7 @@ class Static_File_Analyzer {
       'byte_order': this.LITTLE_ENDIAN,
       'document_properties': document_properties,
       'sheets': spreadsheet_sheet_names,
+      'string_constants': [],
       'current_sheet_name': "",
       'current_cell': "",
       'indexed_cells': {},
@@ -1285,8 +1286,9 @@ class Static_File_Analyzer {
           var shortcut_key = file_bytes[i+6];
 
           if (is_built_in) {
-            var debug143=0;
+            // This is not a reliable check as some malicious XLS files don't tag Auto_Open as a built in.
           }
+
           var name_char_count = file_bytes[i+7];
           var rgce_size = this.get_two_byte_int(file_bytes.slice(i+8,i+10), byte_order);
           var reserved3 = this.get_two_byte_int(file_bytes.slice(i+10,i+12), byte_order);
@@ -1321,16 +1323,23 @@ class Static_File_Analyzer {
               var formula_type = rgce_bytes[current_rgce_byte];
 
               // TODO implement all formulas here.
-              if (formula_type == 0x3A) {
+              if (formula_type == 0x1C) {
+                // PtgErr - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4746c46e-8301-4d72-aaa8-742f5404b5db
+                var error_code = rgce_bytes[current_rgce_byte+1]
+                current_rgce_byte += 2;
+              } else if (formula_type == 0x3A) {
                 // PtgRef3d - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1ca817be-8df3-4b80-8d35-46b5eb753577
                 var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+5), byte_order);
                 var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+5,current_rgce_byte+7), byte_order);
                 var col_rel_bits = this.get_bin_from_int(col_rel);
                 var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
                 var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
+                var sheet_name = sheet_index_list[itab];
 
-                formula += cell_ref;
+                formula += sheet_name + "!" + cell_ref;
                 current_rgce_byte += 7;
+              } else {
+                break;
               }
 
             }
@@ -1360,6 +1369,7 @@ class Static_File_Analyzer {
         'sheets': spreadsheet_sheet_names,
         'sheet_index_list': sheet_index_list,
         'sheet_indexes': Array(sheet_index_list.length),
+        'string_constants': string_constants,
         'current_sheet_name': Object.entries(spreadsheet_sheet_names)[0],
         'current_cell': "",
         'indexed_cells': {},
@@ -1433,10 +1443,27 @@ class Static_File_Analyzer {
         }
       }
 
+      // Check for Auto_Open LBL value
+      var auto_open_cell = "";
+      for (var dn=0; dn<document_obj.defined_names.length; dn++) {
+        if (document_obj.defined_names[dn].name == "Auto_Open") {
+          auto_open_cell = document_obj.defined_names[dn].formula;
+          if (document_obj.indexed_cells.hasOwnProperty(auto_open_cell)) {
+            // Put Auto_Open cell as fist cell_record
+            cell_records.unshift(document_obj.indexed_cells[auto_open_cell]);
+          }
+          break;
+        }
+      }
+
       // Parse the remaining cells
       var cell_data_obj;
       for (var i=0; i<cell_records.length; i++) {
-        //break; // TEMP
+        if (i > 0 && auto_open_cell != "" && cell_records[i].cell_name == auto_open_cell) {
+          // Skip auto_open cell as we should have already done it.
+          continue;
+        }
+
         if (cell_records[i].record_type == "String") {
           // String value of a formula.
           var string_size = this.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
@@ -2812,7 +2839,19 @@ class Static_File_Analyzer {
             stack.shift();
           } else {
             if (c_index > 1) {
+              var param1 = stack[c_index-2];
+              var param2 = stack[c_index-1];
+              var param1_val = param1.value;
+              var param2_val = param2.value;
+
+              var formula = param1_val + " != " + param2_val;
               var sub_result = (String(stack[c_index-2].value) != String(stack[c_index-1].value));
+
+              stack.splice(c_index-2, 3, {
+                'value': sub_result,
+                'formula': formula,
+                'type': "boolean"
+              });
             }
 
             c_index++;
@@ -2998,6 +3037,12 @@ class Static_File_Analyzer {
 
                   c_index++;
                 } else if (function_name == "HALT") {
+                  stack.splice(c_index, 1, {
+                    'value':   "",
+                    'type':    "string",
+                    'formula': "=HALT()"
+                  });
+
                   c_index++;
                 } else if (function_name == "IF") {
                   var sub_result = false;
@@ -3037,7 +3082,12 @@ class Static_File_Analyzer {
                       sub_result = (op_param1_val > op_param2);
                     }
                   } if (stack[c_index-1].type == "boolean") {
-                    formula += stack[c_index-1].value;
+                    if (stack[c_index-1].hasOwnProperty("formula") && stack[c_index-1].formula !== null && stack[c_index-1].formula != "") {
+                      formula += stack[c_index-1].formula;
+                    } else {
+                      formula += stack[c_index-1].value;
+                    }
+
                     sub_result = stack[c_index-1].value;
                   }
                   formula += ")";
@@ -3062,7 +3112,13 @@ class Static_File_Analyzer {
                   c_index++;
                 } else if (function_name == "REGISTER") {
                   var sub_result = "=REGISTER(";
-                  var reg_params = stack.slice(0,c_index);
+                  var reg_params = stack.slice(c_index-7,c_index);
+
+                  var store_val = "=CALL(\"";
+                  for (var rpi=0; rpi<3; rpi++) {
+                    store_val += reg_params[rpi].value + "\",\""
+                  }
+                  workbook.varables[reg_params[3].value] = store_val.slice(0,-2);
 
                   for (var rpi=0; rpi<reg_params.length; rpi++) {
                     sub_result += reg_params[rpi].value + ",";
@@ -3113,22 +3169,6 @@ class Static_File_Analyzer {
                       console.log("Error Invalid number of stack parameters for SET.NAME.")
                     }
                   }
-
-                  /*
-                  var ref_match = /R\[?(\-?\d+)?\]?C\[?(\-?\d+)?\]?/gmi.exec(param2.value);
-                  if (ref_match !== null) {
-                    var row_shift = (ref_match[1] !== undefined) ? parseInt(ref_match[1]) : 0;
-                    var col_shift = (ref_match[2] !== undefined) ? parseInt(ref_match[2]) : 0;
-                    var new_cell_ref = this.get_shifted_cell_name(workbook.current_cell,row_shift,col_shift);
-
-                    if (workbook.sheets[workbook.current_sheet_name].data.hasOwnProperty(new_cell_ref)) {
-                      param2 = workbook.sheets[workbook.current_sheet_name].data[new_cell_ref];
-                    } else {
-                      param2 = "@" + workbook.current_sheet_name + "!" + new_cell_ref;
-                        workbook.recalc_objs.push(workbook.current_cell);
-                    }
-                  }
-                  */
 
                   // TODO - store references to cells as references and recalc when used.
                   var param1_val = param1.value;
@@ -3188,38 +3228,65 @@ class Static_File_Analyzer {
                   if (stack.length > stack[c_index].params) {
                     var params = stack.slice(c_index - stack[c_index].params, c_index);
                     var params2 = [];
-                    var user_func_name = params[0].value;
-                    var function_value = params[0].value;
+                    var user_func_name;
+                    var function_value;
                     var ref_name = "";
 
-                    if (params.length > 1) {
-                      for (var pi=1; pi<params.length; pi++) {
-                        params2.push(params[pi].value);
+                    if (params.length > 0 && ((typeof params[0].value) == "string") && params[0].value.startsWith("=CALL(")) {
+                      user_func_name = "CALL";
+                      var formula_str = params[0].value;
+
+                      for (var fi2=1; fi2<params.length; fi2++) {
+                        if (params[fi2].type == "string") {
+                          formula_str += ",\"" + params[fi2].value + "\"";
+                        } else {
+                          formula_str += "," + params[fi2].value;
+                        }
+
+                      }
+                      formula_str = formula_str + ")";
+
+                      stack.splice(c_index-params.length, params.length+1, {
+                        'value': formula_str,
+                        'type': "string",
+                        'formula': formula_str
+                      });
+
+                    } else {
+                      user_func_name = params[0].value;
+                      function_value = params[0].value;
+                      ref_name = "";
+
+                      if (params.length > 1) {
+                        for (var pi=1; pi<params.length; pi++) {
+                          params2.push(params[pi].value);
+                        }
+                      }
+
+                      var user_func_name = (params[0].hasOwnProperty("ref_name")) ? params[0].ref_name : params[0].value;
+                      var sub_result = user_func_name + "(" + params2.join(",") + ")";
+
+                      if (params[0].hasOwnProperty("ref_name")) {
+                        user_func_name = params[0].ref_name;
+                        ref_name = params[0].ref_name;
+
+                        stack.splice(c_index-params.length, params.length+1, {
+                          'value': function_value,
+                          'type': "string",
+                          'formula': sub_result,
+                          'ref_name': ref_name,
+                          'subroutine': true
+                        });
+                      } else {
+                        stack.splice(c_index-params.length, params.length+1, {
+                          'value': sub_result,
+                          'type': "string"
+                        });
                       }
                     }
 
-                    var user_func_name = (params[0].hasOwnProperty("ref_name")) ? params[0].ref_name : params[0].value;
-                    var sub_result = user_func_name + "(" + params2.join(",") + ")";
-
-                    if (params[0].hasOwnProperty("ref_name")) {
-                      user_func_name = params[0].ref_name;
-                      ref_name = params[0].ref_name;
-
-                      stack.splice(c_index-params.length, params.length+1, {
-                        'value': function_value,
-                        'type': "string",
-                        'formula': sub_result,
-                        'ref_name': ref_name
-                      });
-                    } else {
-                      stack.splice(c_index-params.length, params.length+1, {
-                        'value': sub_result,
-                        'type': "string"
-                      });
-                    }
                   }
 
-                  //c_index++;
                 } else {
                   // Unknown function
                   console.log("Unknown Function");
@@ -3958,7 +4025,7 @@ class Static_File_Analyzer {
           if (raw_cell.record_type == "Formula") {
             parsed_cell = this.parse_xls_formula_record(raw_cell, document_obj, file_info, document_obj.byte_order);
           } else if (raw_cell.record_type == "LabelSst") {
-            parsed_cell = this.parse_xls_label_set_record(raw_cell, [], document_obj.byte_order);
+            parsed_cell = this.parse_xls_label_set_record(raw_cell, document_obj.string_constants, document_obj.byte_order);
           } else if (raw_cell.record_type == "RK") {
             parsed_cell = this.parse_xls_rk_record(raw_cell, document_obj.byte_order);
           }
@@ -4583,7 +4650,7 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "W54030") {
+    if (document_obj.current_cell == "DA13074") {
       var debug773=33;
     }
 
@@ -4676,8 +4743,8 @@ class Static_File_Analyzer {
           'type':  "operator",
           'xname': "PtgNe"
         });
-        cell_formula += "!=";
-        //var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
+        var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
+        //cell_formula += "!=";
       } else if (formula_type == 0x16) {
         // PtgMissArg - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/69352e6c-e712-48d7-92d1-0bf7c1f61f69
         formula_calc_stack.push({
@@ -5133,6 +5200,10 @@ class Static_File_Analyzer {
               'params': param_count,
               'xname': "PtgFuncVar"
             });
+
+            var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+            cell_formula = stack_result.formula;
+            cell_value = stack_result.value;
           } else if (tab_int == 0x37) {
             // RETURN
             formula_calc_stack.push({
@@ -5209,6 +5280,12 @@ class Static_File_Analyzer {
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+
+            file_info.scripts.script_type = "Excel 4.0 Macro";
+            if (file_info.scripts.extracted_script.indexOf(stack_result.value) < 0) {
+              file_info.scripts.extracted_script += stack_result.value + "\n";
+            }
+
             cell_formula = stack_result.formula;
           } else if (tab_int == 0xA7) {
             // IPMT - https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ipmt-function
@@ -5298,7 +5375,7 @@ class Static_File_Analyzer {
 
               break;
             } else if (param_count >= 2) {
-              if (formula_calc_stack[c].value !== null && formula_calc_stack[c].value.length > 0) {
+              if (formula_calc_stack[c].value !== null && formula_calc_stack[c].value !== undefined && formula_calc_stack[c].value.length > 0) {
                 if (formula_calc_stack[c].value == "=") {
                   // c + 1 is the varable name, c + 2 is the value.
                   if (formula_calc_stack.length > 2) {
@@ -5491,9 +5568,104 @@ class Static_File_Analyzer {
     if (formula_calc_stack.length > 0 && cell_value === null) {
       if (formula_calc_stack.length > 1) {
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
+
+        if (((typeof stack_result) == "string") && stack_result.indexOf("=CALL") >= 0) {
+          file_info.scripts.script_type = "Excel 4.0 Macro";
+          if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
+            file_info.scripts.extracted_script += stack_result + "\n";
+
+            var analyzed_results = this.analyze_embedded_script(stack_result);
+
+            for (var f=0; f<analyzed_results.findings.length; f++) {
+              if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
+                file_info.analytic_findings.push(analyzed_results.findings[f]);
+              }
+            }
+
+            for (var f=0; f<analyzed_results.iocs.length; f++) {
+              if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
+                file_info.iocs.push(analyzed_results.iocs[f]);
+              }
+            }
+          }
+        }
       }
 
       cell_value = formula_calc_stack[0].value;
+    }
+
+    if (formula_calc_stack[0].hasOwnProperty("subroutine") && formula_calc_stack[0].subroutine == true) {
+      // This is a user function / subroutine.
+      // Execute cell functions one by one until a REUTRN or HALT funciton is found.
+      if (formula_calc_stack[0].hasOwnProperty("ref_name")) {
+        var next_cell_name = formula_calc_stack[0].ref_name;
+        var ref_cell_raw;
+        var ref_cell_data_obj;
+        var skip_formula = false;
+        var cell_skip_count = 0;
+
+        while (next_cell_name != null) {
+          if (document_obj.indexed_cells.hasOwnProperty(next_cell_name)) {
+            ref_cell_raw = document_obj.indexed_cells[next_cell_name];
+
+            if (ref_cell_raw.record_type == "Formula") {
+              if (skip_formula == false) {
+                ref_cell_data_obj = this.parse_xls_formula_record(ref_cell_raw, document_obj, file_info, byte_order);
+              } else {
+                // Look for END.IF
+                var next_formula = ref_cell_raw.record_bytes[22];
+
+                if (next_formula == 0x41 || next_formula== 0x21) {
+                  var iftab = this.get_two_byte_int(ref_cell_raw.record_bytes.slice(23,24), byte_order);
+
+                  if (iftab == 0x00E1) {
+                    // END.IF found
+                    skip_formula = false;
+                    ref_cell_data_obj = {'cell_data': {'formula': "=END.IF()"}};
+                  }
+                } else if (next_formula == 0x42) {
+                  var tab_int = rgce_bytes[23];
+
+                  if (tab_int == 0xE1) {
+                    // END.IF found
+                    skip_formula = false;
+                    ref_cell_data_obj = {'cell_data': {'formula': "=END.IF()"}};
+                  }
+                }
+              }
+
+              if (ref_cell_data_obj.cell_data.formula == "=HALT()") {
+                cell_formula = "=HALT()";
+                break; // User function is complete.
+              } else {
+                // Get the next cell down
+                next_cell_name = ref_cell_raw.sheet_name + "!" + this.get_shifted_cell_name(ref_cell_raw.cell_name, 1, 0);
+
+                if (ref_cell_data_obj.cell_data.formula.startsWith("=IF") && ref_cell_data_obj.cell_data.value == false) {
+                  skip_formula = true;
+                } else if (skip_formula == true && ref_cell_data_obj.cell_data.formula == "=END.IF()") {
+                  skip_formula = false;
+                }
+
+              }
+            } else {
+              cell_formula = "=HALT()";
+              break;
+            }
+          } else {
+            var cell_name_parts = next_cell_name.split("!");
+            next_cell_name = cell_name_parts[0] + "!" + this.get_shifted_cell_name(cell_name_parts[1], 1, 0);
+            cell_skip_count++;
+
+            // A count of 99 is arbitrary to prevent an infinite loop.
+            if (cell_skip_count > 99) {
+              cell_formula = "=HALT()";
+              break;
+            }
+          }
+        }
+
+      }
     }
 
     return {
