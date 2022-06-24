@@ -5594,7 +5594,7 @@ class Static_File_Analyzer {
       cell_value = formula_calc_stack[0].value;
     }
 
-    if (formula_calc_stack[0].hasOwnProperty("subroutine") && formula_calc_stack[0].subroutine == true) {
+    if (formula_calc_stack.legnth > 0 && formula_calc_stack[0].hasOwnProperty("subroutine") && formula_calc_stack[0].subroutine == true) {
       // This is a user function / subroutine.
       // Execute cell functions one by one until a REUTRN or HALT funciton is found.
       if (formula_calc_stack[0].hasOwnProperty("ref_name")) {
