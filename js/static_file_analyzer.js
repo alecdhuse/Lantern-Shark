@@ -1266,7 +1266,8 @@ class Static_File_Analyzer {
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0x18 && file_bytes[i+1] == 0x00) {
           var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
-          var prop_bits = this.get_bin_from_int(file_bytes[4]).concat(this.get_bin_from_int(file_bytes[5]));
+          //var prop_bits = this.get_bin_from_int(file_bytes[4]).concat(this.get_bin_from_int(file_bytes[5]));
+          var prop_bits = this.get_binary_array([file_bytes[4],file_bytes[5]]);
           var is_hidden = (prop_bits[0] == 1) ? true : false;
           var is_function = (prop_bits[1] == 1) ? true : false;
           var is_vba_macro = (prop_bits[2] == 1) ? true : false;
@@ -1281,10 +1282,13 @@ class Static_File_Analyzer {
 
           var published_name = (prop_bits[13] == 1) ? true : false;
           var is_workbook_param  = (prop_bits[14] == 1) ? true : false;
-
           var shortcut_key = file_bytes[i+6];
+
+          if (is_built_in) {
+            var debug143=0;
+          }
           var name_char_count = file_bytes[i+7];
-          var rgce = this.get_two_byte_int(file_bytes.slice(i+8,i+10), byte_order);
+          var rgce_size = this.get_two_byte_int(file_bytes.slice(i+8,i+10), byte_order);
           var reserved3 = this.get_two_byte_int(file_bytes.slice(i+10,i+12), byte_order);
           if (reserved3 != 0) continue;
 
@@ -1309,10 +1313,43 @@ class Static_File_Analyzer {
           var string_val = Static_File_Analyzer.get_string_from_array(file_bytes.slice(i+19, string_end));
 
           if (string_val !== null && string_val.length > 0) {
+            var rgce_bytes = file_bytes.slice(string_end, string_end+rgce_size);
+            var current_rgce_byte = 0;
+            var formula = (rgce_size > 0) ? "" : null;
+
+            while (current_rgce_byte<rgce_size) {
+              var formula_type = rgce_bytes[current_rgce_byte];
+
+              // TODO implement all formulas here.
+              if (formula_type == 0x3A) {
+                // PtgRef3d - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1ca817be-8df3-4b80-8d35-46b5eb753577
+                var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+5), byte_order);
+                var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+5,current_rgce_byte+7), byte_order);
+                var col_rel_bits = this.get_bin_from_int(col_rel);
+                var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
+                var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
+
+                formula += cell_ref;
+                current_rgce_byte += 7;
+              }
+
+            }
+
+            if (string_end-i-19 == 1) {
+              // Built in function
+              var built_in_names = ["Consolidate_Area","Auto_Open","Auto_Close","Extract","Database","Criteria","Print_Area","Print_Titles","Recorder","Data_Form","Auto_Activate","Auto_Deactivate","Sheet_Title","_FilterDatabase"];
+              if (file_bytes[i+19] < 14) {
+                string_val = built_in_names[file_bytes[i+19]];
+              }
+            }
+
             spreadsheet_var_names.push({
-              'name': string_val
+              'name': string_val,
+              'formula': formula
             });
+
           }
+
         }
       }
 
