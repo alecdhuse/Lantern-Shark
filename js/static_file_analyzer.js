@@ -2991,6 +2991,23 @@ class Static_File_Analyzer {
                     'type': "number"
                   });
                   c_index++;
+                } else if (function_name == "BEEP") {
+                  var formula;
+
+                  if (stack[c_index].params > 0) {
+                    var param_arr = stack.splice(c_index-stack[c_index].params, c_index);
+                    formula = "=BEEP(" + param_arr[0].value + ")";
+                  } else {
+                    formula = "=BEEP()";
+                  }
+
+                  stack.splice(c_index-1, param_arr.length, {
+                    'value':   "",
+                    'type':    "string",
+                    'formula': formula
+                  });
+
+                  c_index++;
                 } else if (function_name == "CHAR") {
                   if (c_index > 0) {
                     var sub_result = String.fromCharCode(stack[c_index-1].value);
@@ -5369,6 +5386,7 @@ class Static_File_Analyzer {
               'xname': "PtgFuncVar"
             });
           } else if (tab_int == 0x00A7) {
+            // Calculates only the active worksheet. - https://xlladdins.github.io/Excel4Macros/calculate.document.html
             formula_calc_stack.push({
               'value': "_xlfn.CALCULATE.DOCUMENT",
               'type':  "string",
