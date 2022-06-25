@@ -5130,6 +5130,13 @@ class Static_File_Analyzer {
         } else if (iftab == 0x00A7) {
           // IPMT - https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ipmt-function
           console.log("IPMT function not implemented.");
+        } else if (iftab == 0x00AC) {
+          // WHILE
+          formula_calc_stack.push({
+            'value': "_xlfn.WHILE",
+            'type':  "string",
+            'params': param_count
+          });
         } else if (iftab == 0x00AE) {
           // NEXT
           formula_calc_stack.push({
@@ -5163,10 +5170,11 @@ class Static_File_Analyzer {
         var param_count = rgce_bytes[current_rgce_byte];
         var tab_bits = this.get_binary_array(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
         var tab_int = rgce_bytes[current_rgce_byte+1];
+        var tab_int2 = this.get_int_from_bin(tab_bits.slice(0,15), document_obj.byte_order);
         var exec_stack = true;
         current_rgce_byte += 3;
 
-        if (tab_bits[15] == 0) {
+        if (tab_bits[8] == 0) {
           // Ftab value - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00b5dd7d-51ca-4938-b7b7-483fe0e5933b
           if (tab_int == 0x00) {
             // COUNT
@@ -5353,6 +5361,30 @@ class Static_File_Analyzer {
           }
         } else {
           // Cetab value - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/0b8acba5-86d2-4854-836e-0afaee743d44
+          if (tab_int2 == 0x01C3) {
+            formula_calc_stack.push({
+              'value': "_xlfn.ADD.LIST.ITEM",
+              'type':  "string",
+              'params': param_count,
+              'xname': "PtgFuncVar"
+            });
+          } else if (tab_int == 0x00A7) {
+            formula_calc_stack.push({
+              'value': "_xlfn.CALCULATE.DOCUMENT",
+              'type':  "string",
+              'params': param_count,
+              'xname': "PtgFuncVar"
+            });
+          } else if (tab_int == 0x0000) {
+            formula_calc_stack.push({
+              'value': "_xlfn.BEEP",
+              'type':  "string",
+              'params': param_count,
+              'xname': "PtgFuncVar"
+            });
+          } else {
+            console.log("Unknown PtgFuncVar - Cetab: " + tab_int); // DEBUG
+          }
         }
 
         if (exec_stack == true) {
@@ -5594,7 +5626,7 @@ class Static_File_Analyzer {
       cell_value = formula_calc_stack[0].value;
     }
 
-    if (formula_calc_stack.legnth > 0 && formula_calc_stack[0].hasOwnProperty("subroutine") && formula_calc_stack[0].subroutine == true) {
+    if (formula_calc_stack.length > 0 && formula_calc_stack[0].hasOwnProperty("subroutine") && formula_calc_stack[0].subroutine == true) {
       // This is a user function / subroutine.
       // Execute cell functions one by one until a REUTRN or HALT funciton is found.
       if (formula_calc_stack[0].hasOwnProperty("ref_name")) {
