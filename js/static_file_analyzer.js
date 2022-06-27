@@ -2941,7 +2941,12 @@ class Static_File_Analyzer {
                 // Create a string containing the human readable formula name and parameters.
                 for (var pi=0; pi<param_array.length; pi++) {
                   if (param_array[pi].type == "boolean") {
-                    param_string += param_array[pi].value + ",";
+                    if (param_array[pi].hasOwnProperty("formula") && param_array[pi].formula !== null && param_array[pi].formula !== undefined) {
+                      param_string += param_array[pi].formula + ",";
+                    } else {
+                      param_string += param_array[pi].value + ",";
+                    }
+
                   } else if (param_array[pi].type == "number") {
                     param_string += param_array[pi].value + ",";
                   } else if (param_array[pi].type == "reference") {
@@ -2952,7 +2957,7 @@ class Static_File_Analyzer {
                 }
 
                 param_string = param_string.slice(0,-1);
-                formula_full = function_name + "(" + param_string + ")";
+                formula_full = "=" + function_name + "(" + param_string + ")";
 
                 if (function_name == "ABSREF") {
                   var param1 = stack[c_index-2];
@@ -3029,12 +3034,6 @@ class Static_File_Analyzer {
                 } else if (function_name == "COUNTA") {
                   // COUNTA - counts the number of cells that are not empty in a range. Two params start_cell, end_cell
                   c_index++;
-                } else if (function_name == "END.IF") {
-                  stack.splice(c_index, c_index+1, {
-                    'value': "=END.IF()",
-                    'type': "string",
-                    'formula': "=END.IF()"
-                  });
                 } else if (function_name == "EXEC") {
                   var param_count = stack[c_index].params;
                   var exec_cmd = "";
@@ -3112,15 +3111,7 @@ class Static_File_Analyzer {
                   });
 
                   c_index++;
-                } else if (function_name == "IPMT") {
-                  var param_count = stack[c_index].params;
-                  var f_params = stack.slice(c_index-param_count, c_index);
-
-                  c_index++;
                 } else if (function_name == "ISNUMBER") {
-                  c_index++;
-                } else if (function_name == "NEXT") {
-                  stack[c_index].formula = "=NEXT()";
                   c_index++;
                 } else if (function_name == "REGISTER") {
                   var sub_result = "=REGISTER(";
@@ -3298,7 +3289,14 @@ class Static_File_Analyzer {
                     }
 
                   }
+                } else if (function_name == "WHILE") {
+                  stack.splice(c_index-param_array.length, param_array.length+1, {
+                    'value':   stack[c_index-1].value,
+                    'type':    "string",
+                    'formula': formula_full
+                  });
 
+                  c_index++;
                 } else {
                   // Default for formulas where we are not emulating their functionality.
                   stack.splice(c_index-param_array.length, param_array.length+1, {
@@ -5152,14 +5150,14 @@ class Static_File_Analyzer {
           formula_calc_stack.push({
             'value': "_xlfn.WHILE",
             'type':  "string",
-            'params': param_count
+            'params': 1
           });
         } else if (iftab == 0x00AE) {
           // NEXT
           formula_calc_stack.push({
             'value': "_xlfn.NEXT",
             'type':  "string",
-            'params': param_count
+            'params': 0
           });
 
           var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -5170,7 +5168,7 @@ class Static_File_Analyzer {
           formula_calc_stack.push({
             'value': "_xlfn.END.IF",
             'type':  "string",
-            'params': param_count
+            'params': 0
           });
 
           var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
@@ -5653,11 +5651,14 @@ class Static_File_Analyzer {
       // This is a user function / subroutine.
       // Execute cell functions one by one until a REUTRN or HALT funciton is found.
       if (formula_calc_stack[0].hasOwnProperty("ref_name")) {
+        var cell_skip_count = 0;
+        var function_complete = false;
+        var loop_stack = [];
         var next_cell_name = formula_calc_stack[0].ref_name;
         var ref_cell_raw;
         var ref_cell_data_obj;
         var skip_formula = false;
-        var cell_skip_count = 0;
+
 
         while (next_cell_name != null) {
           if (document_obj.indexed_cells.hasOwnProperty(next_cell_name)) {
@@ -5666,6 +5667,27 @@ class Static_File_Analyzer {
             if (ref_cell_raw.record_type == "Formula") {
               if (skip_formula == false) {
                 ref_cell_data_obj = this.parse_xls_formula_record(ref_cell_raw, document_obj, file_info, byte_order);
+
+                if (ref_cell_data_obj.cell_data.formula.startsWith("=WHILE")) {
+                  if (ref_cell_data_obj.cell_data.value == true) {
+                    loop_stack.push(ref_cell_raw);
+                  } else {
+                    var debug387=0;
+                  }
+
+                } else if (ref_cell_data_obj.cell_data.formula.startsWith("=NEXT")) {
+                  var loop_start_cell = loop_stack.pop();
+                  var loop_start_cell_obj = this.parse_xls_formula_record(loop_start_cell, document_obj, file_info, byte_order);
+
+                  if (loop_start_cell_obj.cell_data.value == true) {
+                    loop_stack.push(loop_start_cell);
+                    ref_cell_raw = loop_start_cell;
+                    ref_cell_data_obj = loop_start_cell_obj;
+                  } else {
+                    var debug387=0;
+                  }
+                }
+
               } else {
                 // Look for END.IF
                 var next_formula = ref_cell_raw.record_bytes[22];
@@ -5689,8 +5711,8 @@ class Static_File_Analyzer {
                 }
               }
 
-              if (ref_cell_data_obj.cell_data.formula == "=HALT()") {
-                cell_formula = "=HALT()";
+              if (ref_cell_data_obj.cell_data.formula == "=HALT()" || ref_cell_data_obj.function_complete) {
+                function_complete = true;
                 break; // User function is complete.
               } else {
                 // Get the next cell down
@@ -5705,6 +5727,7 @@ class Static_File_Analyzer {
               }
             } else {
               cell_formula = "=HALT()";
+              function_complete = true;
               break;
             }
           } else {
@@ -5715,6 +5738,7 @@ class Static_File_Analyzer {
             // A count of 99 is arbitrary to prevent an infinite loop.
             if (cell_skip_count > 99) {
               cell_formula = "=HALT()";
+              function_complete = true;
               break;
             }
           }
@@ -5727,6 +5751,7 @@ class Static_File_Analyzer {
       'sheet_name': cell_record_obj.sheet_name,
       'cell_name': cell_record_obj.cell_name,
       'cell_recalc': cell_recalc,
+      'function_complete': function_complete,
       'cell_data': {
         'formula': cell_formula,
         'value': cell_value
