@@ -5352,25 +5352,6 @@ class Static_File_Analyzer {
             });
 
             exec_stack = false;
-            /*
-            var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-
-            if (stack_result.hasOwnProperty("formula")) {
-              if (cell_formula === null) {
-                cell_formula = stack_result.formula;
-              } else {
-                if (cell_formula == stack_result.ref_name) {
-                  cell_formula = stack_result.formula;
-                } else {
-                  cell_formula += stack_result.formula;
-                }
-              }
-
-              cell_value = (cell_value === null) ? stack_result.value : cell_value+stack_result.value;
-            } else {
-              cell_formula = stack_result.value;
-            }
-            */
           } else {
             console.log("Unknown PtgFuncVar: " + tab_int); // DEBUG
           }
@@ -5672,7 +5653,8 @@ class Static_File_Analyzer {
                   if (ref_cell_data_obj.cell_data.value == true) {
                     loop_stack.push(ref_cell_raw);
                   } else {
-                    var debug387=0;
+                    // We need to skip code until a =NEXT() is found.
+                    skip_formula = true;
                   }
 
                 } else if (ref_cell_data_obj.cell_data.formula.startsWith("=NEXT")) {
@@ -5683,8 +5665,6 @@ class Static_File_Analyzer {
                     loop_stack.push(loop_start_cell);
                     ref_cell_raw = loop_start_cell;
                     ref_cell_data_obj = loop_start_cell_obj;
-                  } else {
-                    var debug387=0;
                   }
                 }
 
@@ -5694,8 +5674,13 @@ class Static_File_Analyzer {
 
                 if (next_formula == 0x41 || next_formula== 0x21) {
                   var iftab = this.get_two_byte_int(ref_cell_raw.record_bytes.slice(23,24), byte_order);
+                  // TODO: This won't work if there is an IF inside of a loop.
 
-                  if (iftab == 0x00E1) {
+                  if (iftab == 0x00AE) {
+                    // Next()
+                    skip_formula = false;
+                    ref_cell_data_obj = {'cell_data': {'formula': "=NEXT()"}};
+                  } else if (iftab == 0x00E1) {
                     // END.IF found
                     skip_formula = false;
                     ref_cell_data_obj = {'cell_data': {'formula': "=END.IF()"}};
