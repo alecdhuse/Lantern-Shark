@@ -2932,8 +2932,27 @@ class Static_File_Analyzer {
           if (stack[c_index].value !== null && stack[c_index].value !== undefined) {
             try {
               if (String(stack[c_index].value).substring(0, 6).toLowerCase() == "_xlfn.") {
-                // Execute an Excel function.
+                // Execute an Excel formula.
+                var formula_full;
                 var function_name = stack[c_index].value.substring(6);
+                var param_array = stack.slice(c_index-stack[c_index].params, c_index);
+                var param_string = "";
+
+                // Create a string containing the human readable formula name and parameters.
+                for (var pi=0; pi<param_array.length; pi++) {
+                  if (param_array[pi].type == "boolean") {
+                    param_string += param_array[pi].value + ",";
+                  } else if (param_array[pi].type == "number") {
+                    param_string += param_array[pi].value + ",";
+                  } else if (param_array[pi].type == "reference") {
+                    param_string += param_array[pi].value + ",";
+                  } else if (param_array[pi].type == "string") {
+                    param_string += "\"" + param_array[pi].value + "\",";
+                  }
+                }
+
+                param_string = param_string.slice(0,-1);
+                formula_full = function_name + "(" + param_string + ")";
 
                 if (function_name == "ABSREF") {
                   var param1 = stack[c_index-2];
@@ -2988,25 +3007,9 @@ class Static_File_Analyzer {
                   stack.splice(c_index, 2);
                   stack.unshift({
                     'value': sub_result,
-                    'type': "number"
+                    'type': "number",
+                    'formula': formula_full
                   });
-                  c_index++;
-                } else if (function_name == "BEEP") {
-                  var formula;
-
-                  if (stack[c_index].params > 0) {
-                    var param_arr = stack.splice(c_index-stack[c_index].params, c_index);
-                    formula = "=BEEP(" + param_arr[0].value + ")";
-                  } else {
-                    formula = "=BEEP()";
-                  }
-
-                  stack.splice(c_index-1, param_arr.length, {
-                    'value':   "",
-                    'type':    "string",
-                    'formula': formula
-                  });
-
                   c_index++;
                 } else if (function_name == "CHAR") {
                   if (c_index > 0) {
@@ -3050,14 +3053,6 @@ class Static_File_Analyzer {
                   stack.unshift({
                     'value': sub_result,
                     'type': "string"
-                  });
-
-                  c_index++;
-                } else if (function_name == "HALT") {
-                  stack.splice(c_index, 1, {
-                    'value':   "",
-                    'type':    "string",
-                    'formula': "=HALT()"
                   });
 
                   c_index++;
@@ -3305,8 +3300,13 @@ class Static_File_Analyzer {
                   }
 
                 } else {
-                  // Unknown function
-                  console.log("Unknown Function");
+                  // Default for formulas where we are not emulating their functionality.
+                  stack.splice(c_index-param_array.length, param_array.length+1, {
+                    'value':   "",
+                    'type':    "string",
+                    'formula': formula_full
+                  });
+
                   c_index++;
                 }
               } else {
@@ -5393,6 +5393,10 @@ class Static_File_Analyzer {
               'params': param_count,
               'xname': "PtgFuncVar"
             });
+
+            var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
+            cell_formula = stack_result.formula;
+            cell_value = (cell_value === null) ? stack_result.value : cell_value + stack_result.value;
           } else if (tab_int == 0x0000) {
             formula_calc_stack.push({
               'value': "_xlfn.BEEP",
@@ -5642,6 +5646,7 @@ class Static_File_Analyzer {
       }
 
       cell_value = formula_calc_stack[0].value;
+      cell_formula = (formula_calc_stack[0].hasOwnProperty("formula")) ? formula_calc_stack[0].formula : cell_formula;
     }
 
     if (formula_calc_stack.length > 0 && formula_calc_stack[0].hasOwnProperty("subroutine") && formula_calc_stack[0].subroutine == true) {
