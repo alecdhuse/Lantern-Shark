@@ -50,6 +50,8 @@ class Static_File_Analyzer {
       file_info = this.analyze_iso9660(file_bytes);
     } else if (this.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
       file_info = this.analyze_jpeg(file_bytes);
+    } else if (this.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
+      file_info = this.analyze_lnk(file_bytes);
     } else if (this.array_equals(file_bytes.slice(0,6), [82,97,114,33,26,7])) {
       file_info = this.analyze_rar(file_bytes);
     } else if (this.array_equals(file_bytes.slice(0,4), [0x7b,0x5c,0x72,0x74])) {
@@ -366,6 +368,94 @@ class Static_File_Analyzer {
     }
 
     file_info.file_format_ver = "JFIF Version " + jfif_ver_str;
+
+    return file_info;
+  }
+
+  /**
+   * Extracts meta data and other information from LNK files.
+   *
+   * @see https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/16cb4ca1-9339-4d0c-a68d-bf1d6cc0f943
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_lnk(file_bytes) {
+    var file_info = this.get_default_file_json();
+
+    file_info.file_format = "lnk";
+    file_info.file_generic_type = "Shortcut";
+
+    var link_class_id = file_bytes.slice(4,20);
+    var link_flags = this.get_binary_array(file_bytes.slice(20,24));
+    var file_attribute_flags = this.get_binary_array(file_bytes.slice(24,28));
+
+    file_info.metadata.creation_date = this.get_eight_byte_date(file_bytes.slice(28,36), this.LITTLE_ENDIAN);
+    file_info.metadata.last_modified_date = this.get_eight_byte_date(file_bytes.slice(36,44), this.LITTLE_ENDIAN);
+    var write_time = this.get_eight_byte_date(file_bytes.slice(44,52), this.LITTLE_ENDIAN);
+    
+    var file_size = file_bytes.slice(52,56);
+    var icon_index = file_bytes.slice(56,60);
+    var show_cmd = file_bytes.slice(60,64);
+    var hot_key = file_bytes.slice(64,66);
+
+    // Skip the 10 reserved bytes
+    var byte_offset = 76;
+
+    if (link_flags[0] == 1) {
+      // HasLinkTargetIDList
+      var id_list_size = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+      var id_list_bytes = file_bytes.slice(byte_offset,byte_offset+id_list_size);
+      byte_offset += id_list_size;
+    }
+
+    // LinkInfo
+    var link_info_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var link_info_header_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var link_info_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
+    var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var cnrl_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+    if (local_base_path_offset >= 0x24) {
+      var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    }
+
+    if (common_path_suffix_offset >= 0x24) {
+      var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    }
+
+    if (link_info_flags[0] == 1) {
+      var volume_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var drive_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var drive_serial_number = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var drive_volume_lbl_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var drive_data_size = volume_size - 12;
+
+      if (drive_volume_lbl_offset == 0x14) {
+        // NULL-terminated string of Unicode characters
+        var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        drive_data_size += 4;
+      }
+
+      var drive_data_byte = file_bytes.slice(byte_offset,byte_offset+=drive_data_size);
+    }
+
+    // CommonNetworkRelativeLink
+    var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var cnrl_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
+    var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+    if (drive_volume_lbl_offset > 0x14) {
+      var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    }
+
+    if (device_name_offset > 0x14) {
+      var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    }
 
     return file_info;
   }
