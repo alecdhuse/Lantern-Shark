@@ -387,13 +387,16 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "Shortcut";
 
     var link_class_id = file_bytes.slice(4,20);
+
     var link_flags = this.get_binary_array(file_bytes.slice(20,24));
+    var link_strings_are_unicode = (link_flags[7]==1) ? true : false;
+
     var file_attribute_flags = this.get_binary_array(file_bytes.slice(24,28));
 
     file_info.metadata.creation_date = this.get_eight_byte_date(file_bytes.slice(28,36), this.LITTLE_ENDIAN);
     file_info.metadata.last_modified_date = this.get_eight_byte_date(file_bytes.slice(36,44), this.LITTLE_ENDIAN);
     var write_time = this.get_eight_byte_date(file_bytes.slice(44,52), this.LITTLE_ENDIAN);
-    
+
     var file_size = file_bytes.slice(52,56);
     var icon_index = file_bytes.slice(56,60);
     var show_cmd = file_bytes.slice(60,64);
@@ -410,20 +413,44 @@ class Static_File_Analyzer {
     }
 
     // LinkInfo
+    var link_info_start = byte_offset;
     var link_info_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
     var link_info_header_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var link_info_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
-    var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var cnrl_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var link_info_end = link_info_start + link_info_header_size;
 
-    if (local_base_path_offset >= 0x24) {
+    var link_info_flags = this.get_bin_from_int(file_bytes[byte_offset]).reverse();
+    byte_offset+=4;
+
+    var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+    var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var local_base_path_start = (link_info_start+local_base_path_offset);
+
+    var cnrl_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+    var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var common_path_suffix_start = (link_info_start+common_path_suffix_offset);
+
+    if (link_info_header_size >= 0x24) {
       var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      local_base_path_start = (link_info_start+local_base_path_offset_unicode);
     }
 
-    if (common_path_suffix_offset >= 0x24) {
+    var local_base_path_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start), true);
+    var local_base_path = Static_File_Analyzer.get_string_from_array(local_base_path_bytes);
+    if (local_base_path === null) {
+      local_base_path = Static_File_Analyzer.get_ascii(local_base_path_bytes);
+    }
+
+    if (link_info_header_size >= 0x24) {
       var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      common_path_suffix_start = (link_info_start+common_path_suffix_offset_unicode);
+    }
+
+    var common_path_suffix_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
+    var common_path_suffix = Static_File_Analyzer.get_string_from_array(common_path_suffix_bytes);
+    if (common_path_suffix === null) {
+      common_path_suffix = Static_File_Analyzer.get_ascii(common_path_suffix_bytes);
     }
 
     if (link_info_flags[0] == 1) {
@@ -442,19 +469,21 @@ class Static_File_Analyzer {
       var drive_data_byte = file_bytes.slice(byte_offset,byte_offset+=drive_data_size);
     }
 
-    // CommonNetworkRelativeLink
-    var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var cnrl_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
-    var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    if (link_info_flags[1] == 1) {
+      // CommonNetworkRelativeLink
+      var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var cnrl_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
+      var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
 
-    if (drive_volume_lbl_offset > 0x14) {
-      var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    }
+      if (net_name_offset > 0x14) {
+        var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      }
 
-    if (device_name_offset > 0x14) {
-      var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      if (drive_volume_lbl_offset > 0x14) {
+        var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      }
     }
 
     return file_info;
@@ -3858,6 +3887,36 @@ class Static_File_Analyzer {
     var msdos_date = year + "-" + month + "-" + day + " " + hour + ":" + minute + ":" + second;
 
     return msdos_date;
+  }
+
+  /**
+   * Returns an array of bytes starting with the givven array byte 0 and ending with the next null terminator.
+   * If there is no null terminator, the whole array will be returned.
+   *
+   * @param {array}  bytes       Ann array of integer values from 0 to 255.
+   * @param {boolam} double_byte If the null terminator should be two bytes, default i one byte.
+   * @return {array} The array of bytes with the null terminator.
+   */
+  get_null_terminated_bytes(bytes, double_byte=false) {
+    var return_array = [];
+
+    if (double_byte == false) {
+      for (var i=0; i<bytes.length; i++) {
+        return_array.push(bytes[i]);
+        if (bytes[i] == 0) break;
+      }
+    } else {
+      for (var i=0; i<bytes.length-1; i++) {
+        return_array.push(bytes[i]);
+
+        if (bytes[i] == 0 && bytes[i+1] == 0) {
+          return_array.push(bytes[i+1]);
+          break;
+        }
+      }
+    }
+
+    return return_array;
   }
 
   /**
