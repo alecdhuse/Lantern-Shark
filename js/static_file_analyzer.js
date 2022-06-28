@@ -77,6 +77,23 @@ class Static_File_Analyzer {
   /**
    * Extracts meta data and other information from ACE archive files.
    *
+   * @param  {String}    script_type Name of the script type to add.
+   * @param  {String}    script_text The actual script text.
+   * @param  {object}    file_info   The file_info object to add the script to.
+   * @return {undefined}
+   */
+  add_extracted_script(script_type, script_text, file_info) {
+    file_info.scripts.script_type = script_type;
+
+    if (!file_info.scripts.extracted_script.includes(script_text)) {
+      file_info.scripts.extracted_script += script_text;
+      file_info.scripts.extracted_script += (script_type == "Excel 4.0 Macro") ? "\n" : "\n\n";
+    }
+  }
+
+  /**
+   * Extracts meta data and other information from ACE archive files.
+   *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
@@ -189,13 +206,11 @@ class Static_File_Analyzer {
     for (var i=0; i<macro_functions.length; i++) {
       if (macro_functions[i].trim() != "") {
         new_finding = "";
-        file_info.scripts.extracted_script += "=" + macro_functions[i] + "\n";
+        this.add_extracted_script("Excel 4.0 Macro", "="+macro_functions[i], file_info);
 
         if (/CALL\(/gm.test(macro_functions[i])) {
-          file_info.scripts.script_type = "Excel 4.0 Macro";
           new_finding = "SUSPICIOUS - Use of CALL function";
         } else if (/EXEC\(/gm.test(macro_functions[i])) {
-          file_info.scripts.script_type = "Excel 4.0 Macro";
           new_finding = "SUSPICIOUS - Use of EXEC function";
         }
 
@@ -471,7 +486,7 @@ class Static_File_Analyzer {
         script_text = script_text.slice(0,-1);
       }
 
-      file_info.scripts.extracted_script += script_text + "\n\n";
+      this.add_extracted_script("JavaScript", script_text, file_info);
 
       if (script_matches[1].toLowerCase() == "js" || script_matches[1].toLowerCase() == "javascript") {
         file_info.scripts.script_type = "JavaScript";
@@ -1610,9 +1625,8 @@ class Static_File_Analyzer {
           var sub_match = /\n[a-z\s]?(?:Sub|Function)[^\(]+\([^\)]*\)/gmi.exec(vba_code);
 
           if (sub_match != null) {
-            file_info.scripts.script_type = "VBA Macro";
             vba_code = vba_code.substring(sub_match.index).trim();
-            file_info.scripts.extracted_script += vba_code + "\n\n";
+            this.add_extracted_script("VBA Macro", vba_code, file_info);
 
             document_obj = {
               'type': "spreadsheet",
@@ -2050,7 +2064,7 @@ class Static_File_Analyzer {
                     if (sub_match != null) {
                       var vba_code = vba_data.attributes[s].substring(sub_match.index).trim();
                       vba_code = this.pretty_print_vba(vba_code);
-                      file_info.scripts.extracted_script += vba_code + "\n\n";
+                      this.add_extracted_script("VBA Macro", vba_code, file_info);
                     }
                   }
                 }
@@ -2215,8 +2229,6 @@ class Static_File_Analyzer {
                     console.log("Unknown record type: " + current_record_info.record_number);
                   }
                 }
-
-                var tt=0; // DEBUG
               } else {
                 // XLM Sheet file
                 var sheet_xml = Static_File_Analyzer.get_string_from_array(sheet_file_bytes);
@@ -2288,9 +2300,10 @@ class Static_File_Analyzer {
           'byte_order': this.LITTLE_ENDIAN,
           'document_properties': {},
           'sheets': spreadsheet_sheet_names,
+          'string_constants': string_constants,
           'current_sheet_name': "",
           'current_cell': "",
-          'varables': {}
+          'varables': spreadsheet_defined_names
         };
 
         var vba_results = this.analyze_vba(file_info, document_obj);
@@ -2645,7 +2658,7 @@ class Static_File_Analyzer {
         dollar_sign_ref_match = dollar_sign_ref_regex.exec(macro_formula);
       }
 
-      file_info.scripts.extracted_script += macro_formula + "\n\n";
+      this.add_extracted_script("Excel 4.0 Macro", macro_formula, file_info);
     } else if (formula_name.toUpperCase() == "CHAR") {
       //String.fromCharCode(stack_result)
     } else if (formula_name.toUpperCase() == "EXEC") {
@@ -2653,7 +2666,7 @@ class Static_File_Analyzer {
         file_info.analytic_findings.push("SUSPICIOUS - Use of EXEC function");
       }
 
-      file_info.scripts.extracted_script += formula_matches.input + "\n\n";
+      this.add_extracted_script("Excel 4.0 Macro", formula_matches.input, file_info);
     } else if (formula_name.toUpperCase() == "FORMULA" || formula_name.toUpperCase() == "FILL") {
       /*  FORMULA(formula_text, reference)
           Formula_text - text, number, reference, or formula
@@ -2860,7 +2873,7 @@ class Static_File_Analyzer {
           // TODO: Implement this more fully.
           if (stack[c_index-1].value.charAt(0) == "=") {
             var code_script = stack[c_index-1].value.replaceAll(/\\?[\"\']&\\?[\"\']/gm, "");
-            file_info.scripts.extracted_script += code_script + "\n\n";
+            this.add_extracted_script("Excel 4.0 Macro", code_script, file_info);
 
             if (code_script.substr(0,3).toUpperCase() == "=IF") {
               // TODO return the actual valuse
@@ -4030,26 +4043,28 @@ class Static_File_Analyzer {
     var var_value = document_obj.varables[var_name];
 
     if (var_value !== null && var_value !== undefined) {
-      if (var_value.length > 0 && var_value.charAt(0) == "@") {
-        // This is a reference to a cell, we should re-calculate this are return the value.
-        if (document_obj.indexed_cells.hasOwnProperty(var_value.substring(1))) {
-          // The raw cell was found in the document pre-parse.
-          var raw_cell = document_obj.indexed_cells[var_value.substring(1)];
-          var parsed_cell;
+      if (!Array.isArray(var_value)) {
+        if (var_value.length > 0 && var_value.charAt(0) == "@") {
+          // This is a reference to a cell, we should re-calculate this are return the value.
+          if (document_obj.indexed_cells.hasOwnProperty(var_value.substring(1))) {
+            // The raw cell was found in the document pre-parse.
+            var raw_cell = document_obj.indexed_cells[var_value.substring(1)];
+            var parsed_cell;
 
-          if (raw_cell.record_type == "Formula") {
-            parsed_cell = this.parse_xls_formula_record(raw_cell, document_obj, file_info, document_obj.byte_order);
-          } else if (raw_cell.record_type == "LabelSst") {
-            parsed_cell = this.parse_xls_label_set_record(raw_cell, document_obj.string_constants, document_obj.byte_order);
-          } else if (raw_cell.record_type == "RK") {
-            parsed_cell = this.parse_xls_rk_record(raw_cell, document_obj.byte_order);
+            if (raw_cell.record_type == "Formula") {
+              parsed_cell = this.parse_xls_formula_record(raw_cell, document_obj, file_info, document_obj.byte_order);
+            } else if (raw_cell.record_type == "LabelSst") {
+              parsed_cell = this.parse_xls_label_set_record(raw_cell, document_obj.string_constants, document_obj.byte_order);
+            } else if (raw_cell.record_type == "RK") {
+              parsed_cell = this.parse_xls_rk_record(raw_cell, document_obj.byte_order);
+            }
+
+            var_value = parsed_cell.cell_data.value;
           }
 
-          var_value = parsed_cell.cell_data.value;
+        } else {
+          // Just return the value;
         }
-
-      } else {
-        // Just return the value;
       }
     } else{
       var_value = "";
@@ -5029,9 +5044,7 @@ class Static_File_Analyzer {
 
               if (at_ref_match === null) {
                 if (stack_result != c_formula_name) {
-                  if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
-                    file_info.scripts.extracted_script += stack_result + "\n\n";
-                  }
+                  this.add_extracted_script("Excel 4.0 Macro", stack_result, file_info);
                 }
               }
 
@@ -5303,12 +5316,7 @@ class Static_File_Analyzer {
             });
 
             var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj);
-
-            file_info.scripts.script_type = "Excel 4.0 Macro";
-            if (file_info.scripts.extracted_script.indexOf(stack_result.value) < 0) {
-              file_info.scripts.extracted_script += stack_result.value + "\n";
-            }
-
+            this.add_extracted_script("Excel 4.0 Macro", stack_result.value, file_info);
             cell_formula = stack_result.formula;
           } else if (tab_int == 0xA7) {
             // IPMT - https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/ipmt-function
@@ -5603,10 +5611,9 @@ class Static_File_Analyzer {
         var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
 
         if (((typeof stack_result) == "string") && stack_result.indexOf("=CALL") >= 0) {
-          file_info.scripts.script_type = "Excel 4.0 Macro";
-          if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
-            file_info.scripts.extracted_script += stack_result + "\n";
+          this.add_extracted_script("Excel 4.0 Macro", stack_result, file_info);
 
+          if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
             var analyzed_results = this.analyze_embedded_script(stack_result);
 
             for (var f=0; f<analyzed_results.findings.length; f++) {
