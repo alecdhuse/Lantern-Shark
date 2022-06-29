@@ -383,6 +383,8 @@ class Static_File_Analyzer {
   analyze_lnk(file_bytes) {
     var file_info = this.get_default_file_json();
 
+    var drive_types_arr = ['DRIVE_UNKNOWN','DRIVE_NO_ROOT_DIR','DRIVE_REMOVABLE','DRIVE_FIXED','DRIVE_REMOTE','DRIVE_CDROM','DRIVE_RAMDISK'];
+
     file_info.file_format = "lnk";
     file_info.file_generic_type = "Shortcut";
 
@@ -463,19 +465,21 @@ class Static_File_Analyzer {
     file_info = this.search_for_iocs(common_path_suffix, file_info);
 
     if (link_info_flags[0] == 1) {
+      var volume_obj_start = byte_offset;
       var volume_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var drive_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var drive_type = drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)];
       var drive_serial_number = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
       var drive_volume_lbl_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var drive_data_size = volume_size - 12;
+      var drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset;
 
       if (drive_volume_lbl_offset == 0x14) {
         // NULL-terminated string of Unicode characters
         var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        drive_data_size += 4;
+        drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset_unicode;
       }
 
-      var drive_data_byte = file_bytes.slice(byte_offset,byte_offset+=drive_data_size);
+      var drive_data_byte = this.get_null_terminated_bytes(file_bytes.slice(drive_volume_lbl_start));      
+      var drive_data_str = Static_File_Analyzer.get_string_from_array(drive_data_byte);
     }
 
     if (link_info_flags[1] == 1) {
