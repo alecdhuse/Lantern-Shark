@@ -439,7 +439,7 @@ class Static_File_Analyzer {
     var local_base_path_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start), true);
     var local_base_path = Static_File_Analyzer.get_string_from_array(local_base_path_bytes);
     if (local_base_path === null) {
-      local_base_path = Static_File_Analyzer.get_ascii(local_base_path_bytes);
+      local_base_path = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i !== 0));
     }
 
     if (link_info_header_size >= 0x24) {
@@ -450,8 +450,17 @@ class Static_File_Analyzer {
     var common_path_suffix_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
     var common_path_suffix = Static_File_Analyzer.get_string_from_array(common_path_suffix_bytes);
     if (common_path_suffix === null) {
-      common_path_suffix = Static_File_Analyzer.get_ascii(common_path_suffix_bytes);
+      common_path_suffix = Static_File_Analyzer.get_ascii(common_path_suffix_bytes.filter(i => i !== 0));
     }
+
+    this.add_extracted_script("Windows Command Shell", common_path_suffix, file_info);
+    common_path_suffix = common_path_suffix.replaceAll(/[^\s]\&\&[^\s]/gm, function(match, match_index, input_string) {
+      var str_part1 = input_string.slice(match_index, match_index+1);
+      var str_part2 = input_string.slice(match_index+3, match_index+4);
+      return str_part1 + " && " + str_part2;
+    });
+
+    file_info = this.search_for_iocs(common_path_suffix, file_info);
 
     if (link_info_flags[0] == 1) {
       var volume_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
