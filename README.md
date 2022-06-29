@@ -18,7 +18,8 @@ See the table below for a list of supported file types and types of data extract
 | GZ             | X            | X               |                 |          |                  |                   |
 | ISO            | X            | X               |                 |          |                  |                   |
 | JPEG           | X            | X               |                 |          |                  |                   |
-| PDF            | X            | X               |                 | X        |X                 |X                  |
+| LNK            | X            |                 |                 |          | X                | X                 |
+| PDF            | X            | X               |                 | X        | X                | X                 |
 | RAR            | X            | X               |                 |          |                  |                   |
 | RTF            | X            | X               |                 | X        |                  |                   |
 | PNG            | X            | X               |                 | X        |                  |                   |
