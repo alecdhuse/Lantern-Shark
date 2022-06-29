@@ -478,7 +478,7 @@ class Static_File_Analyzer {
         drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset_unicode;
       }
 
-      var drive_data_byte = this.get_null_terminated_bytes(file_bytes.slice(drive_volume_lbl_start));      
+      var drive_data_byte = this.get_null_terminated_bytes(file_bytes.slice(drive_volume_lbl_start));
       var drive_data_str = Static_File_Analyzer.get_string_from_array(drive_data_byte);
     }
 
@@ -5193,55 +5193,58 @@ class Static_File_Analyzer {
           // Put reference
           // Calculate the stack.
           var stack_result = this.execute_excel_stack(formula_calc_stack, document_obj).value;
-          stack_result = stack_result.replaceAll(/\\?[\"\']&\\?[\"\']/gm, "");
 
-          if (stack_result.charAt(0) == "=") {
-            // This is an Excel formula or macro
-            var c_formula_name = stack_result.split("(")[0].toUpperCase();
+          if (stack_result !== null && stack_result !== undefined && (typeof stack_result) == "string") {
+            stack_result = stack_result.replaceAll(/\\?[\"\']&\\?[\"\']/gm, "");
 
-            if (c_formula_name == "=CALL" || c_formula_name == "=EXEC" || c_formula_name == "=IF") {
-              file_info.scripts.script_type = "Excel 4.0 Macro";
+            if (stack_result.charAt(0) == "=") {
+              // This is an Excel formula or macro
+              var c_formula_name = stack_result.split("(")[0].toUpperCase();
 
-              var at_ref_match = /@([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)/gmi.exec(stack_result);
+              if (c_formula_name == "=CALL" || c_formula_name == "=EXEC" || c_formula_name == "=IF") {
+                file_info.scripts.script_type = "Excel 4.0 Macro";
 
-              if (at_ref_match === null) {
-                if (stack_result != c_formula_name) {
-                  this.add_extracted_script("Excel 4.0 Macro", stack_result, file_info);
-                }
-              }
+                var at_ref_match = /@([a-zA-Z0-9]+\![a-zA-Z]+[0-9]+)/gmi.exec(stack_result);
 
-              // Keep a list of downloaded file names.
-              var file_dl_match = /\=?CALL\s*\(\s*[\"\']urlmon[\"\']\s*,[^\,]+\,[^\,]+\,[^\,]+\,([^\,]+)(?:\,([^\,]+))?(?:\,([^\,]+))?/gmi.exec(stack_result);
-              if (file_dl_match !== null) {
-                if (file_dl_match[1].charAt(0) == "\"") {
-                  downloaded_files.push(file_dl_match[1].slice(1,-1));
-                }
-
-                if (file_dl_match[2].charAt(0) == "\"") {
-                  downloaded_files.push(file_dl_match[2].slice(1,-1));
-                }
-
-                if (file_dl_match[2].charAt(0) == "\"") {
-                  downloaded_files.push(file_dl_match[3].slice(1,-1));
-                }
-              }
-
-              // Check EXEC for usage of downloaded files.
-              if (c_formula_name == "=EXEC") {
-                for (var dl=0; dl<downloaded_files.length; dl++) {
-                  if (stack_result.indexOf(downloaded_files[dl]) > 0) {
-                    var new_finding = "SUSPICIOUS - Macro Execution of a Downloaded File";
-                    if (!file_info.analytic_findings.includes(new_finding)) {
-                      file_info.analytic_findings.push(new_finding);
-                    }
-                    break;
+                if (at_ref_match === null) {
+                  if (stack_result != c_formula_name) {
+                    this.add_extracted_script("Excel 4.0 Macro", stack_result, file_info);
                   }
                 }
-              }
 
-              // Check for IoCs
-              file_info = this.search_for_iocs(stack_result, file_info);
-            }
+                // Keep a list of downloaded file names.
+                var file_dl_match = /\=?CALL\s*\(\s*[\"\']urlmon[\"\']\s*,[^\,]+\,[^\,]+\,[^\,]+\,([^\,]+)(?:\,([^\,]+))?(?:\,([^\,]+))?/gmi.exec(stack_result);
+                if (file_dl_match !== null) {
+                  if (file_dl_match[1].charAt(0) == "\"") {
+                    downloaded_files.push(file_dl_match[1].slice(1,-1));
+                  }
+
+                  if (file_dl_match[2].charAt(0) == "\"") {
+                    downloaded_files.push(file_dl_match[2].slice(1,-1));
+                  }
+
+                  if (file_dl_match[2].charAt(0) == "\"") {
+                    downloaded_files.push(file_dl_match[3].slice(1,-1));
+                  }
+                }
+
+                // Check EXEC for usage of downloaded files.
+                if (c_formula_name == "=EXEC") {
+                  for (var dl=0; dl<downloaded_files.length; dl++) {
+                    if (stack_result.indexOf(downloaded_files[dl]) > 0) {
+                      var new_finding = "SUSPICIOUS - Macro Execution of a Downloaded File";
+                      if (!file_info.analytic_findings.includes(new_finding)) {
+                        file_info.analytic_findings.push(new_finding);
+                      }
+                      break;
+                    }
+                  }
+                }
+
+                // Check for IoCs
+                file_info = this.search_for_iocs(stack_result, file_info);
+              }
+            }            
           }
 
           cell_value = (cell_value === null) ? stack_result : cell_value + stack_result;
