@@ -238,7 +238,7 @@ function read_file(e) {
     $("#summary_file_encrypted_password_txt").val("");
     $("#summary_file_encrypted_password_txt").removeClass("field_invalid");
     $("#summary_file_encrypted_password_txt").removeClass("field_valid");
-    
+
     // Disable save toolbar item
     $("#toolbar_save_svg").css("fill", "#999");
     $("#toolbar_save_caption").css("color", "#999");
@@ -337,6 +337,29 @@ async function select_file_component(e, component_index=null) {
         var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
         $("#file_text").val(get_file_text(component_bytes));
 
+        if (component_bytes.length == 0) {
+          // This is a directory
+          $("#summary_file_format").html("Directory");
+          $("#summary_file_type").html("Directory");
+          $("#summary_file_format_ver").html("unknown");
+          $("#summary_file_encrypted").html("False");
+          $("#summary_detected_script").html("None");
+          $("#summary_metadata_title").html("unknown");
+          $("#summary_metadata_author").html("unknown");
+          $("#summary_metadata_description").html("unknown");
+          $("#summary_metadata_creation_application").html("unknown");
+          $("#summary_metadata_creation_os").html("unknown");
+          $("#summary_metadata_creation_date").html("unknown");
+          $("#summary_metadata_last_modified_date").html("unknown");
+          $("#summary_metadata_last_saved_location").html("unknown");
+          $("#script_code").val("");
+          $("#extracted_iocs").val("");
+          $("#analytic_findings").val("");
+        } else {
+          var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
+          display_file_summary(subfile_analyzer_results);
+        }
+
         // Enable save toolbar item
         $("#toolbar_save_svg").css("fill", "#000");
         $("#toolbar_save_caption").css("color", "#000");
@@ -370,5 +393,6 @@ async function select_top_level_file(e) {
     $(new_id).removeClass("file_tree_item_selected");
   }
 
+  display_file_summary(analyzer_results);
   $("#file_text").val(get_file_text(file_byte_array));
 }
