@@ -23,9 +23,10 @@ window.addEventListener('load', (event) => {
  */
 async function brute_force_zip(e) {
   if (window.zip) {
-    var component_bytes
+    var base_password;
+    var component_bytes;
     var component_index = analyzer_results.file_components.length - 1;
-    var first_try_passwords = ['infected','abc123','malware','virus'];
+    var first_try_passwords = ['infected','abc123','malware','virus','decreto','mise'];
 
     // Try a list of common passwords first.
     for (var i=0; i<first_try_passwords.length; i++) {
@@ -44,13 +45,13 @@ async function brute_force_zip(e) {
       }
     }
 
-    // Try all combinations of numbers up to length 5 second.
+    // Next try all combinations of numbers up to length 5.
     for (var i=0; i<99999; i++) {
-      file_password = i.toString(10);
+      base_password = i.toString(10);
 
       for (var i2=1; i2<6; i2++) {
         var lead_zero = new Array(i2).join("0");
-        file_password = lead_zero + file_password;
+        file_password = lead_zero + base_password;
 
         try {
           component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
@@ -62,18 +63,18 @@ async function brute_force_zip(e) {
             return;
           }
         } catch (err) {
-
+          if (err.message != "Invalid pasword") break;
         }
       }
     }
 
     // Next try alpha numetic values.
     for (var i=0; i<9999999999; i++) {
-      file_password = i.toString(36);
+      base_password = i.toString(36);
 
       for (var i2=1; i2<8; i2++) {
         var lead_zero = new Array(i2).join("0");
-        file_password = lead_zero + file_password;
+        file_password = lead_zero + base_password;
 
         try {
           component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);

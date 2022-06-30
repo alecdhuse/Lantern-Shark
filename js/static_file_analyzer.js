@@ -2048,56 +2048,15 @@ class Static_File_Analyzer {
     var archive_files = [];
     var current_file_start = 0;
 
-    while (this.array_equals(file_bytes.slice(current_file_start,current_file_start+4), [80,75,3,4])) {
-      var file_entry = {};
+    var new_zip = new zip.ZipReader(new zip.Uint8ArrayReader(new Uint8Array(file_bytes)), {useWebWorkers: false});
+    var new_zip_entries = await new_zip.getEntries({});
 
-      file_entry.extract_version = file_bytes.slice(current_file_start+4,current_file_start+6);
-      file_entry.extract_version_properties = this.get_zip_extract_version_properties(file_entry.extract_version);
+    for (var i=0; i<new_zip_entries.length; i++) {
+      var file_entry = new_zip_entries[i];
 
-      if (file_info.file_encryption_type == "unknown" || file_info.file_encryption_type == "none") {
-        file_info.file_encryption_type = file_entry.extract_version_properties.file_encryption_type;
-        file_info.file_encrypted = "true";
-      }
-
-      file_entry.general_purpose_flag_bytes = file_bytes.slice(current_file_start+6,current_file_start+8);
-      // For the general purpose flag, if the first bit (little endien ) is 1, file is encrypted.
-      file_entry.general_purpose_flag_bits = ("00000000" + (file_entry.general_purpose_flag_bytes[0]).toString(2)).slice(-8).split("").reverse();
-      if (file_entry.general_purpose_flag_bits[0] == 1  && file_bytes[current_file_start+7] == 0) {
-        file_info.file_encrypted = "true";
-        file_entry.file_encrypted = "true";
-
-        if (file_info.file_encryption_type == "unknown") {
-          if (file_bytes[current_file_start+8] == 99) {
-            file_info.file_encryption_type = "AES";
-            file_entry.file_encryption_type = "AES";
-          }
-        }
-      } else {
-        file_info.file_encrypted = "false";
-        file_info.file_encryption_type = "none";
-        file_entry.file_encrypted = "false";
-        file_entry.file_encryption_type = "none";
-      }
-
-      file_entry.compression_method_bytes = file_bytes.slice(current_file_start+8,current_file_start+10);
-      file_entry.compression_method_bits_1 = ("00000000" + (file_entry.compression_method_bytes[0]).toString(2)).slice(-8).split("").reverse();
-      file_entry.compression_method_bits_2 = ("00000000" + (file_entry.compression_method_bytes[1]).toString(2)).slice(-8).split("").reverse();
-
-      file_entry.file_mod_date = this.get_msdos_timestamp(file_bytes.slice(current_file_start+10,current_file_start+14));
-      file_entry.crc32 = file_bytes.slice(current_file_start+14,current_file_start+18);
-      file_entry.compressed_size = this.get_four_byte_int(file_bytes.slice(current_file_start+18,current_file_start+22), this.LITTLE_ENDIAN);
-      file_entry.uncompressed_size = this.get_four_byte_int(file_bytes.slice(current_file_start+22,current_file_start+26), this.LITTLE_ENDIAN);
-      file_entry.file_name_length = this.get_two_byte_int(file_bytes.slice(current_file_start+26,current_file_start+28), this.LITTLE_ENDIAN);
-      file_entry.extra_field_length = this.get_two_byte_int(file_bytes.slice(current_file_start+28,current_file_start+30), this.LITTLE_ENDIAN);
-
-      file_entry.file_name = Static_File_Analyzer.get_ascii(file_bytes.slice(current_file_start+30,current_file_start+30+file_entry.file_name_length));
-      file_entry.extra_field_start = current_file_start + 30 + file_entry.file_name_length;
-      file_entry.extra_field = file_bytes.slice(file_entry.extra_field_start, file_entry.extra_field_start + file_entry.extra_field_length);
-
-      file_entry.file_data_start = file_entry.extra_field_start + file_entry.extra_field_length;
-      file_entry.file_data = file_bytes.slice(file_entry.file_data_start, file_entry.file_data_start + file_entry.compressed_size);
-      file_entry.file_data_ascii = Static_File_Analyzer.get_ascii(file_entry.file_data);
-      current_file_start = file_entry.file_data_start + file_entry.compressed_size;
+      file_entry.file_name = file_entry.filename;
+      file_entry.file_encrypted = file_entry.encrypted;
+      file_info.file_encrypted = file_entry.encrypted.toString();
 
       if (file_entry.file_name.toLowerCase() == "[content_types].xml") {
         has_content_types_xml = true;
@@ -2111,7 +2070,9 @@ class Static_File_Analyzer {
       file_info.file_components.push({
         'name': file_entry.file_name,
         'type': "zip",
-        'uncompressed_size': file_entry.uncompressed_size
+        'directory': file_entry.directory,
+        'last_modified_date': file_entry.lastModDate.toISOString(),
+        'uncompressed_size': file_entry.uncompressedSize
       });
     }
 
