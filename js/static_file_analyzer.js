@@ -673,7 +673,42 @@ class Static_File_Analyzer {
         break;
       } else if (block_sig == 0xA0000009) {
         // PropertyStoreDataBlock
-        break;
+        var storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var format_id = file_bytes.slice(byte_offset,byte_offset+=16);
+
+        var guid = "";
+        var guid_index = 0;
+        for (var k=0; k<format_id.length; k++) {
+          var hex_code = format_id[k].toString(16).toUpperCase();
+          guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
+          guid = (k==3||k==5||k==7||k==9) ? guid += "-" : guid;
+        }
+
+        if (guid == "D5CDD505-2E9C-101B-9397-08002B2CF9AE") {
+          // String
+          var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+          while (value_size != 0 && !isNaN(value_size)) {
+            var name_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            byte_offset++ // skip reserved byte
+
+            var name_bytes = file_bytes.slice(byte_offset,byte_offset+=name_size);
+            var value_bytes = file_bytes.slice(byte_offset,byte_offset+=value_size);
+            value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          }
+        } else {
+          var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+          while (value_size != 0 && !isNaN(value_size)) {
+            var value_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            byte_offset++ // skip reserved byte
+
+            var value_bytes = file_bytes.slice(byte_offset,byte_offset+=value_size);
+            value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          }
+        }
+
       } else if (block_sig == 0xA000000B) {
         // KnownFolderDataBlock
         var known_folder_id_bytes = file_bytes.slice(byte_offset,byte_offset+=16);
