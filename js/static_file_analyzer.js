@@ -533,7 +533,7 @@ class Static_File_Analyzer {
     }
 
     this.add_extracted_script("Windows Command Shell", common_path_suffix, file_info);
-    common_path_suffix = common_path_suffix.replaceAll(/[^\s]\&\&[^\s]/gm, function(match, match_index, input_string) {
+    common_path_suffix = common_path_suffix.replaceAll(/(?:[^\s]\&\&[^\s]|[^\s]\&\&|\&\&[^\s])/gm, function(match, match_index, input_string) {
       var str_part1 = input_string.slice(match_index, match_index+1);
       var str_part2 = input_string.slice(match_index+3, match_index+4);
       return str_part1 + " && " + str_part2;
