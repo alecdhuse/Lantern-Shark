@@ -48,4 +48,5 @@ Lantern Shark uses the following libraries:
 
 # Credits
 - File Icon by Komkrit Noenpoempisut - https://thenounproject.com/icon/file-1876047/ (Purchased for this project)
+- Lightning Icon by Oh Rian - https://thenounproject.com/icon/lightning-4945896/ (Purchased for this project)
 - Unlock Icon by Andy M - https://thenounproject.com/icon/unlock-4584617/ (Purchased for this project)

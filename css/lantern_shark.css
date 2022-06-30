@@ -9,6 +9,14 @@ body {
   text-transform: capitalize;
 }
 
+.field_invalid {
+  border-color: #ff4343;
+}
+
+.field_valid {
+  border-color: #46e727;
+}
+
 #file_components_list {
   font-weight: normal;
 }
@@ -71,6 +79,14 @@ body {
 }
 
 #summary_file_encrypted_password_img {
+  cursor: pointer;
+  float: right;
+  height: 17px;
+  margin: 2px;
+  padding-left: 2px;
+}
+
+#summary_file_encrypted_password_force_img {
   cursor: pointer;
   float: right;
   height: 17px;

@@ -2110,7 +2110,8 @@ class Static_File_Analyzer {
       archive_files.push(file_entry);
       file_info.file_components.push({
         'name': file_entry.file_name,
-        'type': "zip"
+        'type': "zip",
+        'uncompressed_size': file_entry.uncompressed_size
       });
     }
 

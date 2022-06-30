@@ -8,11 +8,93 @@ window.addEventListener('load', (event) => {
   document.getElementById('tab_summary').addEventListener('click', change_tab, false);
   document.getElementById('tab_text').addEventListener('click', change_tab, false);
   document.getElementById('summary_file_encrypted_password_img').addEventListener('click', decrypt_file, false);
+  document.getElementById('summary_file_encrypted_password_force_img').addEventListener('click', brute_force_zip, false);
+  document.getElementById('summary_file_encrypted_password_txt').addEventListener('keydown', password_field_keydown, false);
 
   document.getElementById('open_file').addEventListener('change', read_file, false);
   document.getElementById('toolbar_open').addEventListener('click', function(){document.getElementById('open_file').click()}, false);
   document.getElementById('toolbar_save').addEventListener('click', save_selected, false);
 });
+
+/**
+ * Attempts to brute force a ZIP file's password.
+
+ * @param {Event}  e The event triggered from clicking the brute force image.
+ */
+async function brute_force_zip(e) {
+  if (window.zip) {
+    var component_bytes
+    var component_index = analyzer_results.file_components.length - 1;
+    var first_try_passwords = ['infected','abc123'];
+
+    // Try a list of common passwords first.
+    for (var i=0; i<first_try_passwords.length; i++) {
+      file_password = first_try_passwords[i];
+
+      try {
+        component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+        if (component_bytes.length == analyzer_results.file_components[component_index].uncompressed_size) {
+          // Password found!
+          $("#summary_file_encrypted_password_txt").val(file_password);
+          decrypt_file(e);
+          return;
+        }
+      } catch (err) {
+        if (err.message != "Invalid pasword") break;
+      }
+    }
+
+    // Try all combinations of numbers up to length 5 second.
+    for (var i=0; i<99999; i++) {
+      file_password = i.toString(10);
+
+      for (var i2=1; i2<6; i2++) {
+        var lead_zero = new Array(i2).join("0");
+        file_password = lead_zero + file_password;
+
+        try {
+          component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+
+          if (component_bytes.length == analyzer_results.file_components[component_index].uncompressed_size) {
+            // Password found!
+            $("#summary_file_encrypted_password_txt").val(file_password);
+            decrypt_file(e);
+            return;
+          }
+        } catch (err) {
+
+        }
+      }
+    }
+
+    // Next try alpha numetic values.
+    for (var i=0; i<9999999999; i++) {
+      file_password = i.toString(36);
+
+      for (var i2=1; i2<8; i2++) {
+        var lead_zero = new Array(i2).join("0");
+        file_password = lead_zero + file_password;
+
+        try {
+          component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+
+          if (component_bytes.length == analyzer_results.file_components[component_index].uncompressed_size) {
+            // Password found!
+            $("#summary_file_encrypted_password_txt").val(file_password);
+            decrypt_file(e);
+            return;
+          }
+        } catch (err) {
+          if (err.message != "Invalid pasword") break;
+        }
+      }
+    }
+
+
+  } else {
+    throw "Zip decompression library not found. Please include zip-full.js from https://github.com/gildas-lormeau/zip.js";
+  }
+}
 
 /**
  * Handles the UX changes for when a user changes tabs.
@@ -47,13 +129,23 @@ function change_tab(e) {
 async function decrypt_file(e) {
   file_password = $("#summary_file_encrypted_password_txt").val();
 
-  // If there is only one file, auto analyze that file
-  if (analyzer_results.file_components.length == 1) {
-    var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, 0, file_password);
-    var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
-    display_file_summary(subfile_analyzer_results);
-    select_file_component(null, 0);
+  try {
+    for (var i=0; i<analyzer_results.file_components.length; i++) {
+      if (analyzer_results.file_components[i].uncompressed_size > 1) {
+        // Analyze the first file that is not a directory.
+        var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, i, file_password);
+        var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
+        display_file_summary(subfile_analyzer_results);
+        select_file_component(null, i);
+        $("#summary_file_encrypted_password_txt").addClass("field_valid");
+        break;
+      }
+    }
+  } catch (err) {
+    // Wrong password
+    $("#summary_file_encrypted_password_txt").addClass("field_invalid");
   }
+
 }
 
 /**
@@ -110,6 +202,20 @@ function get_file_text(byte_array) {
     file_text = Static_File_Analyzer.get_ascii(byte_array);
 
   return file_text;
+}
+
+/**
+ * Removes the styling from the file password input or decrypts file if key is enter.
+
+ * @param {Event}  e The event triggered this function
+ */
+function password_field_keydown(e) {
+  if (e.key == "Enter") {
+    decrypt_file(e);
+  } else {
+    $("#summary_file_encrypted_password_txt").removeClass("field_invalid");
+    $("#summary_file_encrypted_password_txt").removeClass("field_valid");
+  }
 }
 
 /**
