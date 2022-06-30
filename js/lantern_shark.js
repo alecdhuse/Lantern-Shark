@@ -236,7 +236,9 @@ function read_file(e) {
 
     // Clear password field.
     $("#summary_file_encrypted_password_txt").val("");
-
+    $("#summary_file_encrypted_password_txt").removeClass("field_invalid");
+    $("#summary_file_encrypted_password_txt").removeClass("field_valid");
+    
     // Disable save toolbar item
     $("#toolbar_save_svg").css("fill", "#999");
     $("#toolbar_save_caption").css("color", "#999");
