@@ -532,15 +532,6 @@ class Static_File_Analyzer {
       drive_data_str = Static_File_Analyzer.get_string_from_array(drive_data_byte);
     }
 
-    this.add_extracted_script("Windows Command Shell", common_path_suffix, file_info);
-    common_path_suffix = common_path_suffix.replaceAll(/(?:[^\s]\&\&[^\s]|[^\s]\&\&|\&\&[^\s])/gm, function(match, match_index, input_string) {
-      var str_part1 = input_string.slice(match_index, match_index+1);
-      var str_part2 = input_string.slice(match_index+3, match_index+4);
-      return str_part1 + " && " + str_part2;
-    });
-
-    file_info = this.search_for_iocs(common_path_suffix, file_info);
-
     if (link_info_flags_obj.CommonNetworkRelativeLinkAndPathSuffix) {
       // CommonNetworkRelativeLink
       var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
@@ -593,8 +584,17 @@ class Static_File_Analyzer {
       string_data['icon_location'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
-    // ExtraData
+    var cmd_shell = local_base_path + " " + string_data['working_dir'];
+    this.add_extracted_script("Windows Command Shell", cmd_shell, file_info);
+    cmd_shell = cmd_shell.replaceAll(/(?:[^\s]\&\&[^\s]|[^\s]\&\&|\&\&[^\s])/gm, function(match, match_index, input_string) {
+      var str_part1 = input_string.slice(match_index, match_index+1);
+      var str_part2 = input_string.slice(match_index+3, match_index+4);
+      return str_part1 + " && " + str_part2;
+    });
 
+    file_info = this.search_for_iocs(cmd_shell, file_info);
+
+    // ExtraData
     var block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
 
     while (block_size >= 4) {
