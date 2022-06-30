@@ -2058,6 +2058,10 @@ class Static_File_Analyzer {
       file_entry.file_encrypted = file_entry.encrypted;
       file_info.file_encrypted = file_entry.encrypted.toString();
 
+      if (file_info.metadata.last_modified_date < file_entry.lastModDate.toISOString()) {
+        file_info.metadata.last_modified_date = file_entry.lastModDate.toISOString();
+      }
+
       if (file_entry.file_name.toLowerCase() == "[content_types].xml") {
         has_content_types_xml = true;
       }
