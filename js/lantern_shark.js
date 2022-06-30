@@ -289,6 +289,8 @@ function read_file(e) {
  * @param {Event}  e The event triggered from clicking the tab.
  */
 async function save_selected(e) {
+  file_password = $("#summary_file_encrypted_password_txt").val();
+  
   if (analyzer_results.file_components[selected_file_component].type == "zip") {
     var file_name = analyzer_results.file_components[selected_file_component].name;
     var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, selected_file_component, file_password);
@@ -317,8 +319,9 @@ async function select_file_component(e, component_index=null) {
   if (e !== null) {
     var component_id = e.currentTarget.id;
     var component_index = parseInt(component_id.split("_")[1]);
-    selected_file_component = component_index;
   }
+
+  selected_file_component = component_index;
 
   if (component_index !== null) {
     // Change UI to show selected component
