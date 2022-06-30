@@ -224,12 +224,19 @@ async function select_file_component(e, component_index=null) {
 
     if (analyzer_results.file_components[component_index].type == "zip") {
       file_password = ($("#summary_file_encrypted_password_txt").val().length > 0) ? $("#summary_file_encrypted_password_txt").val() : null;
-      var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
-      $("#file_text").val(get_file_text(component_bytes));
 
-      // Enable save toolbar item
-      $("#toolbar_save_svg").css("fill", "#000");
-      $("#toolbar_save_caption").css("color", "#000");
+      try {
+        var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+        $("#file_text").val(get_file_text(component_bytes));
+
+        // Enable save toolbar item
+        $("#toolbar_save_svg").css("fill", "#000");
+        $("#toolbar_save_caption").css("color", "#000");
+      } catch(err) {
+        // Disable save toolbar item
+        $("#toolbar_save_svg").css("fill", "#999");
+        $("#toolbar_save_caption").css("color", "#999");
+      }
     } else {
       // Code for other componets
 
