@@ -25,7 +25,7 @@ async function brute_force_zip(e) {
   if (window.zip) {
     var component_bytes
     var component_index = analyzer_results.file_components.length - 1;
-    var first_try_passwords = ['infected','abc123'];
+    var first_try_passwords = ['infected','abc123','malware','virus'];
 
     // Try a list of common passwords first.
     for (var i=0; i<first_try_passwords.length; i++) {
