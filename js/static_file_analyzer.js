@@ -46,7 +46,8 @@ class Static_File_Analyzer {
       file_info = this.analyze_exe(file_bytes);
     } else if (this.array_equals(file_bytes.slice(0,2), [31,139])) {
       file_info = this.analyze_gz(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49])) {
+    } else if (this.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
+               this.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
       file_info = this.analyze_iso9660(file_bytes);
     } else if (this.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
       file_info = this.analyze_jpeg(file_bytes);
