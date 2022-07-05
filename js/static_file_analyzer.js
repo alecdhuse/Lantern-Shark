@@ -326,8 +326,106 @@ class Static_File_Analyzer {
           }
         }
 
-
         file_info.file_format_ver = "Universal Disk Format V" + udf_version_str;
+        // @see https://wiki.osdev.org/UDF
+
+        // Get sector size
+        var anchor_pointer = 0;
+        var decr_tag_buffer = []
+        var sector_size = 0;
+        var sector_start = 0;
+
+        var main_volume_descriptor_sequence_extent = null;
+        var reserve_volume_descriptor_sequence_extent = null;
+
+        var sector_sizes = [4096, 2048, 1024, 512];
+
+        for (var i=0; i<sector_sizes.length; i++) {
+          // File is not large enough for this sector size, skip it.
+          if (file_bytes.length < sector_sizes[i] * 257) continue;
+
+          sector_start = sector_sizes[i] * 256;
+          decr_tag_buffer = file_bytes.slice(sector_start, sector_start+16);
+          var anchor_descriptor_tag = this.parse_udf_descriptor_tag(decr_tag_buffer);
+
+          if (anchor_descriptor_tag.valid == false) continue;
+          if (anchor_descriptor_tag.tag_identifier != 2) continue; // Skip if this is not Anchor Volume Description Pointer
+
+          sector_size = sector_sizes[i];
+          anchor_pointer = anchor_descriptor_tag.tag_location;
+
+          main_volume_descriptor_sequence_extent = {
+            'length': this.get_four_byte_int(file_bytes.slice(sector_start+16, sector_start+20), this.LITTLE_ENDIAN),
+            'location': this.get_four_byte_int(file_bytes.slice(sector_start+20, sector_start+24), this.LITTLE_ENDIAN)
+          }
+
+          reserve_volume_descriptor_sequence_extent = {
+            'length': this.get_four_byte_int(file_bytes.slice(sector_start+24, sector_start+28), this.LITTLE_ENDIAN),
+            'location': this.get_four_byte_int(file_bytes.slice(sector_start+28, sector_start+32), this.LITTLE_ENDIAN)
+          }
+
+          break;
+        }
+
+        var logical_volume_descriptor = null;
+        var partition_descriptor = null;
+
+        if (main_volume_descriptor_sequence_extent !== null) {
+          // find the partition descriptor
+          for (var i=0; i<=256; i++) {
+            sector_start = sector_size * (main_volume_descriptor_sequence_extent.location + i);
+            var sector_descriptor_buffer = file_bytes.slice(sector_start, sector_start+16);
+            var descriptor_tag = this.parse_udf_descriptor_tag(sector_descriptor_buffer);
+
+            if (descriptor_tag.valid) {
+              if (descriptor_tag.tag_identifier == 5) {
+                // Partition Descriptor
+                partition_descriptor = {
+                  'sequence_number': this.get_four_byte_int(file_bytes.slice(sector_start+16,sector_start+20), this.LITTLE_ENDIAN),
+                  'flags': this.get_two_byte_int(file_bytes.slice(sector_start+20,sector_start+22), this.LITTLE_ENDIAN),
+                  'partition_number': this.get_four_byte_int(file_bytes.slice(sector_start+22,sector_start+24), this.LITTLE_ENDIAN),
+                  'entity_flags': file_bytes[sector_start+24],
+                  'entity_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+25,sector_start+48).filter(i => i > 31)),
+                  'entity_identifier_suffix': file_bytes.slice(sector_start+48,sector_start+56),
+                  'contents_use': file_bytes.slice(sector_start+56,sector_start+184),
+                  'access_type': this.get_four_byte_int(file_bytes.slice(sector_start+184,sector_start+188), this.LITTLE_ENDIAN),
+                  'starting_location': this.get_four_byte_int(file_bytes.slice(sector_start+188,sector_start+192), this.LITTLE_ENDIAN),
+                  'partition_length': this.get_four_byte_int(file_bytes.slice(sector_start+192,sector_start+196), this.LITTLE_ENDIAN),
+                  'implementation_identifier': file_bytes.slice(sector_start+196,sector_start+228),
+                  'implementation_use': file_bytes.slice(sector_start+228,sector_start+356)
+                };
+
+                partition_descriptor['byte_start'] = (sector_size * partition_descriptor.starting_location);
+              } else if (descriptor_tag.tag_identifier == 6) {
+                // Logical Volume Descriptor
+                logical_volume_descriptor = {
+                  'sequence_number': this.get_four_byte_int(file_bytes.slice(sector_start+16,sector_start+20), this.LITTLE_ENDIAN),
+                  'character_set': file_bytes.slice(sector_start+20,sector_start+84),
+                  'logical_volume_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+84,sector_start+128).filter(i => i > 31)),
+                  'logical_block_size': this.get_four_byte_int(file_bytes.slice(sector_start+212,sector_start+216), this.LITTLE_ENDIAN),
+                  'entity_flags': file_bytes[sector_start+216],
+                  'entity_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+217,sector_start+240).filter(i => i > 31)),
+                  'entity_identifier_suffix': file_bytes.slice(sector_start+240,sector_start+248),
+                  'contents_use': file_bytes.slice(sector_start+248,sector_start+264),
+                  'map_table_length': this.get_four_byte_int(file_bytes.slice(sector_start+264,sector_start+268), this.LITTLE_ENDIAN),
+                  'number_of_partition_maps': this.get_four_byte_int(file_bytes.slice(sector_start+268,sector_start+272), this.LITTLE_ENDIAN),
+                  'implementation_flags': file_bytes[sector_start+272],
+                  'implementation_identifier': file_bytes.slice(sector_start+273,sector_start+296),
+                  'implementation_identifier_suffix': file_bytes.slice(sector_start+296,sector_start+304),
+                  'implementation_use': file_bytes.slice(sector_start+304,sector_start+432),
+                  'integrity_sequence_extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+432,sector_start+436), this.LITTLE_ENDIAN),
+                  'integrity_sequence_extent_location': this.get_four_byte_int(file_bytes.slice(sector_start+436,sector_start+440), this.LITTLE_ENDIAN),
+                  'raw_partition_maps': file_bytes.slice(sector_start+440,sector_start+512)
+                };
+              }
+
+            }
+          }
+          var debug333=0;
+
+          // Read files
+        }
+
       }
     }
 
@@ -4932,6 +5030,56 @@ class Static_File_Analyzer {
     }
 
     return stream_properties;
+  }
+
+  /**
+   * Parses the descriptor tag for a Universal Disk Format file.
+   *
+   * @see https://wiki.osdev.org/UDF
+   *
+   * @param {object}   decr_tag_buffer Byte buffer with the 16 bytes that make up the descriptor tag.
+   * @return {Object}  An object with the parsed descriptor tag.
+   */
+  parse_udf_descriptor_tag(decr_tag_buffer) {
+    var tag_identifiers = [0x0001,0x0002,0x0003,0x0004,0x0005,0x0006,0x0007,0x0008,0x0009,0x0100,0x0101,0x0102,0x0103,0x0104,0x0105,0x0106,0x0107,0x0108,0x0109,0x010a];
+
+    var descriptor_tag = {
+      'tag_identifier': 0,
+      'descriptor_version': 0,
+      'tag_checksum': 0,
+      'tag_serial_number': 0,
+      'descriptor_crc': 0,
+      'descriptor_crc_length': 0,
+      'tag_location': 0,
+      'valid': false
+    };
+
+    descriptor_tag.tag_identifier = this.get_two_byte_int(decr_tag_buffer.slice(0,2), this.LITTLE_ENDIAN);
+    if (tag_identifiers.includes(descriptor_tag.tag_identifier)) {
+      descriptor_tag.descriptor_version = this.get_two_byte_int(decr_tag_buffer.slice(2,4), this.LITTLE_ENDIAN);
+      descriptor_tag.tag_checksum = decr_tag_buffer[4];
+      descriptor_tag.tag_serial_number = this.get_two_byte_int(decr_tag_buffer.slice(6,8), this.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_crc = this.get_two_byte_int(decr_tag_buffer.slice(8,10), this.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_crc_length = this.get_two_byte_int(decr_tag_buffer.slice(10,12), this.LITTLE_ENDIAN);
+      descriptor_tag.tag_location = this.get_four_byte_int(decr_tag_buffer.slice(12,16), this.LITTLE_ENDIAN);
+    }
+
+    // Verify checksum
+    var checksum = 0;
+    for (var i2=0; i2<decr_tag_buffer.length; i2++) {
+      if (i2==4) continue;
+      checksum += decr_tag_buffer[i2];
+    }
+
+    while (checksum > 256) checksum -= 256; // Truncate to byte
+
+    if (descriptor_tag.tag_checksum == checksum) {
+      descriptor_tag.valid = true;
+    } else {
+      descriptor_tag.valid = false;
+    }
+
+    return descriptor_tag;
   }
 
   /**
