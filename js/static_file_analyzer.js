@@ -369,6 +369,7 @@ class Static_File_Analyzer {
 
         var logical_volume_descriptor = null;
         var partition_descriptor = null;
+        var terminating_descriptor = null;
 
         if (main_volume_descriptor_sequence_extent !== null) {
           // find the partition descriptor
@@ -415,11 +416,78 @@ class Static_File_Analyzer {
                   'implementation_use': file_bytes.slice(sector_start+304,sector_start+432),
                   'integrity_sequence_extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+432,sector_start+436), this.LITTLE_ENDIAN),
                   'integrity_sequence_extent_location': this.get_four_byte_int(file_bytes.slice(sector_start+436,sector_start+440), this.LITTLE_ENDIAN),
-                  'raw_partition_maps': file_bytes.slice(sector_start+440,sector_start+512)
+                  'raw_partition_maps': file_bytes.slice(sector_start+440,sector_start+512),
+                  'partitions': []
                 };
+
+                var partition_index = 0;
+
+                for (var i2=0; i2<logical_volume_descriptor.number_of_partition_maps; i2++) {
+                  var partition_type = logical_volume_descriptor.raw_partition_maps[partition_index];
+                  var partition_length = logical_volume_descriptor.raw_partition_maps[partition_index+1];
+                  var volume_sequence_number = this.get_two_byte_int(logical_volume_descriptor.raw_partition_maps.slice(partition_index+2, partition_index+4), this.LITTLE_ENDIAN);
+                  var partition_number = this.get_two_byte_int(logical_volume_descriptor.raw_partition_maps.slice(partition_index+4, partition_index+6), this.LITTLE_ENDIAN);
+
+                  logical_volume_descriptor.partitions.push({
+                    'partition_type': partition_type,
+                    'partition_length': partition_length,
+                    'volume_sequence_number': volume_sequence_number,
+                    'partition_number': partition_number
+                  });
+
+                  partition_index += partition_length;
+                }
+
+                logical_volume_descriptor.file_set_descriptor_location = {
+                  'length': this.get_four_byte_int(logical_volume_descriptor.contents_use.slice(0,4)),
+                  'logical_block_number': this.get_four_byte_int(logical_volume_descriptor.contents_use.slice(4,8)),
+                  'partition_reference_number': this.get_two_byte_int(logical_volume_descriptor.contents_use.slice(8,10)),
+                  'implementation_use': logical_volume_descriptor.contents_use.slice(10,16)
+                };
+              } else if (descriptor_tag.tag_identifier == 8) {
+                // Terminating Descriptor
+                terminating_descriptor = {};
               }
 
             }
+          }
+
+          if (logical_volume_descriptor !== null) {
+            var partition = logical_volume_descriptor.partitions[logical_volume_descriptor.file_set_descriptor_location.logical_block_number];
+            var offset = partition_descriptor.starting_location * sector_size;
+            var pos = logical_volume_descriptor.file_set_descriptor_location.logical_block_number * logical_volume_descriptor.logical_block_size;
+            var start_location = offset + pos;
+            var length = logical_volume_descriptor.file_set_descriptor_location.length;
+            var fsd_buffer = file_bytes.slice(start_location, length);
+
+            var descriptor_tag = this.parse_udf_descriptor_tag(fsd_buffer.slice(0,16));
+
+            if (descriptor_tag.tag_identifier == 0x0105) {
+              // File Entry
+              var timestamp = fsd_buffer.slice(16,28);
+              var interchange_level = this.get_two_byte_int(fsd_buffer.slice(28,30));
+              var maximum_interchange_level = this.get_two_byte_int(fsd_buffer.slice(30,32));
+              var character_set_list = this.get_four_byte_int(fsd_buffer.slice(32,36));
+              var maximum_character_set_list = this.get_four_byte_int(fsd_buffer.slice(36,40));
+              var file_set_number = this.get_four_byte_int(fsd_buffer.slice(40,44));
+              var file_set_descriptor_number = this.get_four_byte_int(fsd_buffer.slice(44,48));
+              var logical_volume_identifier_character_set = fsd_buffer.slice(48,112);
+              var logical_volume_identifier = Static_File_Analyzer.get_ascii(fsd_buffer.slice(112,128).filter(i => i > 31));
+            } else if (descriptor_tag.tag_identifier == 0x010a) {
+              // Extended File Entry
+              var icb_tag = fsd_buffer.slice(16,36);
+              var uid = this.get_four_byte_int(fsd_buffer.slice(36,40));
+              var gid = this.get_four_byte_int(fsd_buffer.slice(40,44));
+              var permissions = this.get_four_byte_int(fsd_buffer.slice(44,48));
+              var file_link_count = this.get_four_byte_int(fsd_buffer.slice(48,50));
+              var record_format = fsd_buffer[50];
+              var record_display_attributes = fsd_buffer[51];
+              var record_length = this.get_four_byte_int(fsd_buffer.slice(52,56));
+              var info_length = fsd_buffer.slice(56,64);
+              
+            }
+
+
           }
           var debug333=0;
 
