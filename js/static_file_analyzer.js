@@ -413,7 +413,7 @@ class Static_File_Analyzer {
                 file_info.metadata.creation_application = partition_descriptor.implementation_identifier;
                 if (partition_descriptor.implementation_identifier == "Microsoft IMAPI2 1.0") {
                   file_info.metadata.creation_os = "Windows";
-                }                
+                }
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Logical Volume Descriptor
                 logical_volume_descriptor = {
@@ -463,6 +463,58 @@ class Static_File_Analyzer {
               } else if (descriptor_tag.tag_identifier == 8) {
                 // Terminating Descriptor
                 terminating_descriptor = {};
+              } else if (descriptor_tag.tag_identifier == 0x10A) {
+                // Extended File Entry
+                var extended_file_entry = {
+                  'descriptor_tag': descriptor_tag,
+                  'icb_tag': Universal_Disk_Format_Parser.parse_icb_tag(file_bytes.slice(sector_start+16,sector_start+36)),
+                  'uid': this.get_four_byte_int(file_bytes.slice(sector_start+36,sector_start+40), this.LITTLE_ENDIAN),
+                  'gid': this.get_four_byte_int(file_bytes.slice(sector_start+40,sector_start+44), this.LITTLE_ENDIAN),
+                  'permissions': this.get_four_byte_int(file_bytes.slice(sector_start+44,sector_start+48), this.LITTLE_ENDIAN),
+                  'file_link_count': this.get_two_byte_int(file_bytes.slice(sector_start+48,sector_start+50), this.LITTLE_ENDIAN),
+                  'record_format': file_bytes[50],
+                  'record_display_attributes': file_bytes[51],
+                  'record_length': this.get_four_byte_int(file_bytes.slice(sector_start+52,sector_start+56), this.LITTLE_ENDIAN),
+                  'information_length': this.get_eight_byte_int(file_bytes.slice(sector_start+56,sector_start+64), this.LITTLE_ENDIAN),
+                  'object_size': this.get_eight_byte_int(file_bytes.slice(sector_start+64,sector_start+72), this.LITTLE_ENDIAN),
+                  'logical_blocks_recorded': this.get_eight_byte_int(file_bytes.slice(sector_start+72,sector_start+80), this.LITTLE_ENDIAN),
+                  'access_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+80,sector_start+92)),
+                  'modification_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+92,sector_start+104)),
+                  'creation_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+104,sector_start+116)),
+                  'attribute_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+116,sector_start+128)),
+                  'checkpoint': this.get_four_byte_int(file_bytes.slice(sector_start+128,sector_start+132), this.LITTLE_ENDIAN),
+                  'reserved': file_bytes.slice(sector_start+132,sector_start+136),
+                  'extended_attribute_icb': {
+                    'extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+136,sector_start+140), this.LITTLE_ENDIAN),
+                    'extent_location': {
+                      'logical_block_number': this.get_four_byte_int(file_bytes.slice(sector_start+140,sector_start+144), this.LITTLE_ENDIAN),
+                      'partition_reference_number': this.get_two_byte_int(file_bytes.slice(sector_start+144,sector_start+146), this.LITTLE_ENDIAN),
+                    },
+                    'implementation_use': file_bytes.slice(sector_start+146,sector_start+152)
+                  },
+                  'stream_directory_icb': {
+                    'extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+152,sector_start+156), this.LITTLE_ENDIAN),
+                    'extent_location': {
+                      'logical_block_number': this.get_four_byte_int(file_bytes.slice(sector_start+156,sector_start+160), this.LITTLE_ENDIAN),
+                      'partition_reference_number': this.get_two_byte_int(file_bytes.slice(sector_start+160,sector_start+162), this.LITTLE_ENDIAN),
+                    },
+                    'implementation_use': file_bytes.slice(sector_start+162,sector_start+168)
+                  },
+                  'implementation_identifier': {
+                    'flags': file_bytes[168],
+                    'identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+167,sector_start+190).filter(i => i > 31)),
+                    'identifier_suffix': file_bytes.slice(sector_start+190,sector_start+198)
+                  },
+                  'unique_id': this.get_eight_byte_int(file_bytes.slice(sector_start+200,sector_start+208), this.LITTLE_ENDIAN),
+                  'length_of_extended_attributes': this.get_four_byte_int(file_bytes.slice(sector_start+208,sector_start+212), this.LITTLE_ENDIAN),
+                  'length_of_allocation_descriptors': this.get_four_byte_int(file_bytes.slice(sector_start+212,sector_start+216), this.LITTLE_ENDIAN),
+                };
+
+
+                extended_file_entry['extended_attributes'] = file_bytes.slice(sector_start+216,sector_start+216+extended_file_entry.length_of_extended_attributes);
+                extended_file_entry['allocation_descriptors'] = file_bytes.slice(sector_start+216+extended_file_entry.length_of_extended_attributes,sector_start+216+extended_file_entry.length_of_extended_attributes+extended_file_entry.length_of_allocation_descriptors);
+
+                var debug123=0;
               }
 
             }
@@ -4327,6 +4379,29 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Converts an array of int values 0-255 to an integer.
+   *
+   * @param {array}    bytes Array with int values 0-255 representing byte values.
+   * @param {String}   endianness Value indicating how to interperate the bit order of the byte array. Default is BIG_ENDIAN.
+   * @return {integer} The integer value of the given bit array.
+   */
+  static get_int_from_bytes(bytes, endianness = "BIG_ENDIAN") {
+    var int_bits = "";
+
+    if (endianness == "LITTLE_ENDIAN") {
+      for (var byte_index = (bytes.length-1); byte_index >= 0; byte_index--) {
+        int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
+      }
+    } else {
+      for (var byte_index = 0; byte_index < bytes.length; byte_index++) {
+        int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
+      }
+    }
+
+    return parseInt(int_bits, 2);
+  }
+
+  /**
    * Converts an array with two int values 0-255 to an integer.
    *
    * @param {array}    bytes Array with two int values 0-255 representing byte values.
@@ -6780,5 +6855,55 @@ class Static_File_Analyzer {
       'urls': found_urls,
       'findings': findings
     }
+  }
+}
+
+class Universal_Disk_Format_Parser {
+  /**
+   * Converts an array with twelve int values 0-255 to a timestamp.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf
+   *
+   * @param {array}   bytes Array with twelve int values 0-255 representing byte values.
+   * @return {String} The timestamp converted from the four byte array.
+   */
+  static get_ecma_timestamp(bytes) {
+    var type_and_timezone = Static_File_Analyzer.get_int_from_bytes(bytes.slice(0,2), "LITTLE_ENDIAN");
+    var year = Static_File_Analyzer.get_int_from_bytes(bytes.slice(2,4), "LITTLE_ENDIAN");
+    year = (year == 0) ? "0000" : year;
+
+    var month = (bytes[4] < 10) ? "0"+bytes[4] : bytes[4];
+    var day = (bytes[5] < 10) ? "0"+bytes[5] : bytes[5];
+    var hour = (bytes[6] < 10) ? "0"+bytes[6] : bytes[6];
+    var minute = (bytes[7] < 10) ? "0"+bytes[7] : bytes[7];
+    var second = (bytes[8] < 10) ? "0"+bytes[8] : bytes[8];
+
+    var timestamp = year + "-" + month + "-" + day + " " + hour + ":" + minute + ":" + second;
+    return timestamp;
+  }
+
+  /**
+   * Parse the ICB Tag in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.6 ICB Tag
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the ICB Tag start byte.
+   * @return {object} The parsed ICB Tag
+   */
+  static parse_icb_tag(arr_bytes) {
+    var icb_tag = {
+      'prior_recorded_number_of_direct_entries': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(0,4), "LITTLE_ENDIAN"),
+      'strategy_type': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(4,6), "LITTLE_ENDIAN"),
+      'strategy_parameter': arr_bytes.slice(6,8),
+      'max_number_of_entries': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(8,10), "LITTLE_ENDIAN"),
+      'file_type': arr_bytes[11],
+      'parent_icb_location': {
+        'logical_block_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(12,16), "LITTLE_ENDIAN"),
+        'partition_reference_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,18), "LITTLE_ENDIAN")
+      },
+      'flags': arr_bytes.slice(18,20)
+    };
+
+    return icb_tag;
   }
 }
