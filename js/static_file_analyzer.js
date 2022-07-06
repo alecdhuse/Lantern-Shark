@@ -399,7 +399,7 @@ class Static_File_Analyzer {
                   'access_type': this.get_four_byte_int(file_bytes.slice(sector_start+184,sector_start+188), this.LITTLE_ENDIAN),
                   'starting_location': this.get_four_byte_int(file_bytes.slice(sector_start+188,sector_start+192), this.LITTLE_ENDIAN),
                   'partition_length': this.get_four_byte_int(file_bytes.slice(sector_start+192,sector_start+196), this.LITTLE_ENDIAN),
-                  'implementation_identifier': file_bytes.slice(sector_start+196,sector_start+228),
+                  'implementation_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+196,sector_start+228).filter(i => i > 31)),
                   'implementation_use': file_bytes.slice(sector_start+228,sector_start+356)
                 };
 
@@ -408,6 +408,12 @@ class Static_File_Analyzer {
                   'start': (partition_descriptor.starting_location * sector_size),
                   'length': (partition_descriptor.partition_length * sector_size)
                 };
+
+                // Update file metadata
+                file_info.metadata.creation_application = partition_descriptor.implementation_identifier;
+                if (partition_descriptor.implementation_identifier == "Microsoft IMAPI2 1.0") {
+                  file_info.metadata.creation_os = "Windows";
+                }                
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Logical Volume Descriptor
                 logical_volume_descriptor = {
@@ -422,7 +428,7 @@ class Static_File_Analyzer {
                   'map_table_length': this.get_four_byte_int(file_bytes.slice(sector_start+264,sector_start+268), this.LITTLE_ENDIAN),
                   'number_of_partition_maps': this.get_four_byte_int(file_bytes.slice(sector_start+268,sector_start+272), this.LITTLE_ENDIAN),
                   'implementation_flags': file_bytes[sector_start+272],
-                  'implementation_identifier': file_bytes.slice(sector_start+273,sector_start+296),
+                  'implementation_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+273,sector_start+296).filter(i => i > 31)),
                   'implementation_identifier_suffix': file_bytes.slice(sector_start+296,sector_start+304),
                   'implementation_use': file_bytes.slice(sector_start+304,sector_start+432),
                   'integrity_sequence_extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+432,sector_start+436), this.LITTLE_ENDIAN),
@@ -480,7 +486,8 @@ class Static_File_Analyzer {
                 var lof_id = fid_buffer[current_byte++];
                 var icb_tag = {
                   'extent_length ': this.get_four_byte_int(fid_buffer.slice(current_byte,current_byte+=4), this.LITTLE_ENDIAN),
-                  'extent_location': fid_buffer.slice(current_byte,current_byte+=6),
+                  'logical_block_number': this.get_four_byte_int(fid_buffer.slice(current_byte,current_byte+=4), this.LITTLE_ENDIAN),
+                  'partition_reference_number': this.get_two_byte_int(fid_buffer.slice(current_byte,current_byte+=2)),
                   'implementation_use': fid_buffer.slice(current_byte,current_byte+=6)
                 };
                 var loi_use = this.get_two_byte_int(fid_buffer.slice(current_byte,current_byte+=2));
@@ -498,7 +505,6 @@ class Static_File_Analyzer {
                     'type': "iso"
                   });
 
-                  var test = this.get_four_byte_int(icb_tag.extent_location, this.LITTLE_ENDIAN);
                   var debug12311=0;
                 }
 
