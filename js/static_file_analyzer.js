@@ -466,6 +466,16 @@ class Static_File_Analyzer {
               } else if (descriptor_tag.tag_identifier == 0x10A) {
                 // Extended File Entry
                 var extended_file_entry = Universal_Disk_Format_Parser.parse_extended_file_entry(file_bytes.slice(sector_start,sector_start+sector_size));
+
+                // Update metadata
+                if (file_info.metadata.last_modified_date == "0000-00-00 00:00:00") {
+                  file_info.metadata.last_modified_date = extended_file_entry.modification_timestamp;
+                }
+
+                if (file_info.metadata.creation_date == "0000-00-00 00:00:00") {
+                  file_info.metadata.creation_date = extended_file_entry.creation_timestamp;
+                }
+                
                 var debug123=0;
               }
 
