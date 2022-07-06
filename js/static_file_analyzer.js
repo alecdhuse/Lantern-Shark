@@ -465,55 +465,7 @@ class Static_File_Analyzer {
                 terminating_descriptor = {};
               } else if (descriptor_tag.tag_identifier == 0x10A) {
                 // Extended File Entry
-                var extended_file_entry = {
-                  'descriptor_tag': descriptor_tag,
-                  'icb_tag': Universal_Disk_Format_Parser.parse_icb_tag(file_bytes.slice(sector_start+16,sector_start+36)),
-                  'uid': this.get_four_byte_int(file_bytes.slice(sector_start+36,sector_start+40), this.LITTLE_ENDIAN),
-                  'gid': this.get_four_byte_int(file_bytes.slice(sector_start+40,sector_start+44), this.LITTLE_ENDIAN),
-                  'permissions': this.get_four_byte_int(file_bytes.slice(sector_start+44,sector_start+48), this.LITTLE_ENDIAN),
-                  'file_link_count': this.get_two_byte_int(file_bytes.slice(sector_start+48,sector_start+50), this.LITTLE_ENDIAN),
-                  'record_format': file_bytes[50],
-                  'record_display_attributes': file_bytes[51],
-                  'record_length': this.get_four_byte_int(file_bytes.slice(sector_start+52,sector_start+56), this.LITTLE_ENDIAN),
-                  'information_length': this.get_eight_byte_int(file_bytes.slice(sector_start+56,sector_start+64), this.LITTLE_ENDIAN),
-                  'object_size': this.get_eight_byte_int(file_bytes.slice(sector_start+64,sector_start+72), this.LITTLE_ENDIAN),
-                  'logical_blocks_recorded': this.get_eight_byte_int(file_bytes.slice(sector_start+72,sector_start+80), this.LITTLE_ENDIAN),
-                  'access_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+80,sector_start+92)),
-                  'modification_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+92,sector_start+104)),
-                  'creation_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+104,sector_start+116)),
-                  'attribute_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(file_bytes.slice(sector_start+116,sector_start+128)),
-                  'checkpoint': this.get_four_byte_int(file_bytes.slice(sector_start+128,sector_start+132), this.LITTLE_ENDIAN),
-                  'reserved': file_bytes.slice(sector_start+132,sector_start+136),
-                  'extended_attribute_icb': {
-                    'extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+136,sector_start+140), this.LITTLE_ENDIAN),
-                    'extent_location': {
-                      'logical_block_number': this.get_four_byte_int(file_bytes.slice(sector_start+140,sector_start+144), this.LITTLE_ENDIAN),
-                      'partition_reference_number': this.get_two_byte_int(file_bytes.slice(sector_start+144,sector_start+146), this.LITTLE_ENDIAN),
-                    },
-                    'implementation_use': file_bytes.slice(sector_start+146,sector_start+152)
-                  },
-                  'stream_directory_icb': {
-                    'extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+152,sector_start+156), this.LITTLE_ENDIAN),
-                    'extent_location': {
-                      'logical_block_number': this.get_four_byte_int(file_bytes.slice(sector_start+156,sector_start+160), this.LITTLE_ENDIAN),
-                      'partition_reference_number': this.get_two_byte_int(file_bytes.slice(sector_start+160,sector_start+162), this.LITTLE_ENDIAN),
-                    },
-                    'implementation_use': file_bytes.slice(sector_start+162,sector_start+168)
-                  },
-                  'implementation_identifier': {
-                    'flags': file_bytes[168],
-                    'identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+167,sector_start+190).filter(i => i > 31)),
-                    'identifier_suffix': file_bytes.slice(sector_start+190,sector_start+198)
-                  },
-                  'unique_id': this.get_eight_byte_int(file_bytes.slice(sector_start+200,sector_start+208), this.LITTLE_ENDIAN),
-                  'length_of_extended_attributes': this.get_four_byte_int(file_bytes.slice(sector_start+208,sector_start+212), this.LITTLE_ENDIAN),
-                  'length_of_allocation_descriptors': this.get_four_byte_int(file_bytes.slice(sector_start+212,sector_start+216), this.LITTLE_ENDIAN),
-                };
-
-
-                extended_file_entry['extended_attributes'] = file_bytes.slice(sector_start+216,sector_start+216+extended_file_entry.length_of_extended_attributes);
-                extended_file_entry['allocation_descriptors'] = file_bytes.slice(sector_start+216+extended_file_entry.length_of_extended_attributes,sector_start+216+extended_file_entry.length_of_extended_attributes+extended_file_entry.length_of_allocation_descriptors);
-
+                var extended_file_entry = Universal_Disk_Format_Parser.parse_extended_file_entry(file_bytes.slice(sector_start,sector_start+sector_size));
                 var debug123=0;
               }
 
@@ -6883,6 +6835,56 @@ class Universal_Disk_Format_Parser {
   }
 
   /**
+   * Parses the descriptor tag for a Universal Disk Format file.
+   *
+   * @see https://wiki.osdev.org/UDF
+   *
+   * @param {object}   decr_tag_buffer Byte buffer with the 16 bytes that make up the descriptor tag.
+   * @return {Object}  An object with the parsed descriptor tag.
+   */
+  static parse_descriptor_tag(decr_tag_buffer) {
+    var tag_identifiers = [0x0001,0x0002,0x0003,0x0004,0x0005,0x0006,0x0007,0x0008,0x0009,0x0100,0x0101,0x0102,0x0103,0x0104,0x0105,0x0106,0x0107,0x0108,0x0109,0x010a];
+
+    var descriptor_tag = {
+      'tag_identifier': 0,
+      'descriptor_version': 0,
+      'tag_checksum': 0,
+      'tag_serial_number': 0,
+      'descriptor_crc': 0,
+      'descriptor_crc_length': 0,
+      'tag_location': 0,
+      'valid': false
+    };
+
+    descriptor_tag.tag_identifier = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(0,2), "LITTLE_ENDIAN");
+    if (tag_identifiers.includes(descriptor_tag.tag_identifier)) {
+      descriptor_tag.descriptor_version = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(2,4), "LITTLE_ENDIAN");
+      descriptor_tag.tag_checksum = decr_tag_buffer[4];
+      descriptor_tag.tag_serial_number = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(6,8), "LITTLE_ENDIAN");
+      descriptor_tag.descriptor_crc = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(8,10), "LITTLE_ENDIAN");
+      descriptor_tag.descriptor_crc_length = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(10,12), "LITTLE_ENDIAN");
+      descriptor_tag.tag_location = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(12,16), "LITTLE_ENDIAN");
+    }
+
+    // Verify checksum
+    var checksum = 0;
+    for (var i2=0; i2<decr_tag_buffer.length; i2++) {
+      if (i2==4) continue;
+      checksum += decr_tag_buffer[i2];
+    }
+
+    while (checksum > 256) checksum -= 256; // Truncate to byte
+
+    if (descriptor_tag.tag_checksum == checksum) {
+      descriptor_tag.valid = true;
+    } else {
+      descriptor_tag.valid = false;
+    }
+
+    return descriptor_tag;
+  }
+
+  /**
    * Parse the ICB Tag in Universal Disk Format.
    *
    * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.6 ICB Tag
@@ -6905,5 +6907,66 @@ class Universal_Disk_Format_Parser {
     };
 
     return icb_tag;
+  }
+
+  /**
+   * Parse the Extended File Entry in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.17 Extended File Entry
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the Extended File Entry start byte.
+   * @return {object} The parsed Extended File Entry
+   */
+  static parse_extended_file_entry(arr_bytes) {
+    var extended_file_entry = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'icb_tag': Universal_Disk_Format_Parser.parse_icb_tag(arr_bytes.slice(16,36)),
+      'uid': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(36,40), "LITTLE_ENDIAN"),
+      'gid': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(40,44), "LITTLE_ENDIAN"),
+      'permissions': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(44,48), "LITTLE_ENDIAN"),
+      'file_link_count': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(48,50), "LITTLE_ENDIAN"),
+      'record_format': arr_bytes[50],
+      'record_display_attributes': arr_bytes[51],
+      'record_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(52,56), "LITTLE_ENDIAN"),
+      'information_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(56,64), "LITTLE_ENDIAN"),
+      'object_size': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(64,72), "LITTLE_ENDIAN"),
+      'logical_blocks_recorded': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(72,80), "LITTLE_ENDIAN"),
+      'access_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(80,92)),
+      'modification_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(92,104)),
+      'creation_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(104,116)),
+      'attribute_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(116,128)),
+      'checkpoint': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(128,132), "LITTLE_ENDIAN"),
+      'reserved': arr_bytes.slice(132,136),
+      'extended_attribute_icb': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(136,140), "LITTLE_ENDIAN"),
+        'extent_location': {
+          'logical_block_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(140,144), "LITTLE_ENDIAN"),
+          'partition_reference_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(144,146), "LITTLE_ENDIAN"),
+        },
+        'implementation_use': arr_bytes.slice(146,152)
+      },
+      'stream_directory_icb': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(152,156), "LITTLE_ENDIAN"),
+        'extent_location': {
+          'logical_block_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(156,160), "LITTLE_ENDIAN"),
+          'partition_reference_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(160,162), "LITTLE_ENDIAN"),
+        },
+        'implementation_use': arr_bytes.slice(162,168)
+      },
+      'implementation_identifier': {
+        'flags': arr_bytes[168],
+        'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(167,190).filter(i => i > 31)),
+        'identifier_suffix': arr_bytes.slice(190,198)
+      },
+      'unique_id': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(200,208), "LITTLE_ENDIAN"),
+      'length_of_extended_attributes': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(208,212), "LITTLE_ENDIAN"),
+      'length_of_allocation_descriptors': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(212,216), "LITTLE_ENDIAN"),
+    };
+
+
+    extended_file_entry['extended_attributes'] = arr_bytes.slice(216,216+extended_file_entry.length_of_extended_attributes);
+    extended_file_entry['allocation_descriptors'] = arr_bytes.slice(216+extended_file_entry.length_of_extended_attributes,216+extended_file_entry.length_of_extended_attributes+extended_file_entry.length_of_allocation_descriptors);
+
+    return extended_file_entry;
   }
 }
