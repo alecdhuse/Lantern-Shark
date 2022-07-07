@@ -290,7 +290,7 @@ function read_file(e) {
  */
 async function save_selected(e) {
   file_password = $("#summary_file_encrypted_password_txt").val();
-  
+
   if (analyzer_results.file_components[selected_file_component].type == "zip") {
     var file_name = analyzer_results.file_components[selected_file_component].name;
     var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, selected_file_component, file_password);
@@ -372,6 +372,12 @@ async function select_file_component(e, component_index=null) {
         $("#toolbar_save_svg").css("fill", "#999");
         $("#toolbar_save_caption").css("color", "#999");
       }
+    } else if (analyzer_results.file_components[component_index].type == "iso") {
+      var component_bytes = analyzer_results.file_components[component_index].file_bytes;
+      var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
+
+      display_file_summary(subfile_analyzer_results);
+      $("#file_text").val(get_file_text(component_bytes));
     } else {
       // Code for other componets
 
