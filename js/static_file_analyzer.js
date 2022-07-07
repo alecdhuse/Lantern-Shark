@@ -394,7 +394,11 @@ class Static_File_Analyzer {
                 console.log("\n\n");
               }
 
-              if (descriptor_tag.tag_identifier == 5) {
+              if (descriptor_tag.tag_identifier == 1) {
+                // Primary Volume Descriptor
+                var primary_volume_descriptor = Universal_Disk_Format_Parser.parse_primary_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+                var debug11111=0;
+              } else if (descriptor_tag.tag_identifier == 5) {
                 // Partition Descriptor
                 partition_descriptor = {
                   'sequence_number': this.get_four_byte_int(file_bytes.slice(sector_start+16,sector_start+20), this.LITTLE_ENDIAN),
@@ -7021,5 +7025,57 @@ class Universal_Disk_Format_Parser {
     extended_file_entry['allocation_descriptors'] = arr_bytes.slice(216+extended_file_entry.length_of_extended_attributes,216+extended_file_entry.length_of_extended_attributes+extended_file_entry.length_of_allocation_descriptors);
 
     return extended_file_entry;
+  }
+
+  /**
+   * Parse the Primary Volume Descriptor in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.1 Primary Volume Descriptor
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the Primary Volume Descriptor start byte.
+   * @return {object} The parsed Extended File Entry
+   */
+  static parse_primary_volume_descriptor(arr_bytes) {
+    var primary_volume_descriptor = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'volume_descriptor_sequence_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,20), "LITTLE_ENDIAN"),
+      'primary_volume_descriptor_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(20,24), "LITTLE_ENDIAN"),
+      'volume_identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(24,56).filter(i => i > 31)),
+      'volume_sequence_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(56,58), "LITTLE_ENDIAN"),
+      'maximum_volume_sequence_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(58,60), "LITTLE_ENDIAN"),
+      'interchange_level': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(60,62), "LITTLE_ENDIAN"),
+      'maximum_interchange_level': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(62,64), "LITTLE_ENDIAN"),
+      'character_set_list': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(64,68), "LITTLE_ENDIAN"),
+      'maximum_character_set_list': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(68,72), "LITTLE_ENDIAN"),
+      'volume_set_identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(72,200).filter(i => i > 31)),
+      'descriptor_character_set': {
+        'character_set_type': arr_bytes[200],
+        'character_set_information': arr_bytes.slice(201,264)
+      },
+      'explanatory_character_set': {
+        'character_set_type': arr_bytes[264],
+        'character_set_information': arr_bytes.slice(265,328)
+      },
+      'volume_abstract': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(328,332), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(332,336), "LITTLE_ENDIAN"),
+      },
+      'volume_copyright_notice': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(336,340), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(340,344), "LITTLE_ENDIAN"),
+      },
+      'recording_date_and_time': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(376,388)),
+      'implementation_identifier': {
+        'flags': arr_bytes[388],
+        'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(389,412).filter(i => i > 31)),
+        'identifier_suffix': arr_bytes.slice(412,420)
+      },
+      'implementation_use': arr_bytes.slice(420,484),
+      'predecessor_volume_descriptor_sequence_location': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(484,488), "LITTLE_ENDIAN"),
+      'flags': arr_bytes.slice(488,490),
+      'reserved': arr_bytes.slice(490,512)
+    };
+
+    return primary_volume_descriptor;
   }
 }
