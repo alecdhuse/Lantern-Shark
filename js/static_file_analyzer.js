@@ -397,6 +397,9 @@ class Static_File_Analyzer {
               if (descriptor_tag.tag_identifier == 1) {
                 // Primary Volume Descriptor
                 var primary_volume_descriptor = Universal_Disk_Format_Parser.parse_primary_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+              } else if (descriptor_tag.tag_identifier == 4) {
+                // Implementation Use Volume Descriptor
+                var implementation_use_volume_descriptor = Universal_Disk_Format_Parser.parse_implementation_use_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
                 var debug11111=0;
               } else if (descriptor_tag.tag_identifier == 5) {
                 // Partition Descriptor
@@ -7028,12 +7031,56 @@ class Universal_Disk_Format_Parser {
   }
 
   /**
+   * Parse the Implementation Use Volume Descriptor in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.4 Implementation Use Volume Descriptor
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the Implementation Use Volume Descriptor start byte.
+   * @return {object} The parsed Implementation Use Volume Descriptor
+   */
+  static parse_implementation_use_volume_descriptor(arr_bytes) {
+    var implementation_use_volume_descriptor = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'volume_descriptor_sequence_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,20), "LITTLE_ENDIAN"),
+      'implementation_identifier': {
+        'flags': arr_bytes[20],
+        'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(21,44).filter(i => i > 31)),
+        'identifier_suffix': arr_bytes.slice(44,52),
+        'implementation_use': arr_bytes.slice(52,512)
+      },
+    };
+
+    if (implementation_use_volume_descriptor.implementation_identifier.identifier == "*UDF LV Info") {
+      var use_bytes = implementation_use_volume_descriptor.implementation_identifier.implementation_use;
+
+      implementation_use_volume_descriptor['lv_information'] = {
+        'lvi_charset': {
+          'character_set_type': use_bytes[0],
+          'character_set_information': use_bytes.slice(1,64)
+        },
+        'logical_volume_identifier': Static_File_Analyzer.get_ascii(use_bytes.slice(64,192).filter(i => i > 31)),
+        'lv_info1': Static_File_Analyzer.get_ascii(use_bytes.slice(192,228).filter(i => i > 31)),
+        'lv_info2': Static_File_Analyzer.get_ascii(use_bytes.slice(228,264).filter(i => i > 31)),
+        'lv_info3': Static_File_Analyzer.get_ascii(use_bytes.slice(264,300).filter(i => i > 31)),
+        'implementation_identifier': {
+          'flags': arr_bytes[300],
+          'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(301,324).filter(i => i > 31)),
+          'identifier_suffix': arr_bytes.slice(324,332)
+        },
+        'implementation_use': use_bytes.slice(332,460),
+      };
+    }
+
+    return implementation_use_volume_descriptor;
+  }
+
+  /**
    * Parse the Primary Volume Descriptor in Universal Disk Format.
    *
    * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.1 Primary Volume Descriptor
    *
    * @param {array}   arr_bytes The array of bytes starting at the Primary Volume Descriptor start byte.
-   * @return {object} The parsed Extended File Entry
+   * @return {object} The parsed Primary Volume Descriptor
    */
   static parse_primary_volume_descriptor(arr_bytes) {
     var primary_volume_descriptor = {
