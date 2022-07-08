@@ -334,18 +334,11 @@ class Static_File_Analyzer {
         var decr_tag_buffer = []
         var sector_size = 0;
         var sector_start = 0;
-        var logical_block_size = 0;
 
         var main_volume_descriptor_sequence_extent = null;
         var reserve_volume_descriptor_sequence_extent = null;
 
         var sector_sizes = [4096, 2048, 1024, 512];
-
-        var udf_context = {
-          logical_partitions: [],
-          physical_partitions: {},
-          physical_sector_size: 0
-        };
 
         for (var i=0; i<sector_sizes.length; i++) {
           // File is not large enough for this sector size, skip it.
@@ -359,7 +352,6 @@ class Static_File_Analyzer {
           if (anchor_descriptor_tag.tag_identifier != 2) continue; // Skip if this is not Anchor Volume Description Pointer
 
           sector_size = sector_sizes[i];
-          udf_context.physical_sector_size = sector_sizes[i];
           anchor_pointer = anchor_descriptor_tag.tag_location;
 
           main_volume_descriptor_sequence_extent = {
@@ -431,11 +423,6 @@ class Static_File_Analyzer {
                 partition_descriptor = Universal_Disk_Format_Parser.parse_partition_descriptor(file_bytes.slice(sector_start,sector_start+512));
                 partition_descriptor['byte_start'] = (sector_size * partition_descriptor.partition_starting_location);
 
-                udf_context.physical_partitions[partition_descriptor.partition_number] = {
-                  'start': (partition_descriptor.partition_starting_location * sector_size),
-                  'length': (partition_descriptor.partition_length * sector_size)
-                };
-
                 // Update file metadata
                 file_info.metadata.creation_application = partition_descriptor.implementation_identifier.identifier;
                 if (partition_descriptor.implementation_identifier.identifier == "Microsoft IMAPI2 1.0") {
@@ -450,9 +437,6 @@ class Static_File_Analyzer {
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Logical Volume Descriptor
                 logical_volume_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-
-                logical_block_size = logical_volume_descriptor.logical_block_size;
-                udf_context.logical_partitions = udf_context.logical_partitions.concat(logical_volume_descriptor.partition_maps);
 
                 descriptors.push({
                   'type': "Logical Volume Descriptor",
