@@ -380,53 +380,55 @@ class Static_File_Analyzer {
         var terminating_descriptor = null;
 
         var descriptors = [];
+        var found_anchor_volume_descriptor_pointer = false;
 
         if (main_volume_descriptor_sequence_extent !== null) {
-          // find the partition descriptor
-          for (var i=0; i<=256; i++) {
-            sector_start = sector_size * (main_volume_descriptor_sequence_extent.location + i);
+          // parse descriptors
+          var loop_start = sector_size * (main_volume_descriptor_sequence_extent.location);
+
+          for (var i=loop_start; i<=file_bytes.length; i+=sector_size) {
+            sector_start = i;
             var sector_descriptor_buffer = file_bytes.slice(sector_start, sector_start+16);
             var descriptor_tag = Universal_Disk_Format_Parser.parse_descriptor_tag(sector_descriptor_buffer);
 
             if (descriptor_tag.valid) {
-              // DEBUG
-              if (descriptor_tag.tag_identifier > 0) {
-                console.log("ID: " + descriptor_tag.tag_identifier.toString(16));
-                console.log("Byte: " + sector_start);
-                console.log("\n\n");
-              }
-
               if (descriptor_tag.tag_identifier == 1) {
                 // Primary Volume Descriptor
-                var primary_volume_descriptor = Universal_Disk_Format_Parser.parse_primary_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-                primary_volume_descriptor['byte_location'] = sector_start;
+                var primary_volume_descriptor = Universal_Disk_Format_Parser.parse_primary_volume_descriptor(file_bytes.slice(sector_start,sector_start+512));
 
                 descriptors.push({
                   'type': "Primary Volume Descriptor",
+                  'byte_location': sector_start,
                   'descriptor': primary_volume_descriptor
                 });
               } else if (descriptor_tag.tag_identifier == 2) {
                 // Anchor Volume Descriptor Pointer
-                var anchor_volume_descriptor_pointer = Universal_Disk_Format_Parser.parse_anchor_volume_descriptor_pointer(file_bytes.slice(sector_start,sector_start+512));
-                anchor_volume_descriptor_pointer['byte_location'] = sector_start;
+                if (found_anchor_volume_descriptor_pointer == false) {
+                  var anchor_volume_descriptor_pointer = Universal_Disk_Format_Parser.parse_anchor_volume_descriptor_pointer(file_bytes.slice(sector_start,sector_start+512));
 
-                descriptors.push({
-                  'type': "Anchor Volume Descriptor Pointer",
-                  'descriptor': anchor_volume_descriptor_pointer
-                });
+                  descriptors.push({
+                    'type': "Anchor Volume Descriptor Pointer",
+                    'byte_location': sector_start,
+                    'descriptor': anchor_volume_descriptor_pointer
+                  });
+
+                  found_anchor_volume_descriptor_pointer = true;
+                } else {
+                  // Assume only one Anchor Volume Descriptor Pointer per ISO.
+                  break;
+                }
               } else if (descriptor_tag.tag_identifier == 4) {
                 // Implementation Use Volume Descriptor
-                var implementation_use_volume_descriptor = Universal_Disk_Format_Parser.parse_implementation_use_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-                implementation_use_volume_descriptor['byte_location'] = sector_start;
+                var implementation_use_volume_descriptor = Universal_Disk_Format_Parser.parse_implementation_use_volume_descriptor(file_bytes.slice(sector_start,sector_start+512));
 
                 descriptors.push({
                   'type': "Implementation Use Volume Descriptor",
+                  'byte_location': sector_start,
                   'descriptor': implementation_use_volume_descriptor
                 });
               } else if (descriptor_tag.tag_identifier == 5) {
                 // Partition Descriptor
-                partition_descriptor = Universal_Disk_Format_Parser.parse_partition_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-                partition_descriptor['byte_location'] = sector_start;
+                partition_descriptor = Universal_Disk_Format_Parser.parse_partition_descriptor(file_bytes.slice(sector_start,sector_start+512));
                 partition_descriptor['byte_start'] = (sector_size * partition_descriptor.partition_starting_location);
 
                 udf_context.physical_partitions[partition_descriptor.partition_number] = {
@@ -442,51 +444,60 @@ class Static_File_Analyzer {
 
                 descriptors.push({
                   'type': "Partition Descriptor",
+                  'byte_location': sector_start,
                   'descriptor': partition_descriptor
                 });
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Logical Volume Descriptor
                 logical_volume_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-                logical_volume_descriptor['byte_location'] = sector_start;
 
                 logical_block_size = logical_volume_descriptor.logical_block_size;
                 udf_context.logical_partitions = udf_context.logical_partitions.concat(logical_volume_descriptor.partition_maps);
 
                 descriptors.push({
                   'type': "Logical Volume Descriptor",
+                  'byte_location': sector_start,
                   'descriptor': logical_volume_descriptor
                 });
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Unallocated Space Descriptor
                 var unallocated_space_descriptor = Universal_Disk_Format_Parser.parse_unallocated_space_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-                unallocated_space_descriptor['byte_location'] = sector_start;
 
                 descriptors.push({
                   'type': "Unallocated Space Descriptor",
+                  'byte_location': sector_start,
                   'descriptor': unallocated_space_descriptor
                 });
               } else if (descriptor_tag.tag_identifier == 8) {
                 // Terminating Descriptor
-                terminating_descriptor = Universal_Disk_Format_Parser.parse_terminating_descriptor(file_bytes.slice(sector_start,sector_start+512));
-                terminating_descriptor['byte_location'] = sector_start;
+                terminating_descriptor = Universal_Disk_Format_Parser.parse_terminating_descriptor(file_bytes.slice(sector_start,sector_start+512));;
 
                 descriptors.push({
                   'type': "Terminating Descriptor",
+                  'byte_location': sector_start,
                   'descriptor': terminating_descriptor
                 });
               } else if (descriptor_tag.tag_identifier == 9) {
                 // Logical Volume Integrity Descriptor
                 var logical_volume_integrity_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_integrity_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-                logical_volume_integrity_descriptor['byte_location'] = sector_start;
 
                 descriptors.push({
                   'type': "Logical Volume Integrity Descriptor",
+                  'byte_location': sector_start,
                   'descriptor': logical_volume_integrity_descriptor
+                });
+              } else if (descriptor_tag.tag_identifier == 0x101) {
+                // File Identifier Descriptor
+                var file_identifier_descriptor = Universal_Disk_Format_Parser.parse_file_identifier_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+
+                descriptors.push({
+                  'type': "File Identifier Descriptor",
+                  'byte_location': sector_start,
+                  'descriptor': file_identifier_descriptor
                 });
               } else if (descriptor_tag.tag_identifier == 0x10A) {
                 // Extended File Entry
                 var extended_file_entry = Universal_Disk_Format_Parser.parse_extended_file_entry(file_bytes.slice(sector_start,sector_start+sector_size));
-                extended_file_entry['byte_location'] = sector_start;
 
                 // Update metadata
                 if (file_info.metadata.last_modified_date == "0000-00-00 00:00:00") {
@@ -499,162 +510,92 @@ class Static_File_Analyzer {
 
                 descriptors.push({
                   'type': "Extended File Entry",
+                  'byte_location': sector_start,
                   'descriptor': extended_file_entry
                 });
+              } else {
+                // Non implemented identifier
+                // DEBUG
+                if (descriptor_tag.tag_identifier > 0) {
+                  console.log("ID: " + descriptor_tag.tag_identifier.toString(16));
+                  console.log("Byte: " + sector_start);
+                  console.log("\n\n");
+                }
               }
 
             }
           }
 
-          // DEBUG
-          console.log(descriptors);
+          // Build a list of files
+          var current_descriptor_index = 0;
+          var current_fid = null;
+          var current_fe = null;
+          var position_start = 0;
+          var file_list = [];
 
-          if (partition_descriptor !== null) {
-            // Look for	File Identifier Descriptor
-            var current_file_index = 0;
-            var found_file_id_descriptor = false;
-            var last_tag_identifier = 0;
-            var descriptor_tag_obj;
+          while (current_descriptor_index < descriptors.length) {
+            if (descriptors[current_descriptor_index].type == "Partition Descriptor") {
+              position_start = descriptors[current_descriptor_index].descriptor.byte_start;
+              current_descriptor_index++;
+            } else if (descriptors[current_descriptor_index].type == "File Identifier Descriptor") {
+              current_fid = descriptors[current_descriptor_index].descriptor;
 
-            for (var p=partition_descriptor.byte_start; p<file_bytes.length; p+=sector_size) {
-              var current_byte=0;
-              var fid_buffer = file_bytes.slice(p,p+sector_size);
+              for (var i=0; i<current_fid.length; i++) {
+                if (current_fid[i].file_characteristics.directory && current_fid[i].file_characteristics.parent) {
+                  // Skip over root directory.
+                  continue;
+                } else {
+                  if (descriptors[current_descriptor_index+i].type == "Extended File Entry") {
+                    current_fe = descriptors[current_descriptor_index+i].descriptor;
 
-              descriptor_tag_obj = Universal_Disk_Format_Parser.parse_descriptor_tag(fid_buffer.slice(0,current_byte+=16));
+                    var file_length = current_fe.allocation_descriptors[0].extent_length;
+                    var file_location = current_fe.allocation_descriptors[0].extent_position;
+                    var file_byte_location = position_start + (file_location * sector_size);
+                    var c_file_bytes = file_bytes.slice(file_byte_location,file_byte_location+file_length);
 
-              if (found_file_id_descriptor == false) {
-                while (descriptor_tag_obj.tag_identifier == 257) {
-                  // Found File Identifier Descriptor
-                  var file_ver_number = this.get_two_byte_int(fid_buffer.slice(current_byte,current_byte+=2), this.LITTLE_ENDIAN);
-                  var file_characteristics = this.get_bin_from_int(fid_buffer[current_byte++]).reverse();
-
-                  var is_hidden = (file_characteristics[0] == 1) ? true : false;
-                  var is_directory = (file_characteristics[1] == 1) ? true : false;
-                  var is_parent = (file_characteristics[3] == 1) ? true : false;
-
-                  var lof_id = fid_buffer[current_byte++];
-                  var icb_tag = {
-                    'extent_length': this.get_four_byte_int(fid_buffer.slice(current_byte,current_byte+=4), this.LITTLE_ENDIAN),
-                    'logical_block_number': this.get_four_byte_int(fid_buffer.slice(current_byte,current_byte+=4), this.LITTLE_ENDIAN),
-                    'partition_reference_number': this.get_two_byte_int(fid_buffer.slice(current_byte,current_byte+=2), this.LITTLE_ENDIAN),
-                    'ad_imp_use': {
-                      'flags': fid_buffer.slice(current_byte,current_byte+=2),
-                      'udf_unique_id': this.get_four_byte_int(fid_buffer.slice(current_byte,current_byte+=4), this.LITTLE_ENDIAN)
-                    }
-                  };
-                  var loi_use = this.get_two_byte_int(fid_buffer.slice(current_byte,current_byte+=2), this.LITTLE_ENDIAN);
-                  var implementation_use = fid_buffer.slice(current_byte,current_byte+=loi_use);
-                  var file_identifier = Static_File_Analyzer.get_ascii(fid_buffer.slice(current_byte,current_byte+=lof_id).filter(i => i > 31));
-
-                  var padding_length = 4 - (current_byte % 4);
-                  current_byte+= padding_length;
-
-                  // Make sure this is not the root directory.
-                  if (is_directory == false && file_identifier.length > 0) {
-                    file_info.file_components.push({
-                      'name': file_identifier,
-                      'directory': is_directory,
-                      'type': "iso"
-                    });
-                  }
-
-                  descriptor_tag_obj = Universal_Disk_Format_Parser.parse_descriptor_tag(fid_buffer.slice(current_byte,current_byte+=16));
-                }
-
-                // Indicate if we have already found files so we don't pickup backup entries.
-                if (file_info.file_components.length > 0) found_file_id_descriptor = true;
-              } else {
-                if (!this.array_equals(file_bytes.slice(p,p+8), [0,0,0,0,0,0,0,0])) {
-                  // Check if this is a valid tag and if the last entry was a type of file entry.
-                  if (descriptor_tag_obj.valid == false && (last_tag_identifier == 0x0105 || last_tag_identifier == 0x010A)) {
-                    // This should be file data.
-                    var file_start = p;
-
-                    // TODO this is a hack to make this work, fix by sorting out how hte logical volumes work.
-                    for (var bi=p+logical_block_size; bi<file_bytes.length; bi+=logical_block_size) {
-                      if (this.array_equals(file_bytes.slice(bi-8,bi), [0,0,0,0,0,0,0,0])) {
-                        file_info.file_components[current_file_index].file_bytes = file_bytes.slice(p,bi);
-                        current_file_index++;
-                        p = bi-logical_block_size;
-                        break;
+                    // Check to see if the file has been added, this might be the reserve (duplicate) data.
+                    var is_duplicate = false;
+                    for (var fli=0; fli<file_list.length; fli++) {
+                      if (file_list[fli].name == current_fid[i].file_identifier) {
+                        if (file_list[fli].file_bytes.length == c_file_bytes.length) {
+                          is_duplicate = true;
+                          break;
+                        }
                       }
                     }
 
-                    if (current_file_index >= file_info.file_components.length) break;
-
-                  } else {
-                    if (descriptor_tag_obj.tag_identifier == 266) {
-                      var extended_file_entry2 = Universal_Disk_Format_Parser.parse_extended_file_entry(file_bytes.slice(sector_start,sector_start+sector_size));
-                      var debug040404=0;
+                    if (is_duplicate == true) {
+                      // File already added, assume we have entered the reserve data and break the loop.
+                      break;
                     }
+
+                    file_list.push({
+                      'name': current_fid[i].file_identifier,
+                      'directory': current_fid[i].file_characteristics.directory,
+                      'file_bytes': c_file_bytes,
+                      'type': "iso"
+                    });
+                  } else if (descriptors[current_descriptor_index+i].type == "File Entry") {
+                    // TODO: build out code for file enrty.
                   }
                 }
               }
 
-              last_tag_identifier = (descriptor_tag_obj.valid) ? descriptor_tag_obj.tag_identifier : last_tag_identifier;
+              current_descriptor_index++;
+            } else {
+              current_descriptor_index++;
             }
           }
 
-          if (logical_volume_descriptor !== null) {
-            //TODO this isn't correct
-            var partition = udf_context.logical_partitions[logical_volume_descriptor.file_set_descriptor_location.logical_block_number];
-            var offset = udf_context.physical_partitions[partition.partition_number].start;
-            var pos = logical_volume_descriptor.file_set_descriptor_location.logical_block_number * logical_volume_descriptor.logical_block_size;
-            var start_location = offset + pos;
-            var length = logical_volume_descriptor.file_set_descriptor_location.length;
-            var fsd_buffer = file_bytes.slice(start_location, length);
+          // Add parsed files to ISO file components
+          file_info.file_components = file_info.file_components.concat(file_list);
 
-            var descriptor_tag = this.parse_udf_descriptor_tag(fsd_buffer.slice(0,16));
-
-            if (descriptor_tag.tag_identifier == 0x0105) {
-              // File Entry
-              var timestamp = fsd_buffer.slice(16,28);
-              var interchange_level = this.get_two_byte_int(fsd_buffer.slice(28,30), this.LITTLE_ENDIAN);
-              var maximum_interchange_level = this.get_two_byte_int(fsd_buffer.slice(30,32), this.LITTLE_ENDIAN);
-              var character_set_list = this.get_four_byte_int(fsd_buffer.slice(32,36), this.LITTLE_ENDIAN);
-              var maximum_character_set_list = this.get_four_byte_int(fsd_buffer.slice(36,40), this.LITTLE_ENDIAN);
-              var file_set_number = this.get_four_byte_int(fsd_buffer.slice(40,44), this.LITTLE_ENDIAN);
-              var file_set_descriptor_number = this.get_four_byte_int(fsd_buffer.slice(44,48), this.LITTLE_ENDIAN);
-              var logical_volume_identifier_character_set = fsd_buffer.slice(48,112);
-              var logical_volume_identifier = Static_File_Analyzer.get_ascii(fsd_buffer.slice(112,128).filter(i => i > 31));
-            } else if (descriptor_tag.tag_identifier == 0x010a) {
-              // Extended File Entry
-              var icb_tag_bytes = fsd_buffer.slice(16,36);
-              var icb_tag = {
-                'prior_recorded_number_of_direct_entries': this.get_four_byte_int(fsd_buffer.slice(16,20), this.LITTLE_ENDIAN),
-                'strategy_type': this.get_two_byte_int(fsd_buffer.slice(20,22), this.LITTLE_ENDIAN),
-                'strategy_parameter': fsd_buffer.slice(22,24),
-                'max_number_of_entries': this.get_two_byte_int(fsd_buffer.slice(24,26), this.LITTLE_ENDIAN),
-                'file_type': fsd_buffer[27],
-                'parent_icb_location': this.get_eight_byte_int(fsd_buffer.slice(28,36), this.LITTLE_ENDIAN)
-              };
-
-              var uid = this.get_four_byte_int(fsd_buffer.slice(36,40), this.LITTLE_ENDIAN);
-              var gid = this.get_four_byte_int(fsd_buffer.slice(40,44), this.LITTLE_ENDIAN);
-              var permissions = this.get_four_byte_int(fsd_buffer.slice(44,48), this.LITTLE_ENDIAN);
-              var file_link_count = this.get_four_byte_int(fsd_buffer.slice(48,50), this.LITTLE_ENDIAN);
-              var record_format = fsd_buffer[50];
-              var record_display_attributes = fsd_buffer[51];
-              var record_length = this.get_four_byte_int(fsd_buffer.slice(52,56), this.LITTLE_ENDIAN);
-              var info_length = this.get_eight_byte_int(fsd_buffer.slice(56,64), this.LITTLE_ENDIAN);
-              var object_size = this.get_eight_byte_int(fsd_buffer.slice(64,72), this.LITTLE_ENDIAN);
-              var logical_blocks_recorded = this.get_eight_byte_int(fsd_buffer.slice(64,72), this.LITTLE_ENDIAN);
-              var accessed_timestamp = this.get_ecma_timestamp(fsd_buffer.slice(72,84));
-              var modified_timestamp = this.get_ecma_timestamp(fsd_buffer.slice(84,96));
-              var created_timestamp = this.get_ecma_timestamp(fsd_buffer.slice(96,108));
-            }
-
-
-          }
-          var debug333=0;
-
-          // Read files
         }
 
       }
     }
 
-    // Cheack creation application
+    // Check creation application
     if (this.array_equals(file_bytes.slice(33342,33349), [73,77,71,66,85,82,78])) {
       var app_version = Static_File_Analyzer.get_ascii(file_bytes.slice(33350,33359)).trim();
       file_info.metadata.creation_application = "ImgBurn " + app_version;
@@ -6886,6 +6827,33 @@ class Static_File_Analyzer {
 }
 
 class Universal_Disk_Format_Parser {
+
+  /**
+   * Converts an array with int values 0-255 to a binary array.
+   *
+   * @param {array} u8int_array Array with int values 0-255 representing byte values.
+   * @return {array}  An array with int values of 0 or 1, representing the binary value of the given integer.
+   */
+  static get_binary_array(u8int_array) {
+    var binary_array = Array(u8int_array.length * 8);
+    var bin_str = "";
+
+    for (var bi=0; bi<u8int_array.length; bi++) {
+      bin_str = ("00000000" + (u8int_array[bi]).toString(2)).slice(-8);
+
+      binary_array[bi*8+0] = parseInt(bin_str.charAt(0));
+      binary_array[bi*8+1] = parseInt(bin_str.charAt(1));
+      binary_array[bi*8+2] = parseInt(bin_str.charAt(2));
+      binary_array[bi*8+3] = parseInt(bin_str.charAt(3));
+      binary_array[bi*8+4] = parseInt(bin_str.charAt(4));
+      binary_array[bi*8+5] = parseInt(bin_str.charAt(5));
+      binary_array[bi*8+6] = parseInt(bin_str.charAt(6));
+      binary_array[bi*8+7] = parseInt(bin_str.charAt(7));
+    }
+
+    return binary_array;
+  }
+
   /**
    * Converts an array with twelve int values 0-255 to a timestamp.
    *
@@ -6985,31 +6953,6 @@ class Universal_Disk_Format_Parser {
   }
 
   /**
-   * Parse the ICB Tag in Universal Disk Format.
-   *
-   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.6 ICB Tag
-   *
-   * @param {array}   arr_bytes The array of bytes starting at the ICB Tag start byte.
-   * @return {object} The parsed ICB Tag
-   */
-  static parse_icb_tag(arr_bytes) {
-    var icb_tag = {
-      'prior_recorded_number_of_direct_entries': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(0,4), "LITTLE_ENDIAN"),
-      'strategy_type': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(4,6), "LITTLE_ENDIAN"),
-      'strategy_parameter': arr_bytes.slice(6,8),
-      'max_number_of_entries': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(8,10), "LITTLE_ENDIAN"),
-      'file_type': arr_bytes[11],
-      'parent_icb_location': {
-        'logical_block_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(12,16), "LITTLE_ENDIAN"),
-        'partition_reference_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,18), "LITTLE_ENDIAN")
-      },
-      'flags': arr_bytes.slice(18,20)
-    };
-
-    return icb_tag;
-  }
-
-  /**
    * Parse the Extended File Entry in Universal Disk Format.
    *
    * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.17 Extended File Entry
@@ -7061,13 +7004,99 @@ class Universal_Disk_Format_Parser {
       'unique_id': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(200,208), "LITTLE_ENDIAN"),
       'length_of_extended_attributes': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(208,212), "LITTLE_ENDIAN"),
       'length_of_allocation_descriptors': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(212,216), "LITTLE_ENDIAN"),
+      'allocation_descriptors': []
     };
 
 
     extended_file_entry['extended_attributes'] = arr_bytes.slice(216,216+extended_file_entry.length_of_extended_attributes);
-    extended_file_entry['allocation_descriptors'] = arr_bytes.slice(216+extended_file_entry.length_of_extended_attributes,216+extended_file_entry.length_of_extended_attributes+extended_file_entry.length_of_allocation_descriptors);
+    //extended_file_entry['allocation_descriptors'] = arr_bytes.slice(216+extended_file_entry.length_of_extended_attributes,216+extended_file_entry.length_of_extended_attributes+extended_file_entry.length_of_allocation_descriptors);
+
+    var allocation_descriptors_bytes = arr_bytes.slice(216+extended_file_entry.length_of_extended_attributes,216+extended_file_entry.length_of_extended_attributes+extended_file_entry.length_of_allocation_descriptors);
+    var current_ad_byte = 0;
+
+    while (current_ad_byte < allocation_descriptors_bytes.length) {
+      extended_file_entry.allocation_descriptors.push({
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(allocation_descriptors_bytes.slice(current_ad_byte,current_ad_byte+=4), "LITTLE_ENDIAN"),
+        'extent_position': Static_File_Analyzer.get_int_from_bytes(allocation_descriptors_bytes.slice(current_ad_byte,current_ad_byte+=4), "LITTLE_ENDIAN"),
+      });
+    }
 
     return extended_file_entry;
+  }
+
+  /**
+   * Parse the File Identifier Descriptor in Universal Disk Format.
+   * There will be multiple File Identifier Descriptors, one for each file and directory.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.4 File Identifier Descriptor
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the File Identifier Descriptor start byte.
+   * @return {object} The parsed File Identifier Descriptor
+   */
+  static parse_file_identifier_descriptor(arr_bytes) {
+    var descriptors = [];
+    var current_byte = 0;
+
+    while (arr_bytes[current_byte] > 0 && arr_bytes[current_byte+1] > 0) {
+      var file_characteristics = Universal_Disk_Format_Parser.get_binary_array([arr_bytes[current_byte+18]]).reverse();
+      var file_identifier_descriptor = {
+        'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(current_byte,current_byte+=16)),
+        'file_version_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte,current_byte+=2), "LITTLE_ENDIAN"),
+        'file_characteristics': {
+          'hidden': (file_characteristics[0] == 1) ? true : false,
+          'directory': (file_characteristics[1] == 1) ? true : false,
+          'parent': (file_characteristics[3] == 1) ? true : false
+        },
+        'length_of_file_identifier': arr_bytes[current_byte+=1],
+        'icb': {
+          'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte++,current_byte+=4), "LITTLE_ENDIAN"),
+          'logical_block_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte,current_byte+=4), "LITTLE_ENDIAN"),
+          'partition_reference_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte,current_byte+=2), "LITTLE_ENDIAN"),
+          'ad_imp_use': {
+            'flags': Universal_Disk_Format_Parser.get_binary_array(arr_bytes.slice(current_byte,current_byte+=2)),
+            'udf_unique_id': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte,current_byte+=4), "LITTLE_ENDIAN")
+          }
+        },
+        'length_of_implementation_use': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte,current_byte+=2), "LITTLE_ENDIAN"),
+        'implementation_use':[],
+        'file_identifier': "",
+        'padding_length': 0
+      };
+
+      file_identifier_descriptor.implementation_use = arr_bytes.slice(current_byte, current_byte+=file_identifier_descriptor.length_of_implementation_use);
+      file_identifier_descriptor.file_identifier = Static_File_Analyzer.get_ascii(arr_bytes.slice(current_byte, current_byte+=file_identifier_descriptor.length_of_file_identifier).filter(i => i > 31));
+      file_identifier_descriptor.padding_length = 4 - (current_byte % 4);
+      current_byte += file_identifier_descriptor.padding_length;
+
+      descriptors.push(file_identifier_descriptor);
+    }
+
+    return descriptors;
+  }
+
+  /**
+   * Parse the ICB Tag in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.6 ICB Tag
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the ICB Tag start byte.
+   * @return {object} The parsed ICB Tag
+   */
+  static parse_icb_tag(arr_bytes) {
+    var icb_tag = {
+      'prior_recorded_number_of_direct_entries': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(0,4), "LITTLE_ENDIAN"),
+      'strategy_type': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(4,6), "LITTLE_ENDIAN"),
+      'strategy_parameter': arr_bytes.slice(6,8),
+      'max_number_of_entries': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(8,10), "LITTLE_ENDIAN"),
+      'file_type': arr_bytes[11],
+      'parent_icb_location': {
+        'logical_block_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(12,16), "LITTLE_ENDIAN"),
+        'partition_reference_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,18), "LITTLE_ENDIAN")
+      },
+      'flags': arr_bytes.slice(18,20)
+    };
+
+    return icb_tag;
   }
 
   /**
