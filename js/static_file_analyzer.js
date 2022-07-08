@@ -402,30 +402,17 @@ class Static_File_Analyzer {
                 var implementation_use_volume_descriptor = Universal_Disk_Format_Parser.parse_implementation_use_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
               } else if (descriptor_tag.tag_identifier == 5) {
                 // Partition Descriptor
-                partition_descriptor = {
-                  'sequence_number': this.get_four_byte_int(file_bytes.slice(sector_start+16,sector_start+20), this.LITTLE_ENDIAN),
-                  'flags': this.get_two_byte_int(file_bytes.slice(sector_start+20,sector_start+22), this.LITTLE_ENDIAN),
-                  'partition_number': this.get_four_byte_int(file_bytes.slice(sector_start+22,sector_start+24), this.LITTLE_ENDIAN),
-                  'entity_flags': file_bytes[sector_start+24],
-                  'entity_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+25,sector_start+48).filter(i => i > 31)),
-                  'entity_identifier_suffix': file_bytes.slice(sector_start+48,sector_start+56),
-                  'contents_use': file_bytes.slice(sector_start+56,sector_start+184),
-                  'access_type': this.get_four_byte_int(file_bytes.slice(sector_start+184,sector_start+188), this.LITTLE_ENDIAN),
-                  'starting_location': this.get_four_byte_int(file_bytes.slice(sector_start+188,sector_start+192), this.LITTLE_ENDIAN),
-                  'partition_length': this.get_four_byte_int(file_bytes.slice(sector_start+192,sector_start+196), this.LITTLE_ENDIAN),
-                  'implementation_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+196,sector_start+228).filter(i => i > 31)),
-                  'implementation_use': file_bytes.slice(sector_start+228,sector_start+356)
-                };
+                partition_descriptor = Universal_Disk_Format_Parser.parse_partition_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
 
-                partition_descriptor['byte_start'] = (sector_size * partition_descriptor.starting_location);
+                partition_descriptor['byte_start'] = (sector_size * partition_descriptor.partition_starting_location);
                 udf_context.physical_partitions[partition_descriptor.partition_number] = {
-                  'start': (partition_descriptor.starting_location * sector_size),
+                  'start': (partition_descriptor.partition_starting_location * sector_size),
                   'length': (partition_descriptor.partition_length * sector_size)
                 };
 
                 // Update file metadata
-                file_info.metadata.creation_application = partition_descriptor.implementation_identifier;
-                if (partition_descriptor.implementation_identifier == "Microsoft IMAPI2 1.0") {
+                file_info.metadata.creation_application = partition_descriptor.implementation_identifier.identifier;
+                if (partition_descriptor.implementation_identifier.identifier == "Microsoft IMAPI2 1.0") {
                   file_info.metadata.creation_os = "Windows";
                 }
               } else if (descriptor_tag.tag_identifier == 6) {
@@ -7119,6 +7106,67 @@ class Universal_Disk_Format_Parser {
     };
 
     return logical_volume_descriptor;
+  }
+
+  /**
+   * Parse the Partition Descriptor in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.5 Partition Descriptor
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the Partition Descriptor start byte.
+   * @return {object} The parsed Partition Descriptor
+   */
+  static parse_partition_descriptor(arr_bytes) {
+    var partition_descriptor = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'volume_descriptor_sequence_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,20), "LITTLE_ENDIAN"),
+      'flags': arr_bytes.slice(20,22),
+      'partition_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(22,24), "LITTLE_ENDIAN"),
+      'partition_contents': {
+        'flags': arr_bytes[24],
+        'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(25,48).filter(i => i > 31)),
+        'identifier_suffix': arr_bytes.slice(48,56)
+      },
+      'partition_contents_use': arr_bytes.slice(56,184),
+      'access_type': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(184,188), "LITTLE_ENDIAN"),
+      'partition_starting_location': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(188,192), "LITTLE_ENDIAN"),
+      'partition_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(192,196), "LITTLE_ENDIAN"),
+      'implementation_identifier': {
+        'flags': arr_bytes[196],
+        'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(197,220).filter(i => i > 31)),
+        'identifier_suffix': arr_bytes.slice(220,228)
+      },
+      'implementation_use': arr_bytes.slice(228,356),
+      'reserved': arr_bytes.slice(356,512)
+    };
+
+    var use_bytes = partition_descriptor.partition_contents_use;
+
+    partition_descriptor['partition_header_descriptor'] = {
+      'unallocated_space_table': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(0,4), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(4,8), "LITTLE_ENDIAN"),
+      },
+      'unallocated_space_bitmap': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(8,12), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(12,16), "LITTLE_ENDIAN"),
+      },
+      'partition_integrity_table': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(16,20), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(20,24), "LITTLE_ENDIAN"),
+      },
+      'freed_space_table': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(24,28), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(28,32), "LITTLE_ENDIAN"),
+      },
+      'freed_space_bitmap': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(32,36), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(use_bytes.slice(36,40), "LITTLE_ENDIAN"),
+      },
+      'reserved': use_bytes.slice(40,128)
+    };
+
+    return partition_descriptor;
   }
 
   /**
