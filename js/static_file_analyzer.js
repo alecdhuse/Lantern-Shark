@@ -545,38 +545,40 @@ class Static_File_Analyzer {
                   // Skip over root directory.
                   continue;
                 } else {
-                  if (descriptors[current_descriptor_index+i].type == "Extended File Entry") {
-                    current_fe = descriptors[current_descriptor_index+i].descriptor;
+                  if (current_descriptor_index+i < descriptors.length) {
+                    if (descriptors[current_descriptor_index+i].type == "Extended File Entry") {
+                      current_fe = descriptors[current_descriptor_index+i].descriptor;
 
-                    var file_length = current_fe.allocation_descriptors[0].extent_length;
-                    var file_location = current_fe.allocation_descriptors[0].extent_position;
-                    var file_byte_location = position_start + (file_location * sector_size);
-                    var c_file_bytes = file_bytes.slice(file_byte_location,file_byte_location+file_length);
+                      var file_length = current_fe.allocation_descriptors[0].extent_length;
+                      var file_location = current_fe.allocation_descriptors[0].extent_position;
+                      var file_byte_location = position_start + (file_location * sector_size);
+                      var c_file_bytes = file_bytes.slice(file_byte_location,file_byte_location+file_length);
 
-                    // Check to see if the file has been added, this might be the reserve (duplicate) data.
-                    var is_duplicate = false;
-                    for (var fli=0; fli<file_list.length; fli++) {
-                      if (file_list[fli].name == current_fid[i].file_identifier) {
-                        if (file_list[fli].file_bytes.length == c_file_bytes.length) {
-                          is_duplicate = true;
-                          break;
+                      // Check to see if the file has been added, this might be the reserve (duplicate) data.
+                      var is_duplicate = false;
+                      for (var fli=0; fli<file_list.length; fli++) {
+                        if (file_list[fli].name == current_fid[i].file_identifier) {
+                          if (file_list[fli].file_bytes.length == c_file_bytes.length) {
+                            is_duplicate = true;
+                            break;
+                          }
                         }
                       }
-                    }
 
-                    if (is_duplicate == true) {
-                      // File already added, assume we have entered the reserve data and break the loop.
-                      break;
-                    }
+                      if (is_duplicate == true) {
+                        // File already added, assume we have entered the reserve data and break the loop.
+                        break;
+                      }
 
-                    file_list.push({
-                      'name': current_fid[i].file_identifier,
-                      'directory': current_fid[i].file_characteristics.directory,
-                      'file_bytes': c_file_bytes,
-                      'type': "iso"
-                    });
-                  } else if (descriptors[current_descriptor_index+i].type == "File Entry") {
-                    // TODO: build out code for file enrty.
+                      file_list.push({
+                        'name': current_fid[i].file_identifier,
+                        'directory': current_fid[i].file_characteristics.directory,
+                        'file_bytes': c_file_bytes,
+                        'type': "iso"
+                      });
+                    } else if (descriptors[current_descriptor_index+i].type == "File Entry") {
+                      // TODO: build out code for file enrty.
+                    }                    
                   }
                 }
               }
