@@ -430,54 +430,9 @@ class Static_File_Analyzer {
                 }
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Logical Volume Descriptor
-                logical_volume_descriptor = {
-                  'sequence_number': this.get_four_byte_int(file_bytes.slice(sector_start+16,sector_start+20), this.LITTLE_ENDIAN),
-                  'character_set': file_bytes.slice(sector_start+20,sector_start+84),
-                  'logical_volume_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+84,sector_start+212).filter(i => i > 31)),
-                  'logical_block_size': this.get_four_byte_int(file_bytes.slice(sector_start+212,sector_start+216), this.LITTLE_ENDIAN),
-                  'entity_flags': file_bytes[sector_start+216],
-                  'entity_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+217,sector_start+240).filter(i => i > 31)),
-                  'entity_identifier_suffix': file_bytes.slice(sector_start+240,sector_start+248),
-                  'contents_use': file_bytes.slice(sector_start+248,sector_start+264),
-                  'map_table_length': this.get_four_byte_int(file_bytes.slice(sector_start+264,sector_start+268), this.LITTLE_ENDIAN),
-                  'number_of_partition_maps': this.get_four_byte_int(file_bytes.slice(sector_start+268,sector_start+272), this.LITTLE_ENDIAN),
-                  'implementation_flags': file_bytes[sector_start+272],
-                  'implementation_identifier': Static_File_Analyzer.get_ascii(file_bytes.slice(sector_start+273,sector_start+296).filter(i => i > 31)),
-                  'implementation_identifier_suffix': file_bytes.slice(sector_start+296,sector_start+304),
-                  'implementation_use': file_bytes.slice(sector_start+304,sector_start+432),
-                  'integrity_sequence_extent_length': this.get_four_byte_int(file_bytes.slice(sector_start+432,sector_start+436), this.LITTLE_ENDIAN),
-                  'integrity_sequence_extent_location': this.get_four_byte_int(file_bytes.slice(sector_start+436,sector_start+440), this.LITTLE_ENDIAN),
-                  'raw_partition_maps': file_bytes.slice(sector_start+440,sector_start+512)
-                };
-
+                logical_volume_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
                 logical_block_size = logical_volume_descriptor.logical_block_size;
-                var partition_index = 0;
-
-                for (var i2=0; i2<logical_volume_descriptor.number_of_partition_maps; i2++) {
-                  var partition_type = logical_volume_descriptor.raw_partition_maps[partition_index];
-                  var partition_length = logical_volume_descriptor.raw_partition_maps[partition_index+1];
-                  var volume_sequence_number = this.get_two_byte_int(logical_volume_descriptor.raw_partition_maps.slice(partition_index+2, partition_index+4), this.LITTLE_ENDIAN);
-                  var partition_number = this.get_two_byte_int(logical_volume_descriptor.raw_partition_maps.slice(partition_index+4, partition_index+6), this.LITTLE_ENDIAN);
-
-                  udf_context.logical_partitions.push({
-                    'partition_type': partition_type,
-                    'partition_length': partition_length,
-                    'volume_sequence_number': volume_sequence_number,
-                    'partition_number': partition_number,
-                  });
-
-                  partition_index += partition_length;
-                }
-
-                logical_volume_descriptor.file_set_descriptor_location = {
-                  'length': this.get_four_byte_int(logical_volume_descriptor.contents_use.slice(0,4), this.LITTLE_ENDIAN),
-                  'logical_block_number': this.get_four_byte_int(logical_volume_descriptor.contents_use.slice(4,8), this.LITTLE_ENDIAN),
-                  'partition_reference_number': this.get_two_byte_int(logical_volume_descriptor.contents_use.slice(8,10), this.LITTLE_ENDIAN),
-                  'implementation_use': logical_volume_descriptor.contents_use.slice(10,16)
-                };
-
-                var logical_volume_descriptor2 = Universal_Disk_Format_Parser.parse_logical_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-                var debug555=0;
+                udf_context.logical_partitions = udf_context.logical_partitions.concat(logical_volume_descriptor.partition_maps);
               } else if (descriptor_tag.tag_identifier == 8) {
                 // Terminating Descriptor
                 terminating_descriptor = {};
@@ -7134,18 +7089,20 @@ class Universal_Disk_Format_Parser {
         });
       } else if (partition_map.partition_map_type == 2) {
         // See: http://www.osta.org/specs/pdf/udf260.pdf - 2.2.10 Metadata Partition Map
+        // Note: partition_type_identifier seems to sometimes have a trailing version of the form 3 bytes: 0x50 0x02 0x06
+
         logical_volume_descriptor.partition_maps.push({
           'partition_map_type': logical_volume_descriptor.raw_partition_maps[partition_index],
           'partition_map_length': logical_volume_descriptor.raw_partition_maps[partition_index+1],
           'reserved1': logical_volume_descriptor.raw_partition_maps.slice(partition_index+2,partition_index+4),
           'partition_type_identifier': Static_File_Analyzer.get_ascii(logical_volume_descriptor.raw_partition_maps.slice(partition_index+4,partition_index+36).filter(i => i > 31)),
-          'volume_sequence_number': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.logical_volume_contents_use.slice(partition_index+36,partition_index+38), "LITTLE_ENDIAN"),
-          'partition_number': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.logical_volume_contents_use.slice(partition_index+38,partition_index+40), "LITTLE_ENDIAN"),
-          'metadata_file_location': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.logical_volume_contents_use.slice(partition_index+40,partition_index+44), "LITTLE_ENDIAN"),
-          'metadata_mirror_file_location': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.logical_volume_contents_use.slice(partition_index+44,partition_index+48), "LITTLE_ENDIAN"),
-          'metadata_bitmap_file_location': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.logical_volume_contents_use.slice(partition_index+48,partition_index+52), "LITTLE_ENDIAN"),
-          'allocation_unit_size': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.logical_volume_contents_use.slice(partition_index+52,partition_index+56), "LITTLE_ENDIAN"),
-          'alignment_unit_size': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.logical_volume_contents_use.slice(partition_index+56,partition_index+58), "LITTLE_ENDIAN"),
+          'volume_sequence_number': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.raw_partition_maps.slice(partition_index+36,partition_index+38), "LITTLE_ENDIAN"),
+          'partition_number': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.raw_partition_maps.slice(partition_index+38,partition_index+40), "LITTLE_ENDIAN"),
+          'metadata_file_location': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.raw_partition_maps.slice(partition_index+40,partition_index+44), "LITTLE_ENDIAN"),
+          'metadata_mirror_file_location': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.raw_partition_maps.slice(partition_index+44,partition_index+48), "LITTLE_ENDIAN"),
+          'metadata_bitmap_file_location': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.raw_partition_maps.slice(partition_index+48,partition_index+52), "LITTLE_ENDIAN"),
+          'allocation_unit_size': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.raw_partition_maps.slice(partition_index+52,partition_index+56), "LITTLE_ENDIAN"),
+          'alignment_unit_size': Static_File_Analyzer.get_int_from_bytes(logical_volume_descriptor.raw_partition_maps.slice(partition_index+56,partition_index+58), "LITTLE_ENDIAN"),
           'flags': logical_volume_descriptor.raw_partition_maps[partition_index+58],
           'reserved2': logical_volume_descriptor.raw_partition_maps.slice(partition_index+59,partition_index+64)
         });
