@@ -367,10 +367,6 @@ class Static_File_Analyzer {
           break;
         }
 
-        var logical_volume_descriptor = null;
-        var partition_descriptor = null;
-        var terminating_descriptor = null;
-
         var descriptors = [];
         var found_anchor_volume_descriptor_pointer = false;
 
@@ -420,7 +416,7 @@ class Static_File_Analyzer {
                 });
               } else if (descriptor_tag.tag_identifier == 5) {
                 // Partition Descriptor
-                partition_descriptor = Universal_Disk_Format_Parser.parse_partition_descriptor(file_bytes.slice(sector_start,sector_start+512));
+                var partition_descriptor = Universal_Disk_Format_Parser.parse_partition_descriptor(file_bytes.slice(sector_start,sector_start+512));
                 partition_descriptor['byte_start'] = (sector_size * partition_descriptor.partition_starting_location);
 
                 // Update file metadata
@@ -436,7 +432,7 @@ class Static_File_Analyzer {
                 });
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Logical Volume Descriptor
-                logical_volume_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+                var logical_volume_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
 
                 descriptors.push({
                   'type': "Logical Volume Descriptor",
@@ -454,7 +450,7 @@ class Static_File_Analyzer {
                 });
               } else if (descriptor_tag.tag_identifier == 8) {
                 // Terminating Descriptor
-                terminating_descriptor = Universal_Disk_Format_Parser.parse_terminating_descriptor(file_bytes.slice(sector_start,sector_start+512));;
+                var terminating_descriptor = Universal_Disk_Format_Parser.parse_terminating_descriptor(file_bytes.slice(sector_start,sector_start+512));;
 
                 descriptors.push({
                   'type': "Terminating Descriptor",
