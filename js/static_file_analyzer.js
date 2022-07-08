@@ -379,6 +379,8 @@ class Static_File_Analyzer {
         var partition_descriptor = null;
         var terminating_descriptor = null;
 
+        var descriptors = [];
+
         if (main_volume_descriptor_sequence_extent !== null) {
           // find the partition descriptor
           for (var i=0; i<=256; i++) {
@@ -397,14 +399,36 @@ class Static_File_Analyzer {
               if (descriptor_tag.tag_identifier == 1) {
                 // Primary Volume Descriptor
                 var primary_volume_descriptor = Universal_Disk_Format_Parser.parse_primary_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+                primary_volume_descriptor['byte_location'] = sector_start;
+
+                descriptors.push({
+                  'type': "Primary Volume Descriptor",
+                  'descriptor': primary_volume_descriptor
+                });
+              } else if (descriptor_tag.tag_identifier == 2) {
+                // Anchor Volume Descriptor Pointer
+                var anchor_volume_descriptor_pointer = Universal_Disk_Format_Parser.parse_anchor_volume_descriptor_pointer(file_bytes.slice(sector_start,sector_start+512));
+                anchor_volume_descriptor_pointer['byte_location'] = sector_start;
+
+                descriptors.push({
+                  'type': "Anchor Volume Descriptor Pointer",
+                  'descriptor': anchor_volume_descriptor_pointer
+                });
               } else if (descriptor_tag.tag_identifier == 4) {
                 // Implementation Use Volume Descriptor
                 var implementation_use_volume_descriptor = Universal_Disk_Format_Parser.parse_implementation_use_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+                implementation_use_volume_descriptor['byte_location'] = sector_start;
+
+                descriptors.push({
+                  'type': "Implementation Use Volume Descriptor",
+                  'descriptor': implementation_use_volume_descriptor
+                });
               } else if (descriptor_tag.tag_identifier == 5) {
                 // Partition Descriptor
                 partition_descriptor = Universal_Disk_Format_Parser.parse_partition_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
-
+                partition_descriptor['byte_location'] = sector_start;
                 partition_descriptor['byte_start'] = (sector_size * partition_descriptor.partition_starting_location);
+
                 udf_context.physical_partitions[partition_descriptor.partition_number] = {
                   'start': (partition_descriptor.partition_starting_location * sector_size),
                   'length': (partition_descriptor.partition_length * sector_size)
@@ -415,17 +439,50 @@ class Static_File_Analyzer {
                 if (partition_descriptor.implementation_identifier.identifier == "Microsoft IMAPI2 1.0") {
                   file_info.metadata.creation_os = "Windows";
                 }
+
+                descriptors.push({
+                  'type': "Partition Descriptor",
+                  'descriptor': partition_descriptor
+                });
               } else if (descriptor_tag.tag_identifier == 6) {
                 // Logical Volume Descriptor
                 logical_volume_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+                logical_volume_descriptor['byte_location'] = sector_start;
+
                 logical_block_size = logical_volume_descriptor.logical_block_size;
                 udf_context.logical_partitions = udf_context.logical_partitions.concat(logical_volume_descriptor.partition_maps);
+
+                descriptors.push({
+                  'type': "Logical Volume Descriptor",
+                  'descriptor': logical_volume_descriptor
+                });
+              } else if (descriptor_tag.tag_identifier == 6) {
+                // Unallocated Space Descriptor
+                var unallocated_space_descriptor = Universal_Disk_Format_Parser.parse_unallocated_space_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+                unallocated_space_descriptor['byte_location'] = sector_start;
+
+                descriptors.push({
+                  'type': "Unallocated Space Descriptor",
+                  'descriptor': unallocated_space_descriptor
+                });
               } else if (descriptor_tag.tag_identifier == 8) {
                 // Terminating Descriptor
-                terminating_descriptor = {};
+                terminating_descriptor = Universal_Disk_Format_Parser.parse_terminating_descriptor(file_bytes.slice(sector_start,sector_start+512));
+                terminating_descriptor['byte_location'] = sector_start;
+
+                descriptors.push({
+                  'type': "Terminating Descriptor",
+                  'descriptor': terminating_descriptor
+                });
               } else if (descriptor_tag.tag_identifier == 9) {
                 // Logical Volume Integrity Descriptor
                 var logical_volume_integrity_descriptor = Universal_Disk_Format_Parser.parse_logical_volume_integrity_descriptor(file_bytes.slice(sector_start,sector_start+sector_size));
+                logical_volume_integrity_descriptor['byte_location'] = sector_start;
+
+                descriptors.push({
+                  'type': "Logical Volume Integrity Descriptor",
+                  'descriptor': logical_volume_integrity_descriptor
+                });
               } else if (descriptor_tag.tag_identifier == 0x10A) {
                 // Extended File Entry
                 var extended_file_entry = Universal_Disk_Format_Parser.parse_extended_file_entry(file_bytes.slice(sector_start,sector_start+sector_size));
@@ -440,11 +497,17 @@ class Static_File_Analyzer {
                   file_info.metadata.creation_date = extended_file_entry.creation_timestamp;
                 }
 
-                var debug123=0;
+                descriptors.push({
+                  'type': "Extended File Entry",
+                  'descriptor': extended_file_entry
+                });
               }
 
             }
           }
+
+          // DEBUG
+          console.log(descriptors);
 
           if (partition_descriptor !== null) {
             // Look for	File Identifier Descriptor
@@ -6847,6 +6910,31 @@ class Universal_Disk_Format_Parser {
   }
 
   /**
+   * Parse the Anchor Volume Descriptor Pointer in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.2 Anchor Volume Descriptor Pointer
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the Anchor Volume Descriptor Pointer start byte.
+   * @return {object} The parsed Anchor Volume Descriptor Pointer
+   */
+  static parse_anchor_volume_descriptor_pointer(arr_bytes) {
+    var anchor_volume_descriptor_pointer = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'main_volume_descriptor_sequence_extent': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,20), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(20,24), "LITTLE_ENDIAN"),
+      },
+      'reserve_volume_descriptor_sequence_extent': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(24,28), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(28,32), "LITTLE_ENDIAN"),
+      },
+      'reserved': arr_bytes.slice(32,512)
+    };
+
+    return anchor_volume_descriptor_pointer;
+  }
+
+  /**
    * Parses the descriptor tag for a Universal Disk Format file.
    *
    * @see https://wiki.osdev.org/UDF
@@ -7027,7 +7115,7 @@ class Universal_Disk_Format_Parser {
   }
 
   /**
-   * Parse the Logical Volume Integrity Descriptor  in Universal Disk Format.
+   * Parse the Logical Volume Integrity Descriptor in Universal Disk Format.
    *
    * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.10 Logical Volume Integrity Descriptor
    *
@@ -7066,7 +7154,7 @@ class Universal_Disk_Format_Parser {
       'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(current_byte++,current_byte+=23).filter(i => i > 31)),
       'identifier_suffix': arr_bytes.slice(current_byte,current_byte+=8)
     };
-    
+
     return logical_volume_integrity_descriptor;
   }
 
@@ -7271,5 +7359,50 @@ class Universal_Disk_Format_Parser {
     };
 
     return primary_volume_descriptor;
+  }
+
+  /**
+   * Parse the Terminating Descriptor in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.9 Terminating Descriptor
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the Terminating Descriptor start byte.
+   * @return {object} The parsed Terminating Descriptor
+   */
+  static parse_terminating_descriptor(arr_bytes) {
+    var terminating_descriptor = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'reserved': arr_bytes.slice(16,512)
+    };
+
+    return terminating_descriptor;
+  }
+
+  /**
+   * Parse the Unallocated Space Descriptor in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 10.8 Unallocated Space Descriptor
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the Unallocated Space Descriptor start byte.
+   * @return {object} The parsed Unallocated Space Descriptor
+   */
+  static parse_unallocated_space_descriptor(arr_bytes) {
+    var unallocated_space_descriptor = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'volume_descriptor_sequence_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(16,20), "LITTLE_ENDIAN"),
+      'number_of_allocation_descriptors': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(20,24), "LITTLE_ENDIAN"),
+      'allocation_descriptors': []
+    };
+
+    var current_byte = 24;
+
+    for (var i=0; i<unallocated_space_descriptor.number_of_allocation_descriptors; i++) {
+      unallocated_space_descriptor.allocation_descriptors.push({
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte,current_byte+=4), "LITTLE_ENDIAN"),
+        'extent_location': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(current_byte,current_byte+=4), "LITTLE_ENDIAN"),
+      });
+    }
+
+    return unallocated_space_descriptor;
   }
 }
