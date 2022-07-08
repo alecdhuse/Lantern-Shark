@@ -495,6 +495,24 @@ class Static_File_Analyzer {
                   'byte_location': sector_start,
                   'descriptor': file_identifier_descriptor
                 });
+              } else if (descriptor_tag.tag_identifier == 0x105) {
+                // File Entry
+                var file_entry = Universal_Disk_Format_Parser.parse_file_entry(file_bytes.slice(sector_start,sector_start+sector_size));
+
+                // Update metadata
+                if (file_info.metadata.last_modified_date == "0000-00-00 00:00:00") {
+                  file_info.metadata.last_modified_date = file_entry.modification_timestamp;
+                }
+
+                if (file_info.metadata.creation_date == "0000-00-00 00:00:00") {
+                  file_info.metadata.creation_date = file_entry.attribute_timestamp;
+                }
+
+                descriptors.push({
+                  'type': "File Entry",
+                  'byte_location': sector_start,
+                  'descriptor': file_entry
+                });
               } else if (descriptor_tag.tag_identifier == 0x10A) {
                 // Extended File Entry
                 var extended_file_entry = Universal_Disk_Format_Parser.parse_extended_file_entry(file_bytes.slice(sector_start,sector_start+sector_size));
@@ -526,6 +544,9 @@ class Static_File_Analyzer {
             }
           }
 
+          // DEBUG
+          //console.log(descriptors);
+
           // Build a list of files
           var current_descriptor_index = 0;
           var current_fid = null;
@@ -546,7 +567,9 @@ class Static_File_Analyzer {
                   continue;
                 } else {
                   if (current_descriptor_index+i < descriptors.length) {
-                    if (descriptors[current_descriptor_index+i].type == "Extended File Entry") {
+                    if (descriptors[current_descriptor_index+i].type == "Extended File Entry" ||
+                        descriptors[current_descriptor_index+i].type == "File Entry") {
+
                       current_fe = descriptors[current_descriptor_index+i].descriptor;
 
                       var file_length = current_fe.allocation_descriptors[0].extent_length;
@@ -576,9 +599,7 @@ class Static_File_Analyzer {
                         'file_bytes': c_file_bytes,
                         'type': "iso"
                       });
-                    } else if (descriptors[current_descriptor_index+i].type == "File Entry") {
-                      // TODO: build out code for file enrty.
-                    }                    
+                    }
                   }
                 }
               }
@@ -7024,6 +7045,66 @@ class Universal_Disk_Format_Parser {
     }
 
     return extended_file_entry;
+  }
+
+  /**
+   * Parse the File Entry in Universal Disk Format.
+   *
+   * @see https://www.ecma-international.org/wp-content/uploads/ECMA-167_3rd_edition_june_1997.pdf - 14.9 File Entry
+   *
+   * @param {array}   arr_bytes The array of bytes starting at the File Entry start byte.
+   * @return {object} The parsedFile Entry
+   */
+  static parse_file_entry(arr_bytes) {
+    var file_entry = {
+      'descriptor_tag': Universal_Disk_Format_Parser.parse_descriptor_tag(arr_bytes.slice(0,16)),
+      'icb_tag': Universal_Disk_Format_Parser.parse_icb_tag(arr_bytes.slice(16,36)),
+      'uid': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(36,40), "LITTLE_ENDIAN"),
+      'gid': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(40,44), "LITTLE_ENDIAN"),
+      'permissions': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(44,48), "LITTLE_ENDIAN"),
+      'file_link_count': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(48,50), "LITTLE_ENDIAN"),
+      'record_format': arr_bytes[50],
+      'record_display_attributes': arr_bytes[51],
+      'record_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(52,56), "LITTLE_ENDIAN"),
+      'information_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(56,64), "LITTLE_ENDIAN"),
+      'logical_blocks_recorded': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(64,72), "LITTLE_ENDIAN"),
+      'access_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(72,84)),
+      'modification_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(84,96)),
+      'attribute_timestamp': Universal_Disk_Format_Parser.get_ecma_timestamp(arr_bytes.slice(96,108)),
+      'checkpoint': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(108,112), "LITTLE_ENDIAN"),
+      'extended_attribute_icb': {
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(112,116), "LITTLE_ENDIAN"),
+        'extent_location': {
+          'logical_block_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(116,120), "LITTLE_ENDIAN"),
+          'partition_reference_number': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(120,122), "LITTLE_ENDIAN"),
+        },
+        'implementation_use': arr_bytes.slice(122,128)
+      },
+      'implementation_identifier': {
+        'flags': arr_bytes[128],
+        'identifier': Static_File_Analyzer.get_ascii(arr_bytes.slice(129,152).filter(i => i > 31)),
+        'identifier_suffix': arr_bytes.slice(152,160)
+      },
+      'unique_id': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(160,168), "LITTLE_ENDIAN"),
+      'length_of_extended_attributes': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(168,172), "LITTLE_ENDIAN"),
+      'length_of_allocation_descriptors': Static_File_Analyzer.get_int_from_bytes(arr_bytes.slice(172,176), "LITTLE_ENDIAN"),
+      'extended_attributes': [],
+      'allocation_descriptors': []
+    };
+
+    file_entry.extended_attributes = arr_bytes.slice(176,176+file_entry.length_of_extended_attributes);
+
+    var allocation_descriptors_bytes = arr_bytes.slice(176+file_entry.length_of_extended_attributes,176+file_entry.length_of_extended_attributes+file_entry.length_of_allocation_descriptors);
+    var current_ad_byte = 0;
+
+    while (current_ad_byte < allocation_descriptors_bytes.length) {
+      file_entry.allocation_descriptors.push({
+        'extent_length': Static_File_Analyzer.get_int_from_bytes(allocation_descriptors_bytes.slice(current_ad_byte,current_ad_byte+=4), "LITTLE_ENDIAN"),
+        'extent_position': Static_File_Analyzer.get_int_from_bytes(allocation_descriptors_bytes.slice(current_ad_byte,current_ad_byte+=4), "LITTLE_ENDIAN"),
+      });
+    }
+
+    return file_entry;
   }
 
   /**
