@@ -17,6 +17,7 @@ See the table below for a list of supported file types and types of data extract
 | EXE            | X            | X               |                 |          |                  |                   |
 | GZ             | X            | X               |                 |          |                  |                   |
 | ISO            | X            | X               |                 |          |                  |                   |
+| [ISO - UDF](https://en.wikipedia.org/wiki/Universal_Disk_Format)      | X            | X               | X               | X        |                  |                   |
 | JPEG           | X            | X               |                 |          |                  |                   |
 | LNK            | X            |                 |                 |          | X                | X                 |
 | PDF            | X            | X               |                 | X        | X                | X                 |
