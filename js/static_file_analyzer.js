@@ -577,7 +577,7 @@ class Static_File_Analyzer {
                         'name': current_fid[i].file_identifier,
                         'directory': current_fid[i].file_characteristics.directory,
                         'file_bytes': c_file_bytes,
-                        'type': "iso"
+                        'type': "udf"
                       });
                     }
                   }

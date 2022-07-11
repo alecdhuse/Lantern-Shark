@@ -13,13 +13,14 @@ window.addEventListener('load', (event) => {
 
   document.getElementById('open_file').addEventListener('change', read_file, false);
   document.getElementById('toolbar_open').addEventListener('click', function(){document.getElementById('open_file').click()}, false);
-  document.getElementById('toolbar_save').addEventListener('click', save_selected, false);
+  document.getElementById('toolbar_save').addEventListener('click', save_selected_file, false);
 });
 
 /**
  * Attempts to brute force a ZIP file's password.
 
  * @param {Event}  e The event triggered from clicking the brute force image.
+ * @return {void}
  */
 async function brute_force_zip(e) {
   if (window.zip) {
@@ -101,6 +102,7 @@ async function brute_force_zip(e) {
  * Handles the UX changes for when a user changes tabs.
  *
  * @param {Event}  e The event triggered from clicking the tab.
+ * @return {void}
  */
 function change_tab(e) {
   var tab_id = e.currentTarget.id;
@@ -126,6 +128,7 @@ function change_tab(e) {
  * @async
  *
  * @param {Event}  e The event triggered from clicking the decrypt file image.
+ * @return {void}
  */
 async function decrypt_file(e) {
   file_password = $("#summary_file_encrypted_password_txt").val();
@@ -153,6 +156,7 @@ async function decrypt_file(e) {
  * Displays the provided file summary
  *
  * @param {object}  file_analyzer_results The results from the Static_File_Analyzer
+ * @return {void}
  */
 function display_file_summary(file_analyzer_results) {
   // Load summary info
@@ -193,6 +197,24 @@ function display_file_summary(file_analyzer_results) {
  * This function will attempt to make a Unicode safe conversion of the byte array,
  * but will return an ASCII representation if that fails.
  *
+ * @param {boolean}  to_enable True or False to enable the save file toolbar button.
+ * @return {void}
+ */
+function enable_save_file_toolbar_button(to_enable) {
+  if (to_enable == true) {
+    $("#toolbar_save_svg").css("fill", "#000");
+    $("#toolbar_save_caption").css("color", "#000");
+  } else {
+    $("#toolbar_save_svg").css("fill", "#999");
+    $("#toolbar_save_caption").css("color", "#999");
+  }
+}
+
+/**
+ * Returns the content of a given byte array (file) as a string.
+ * This function will attempt to make a Unicode safe conversion of the byte array,
+ * but will return an ASCII representation if that fails.
+ *
  * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of a file.
  * @return {String}     The string value of the file.
  */
@@ -223,6 +245,7 @@ function password_field_keydown(e) {
  * Event triggered when the user opens a file.
  *
  * @param {Event}  e The event triggered from opening a new file.
+ * @return {void}
  */
 function read_file(e) {
   var file = e.target.files[0];
@@ -287,15 +310,24 @@ function read_file(e) {
  * Handles the UX click for the toolbar save selected button.
  * @async
  * @param {Event}  e The event triggered from clicking the tab.
+ * @return {void}
  */
-async function save_selected(e) {
+async function save_selected_file(e) {
+  var base64_encoded;
+  var component_bytes = [];
+  var file_name = analyzer_results.file_components[selected_file_component].name;
+
   file_password = $("#summary_file_encrypted_password_txt").val();
 
   if (analyzer_results.file_components[selected_file_component].type == "zip") {
-    var file_name = analyzer_results.file_components[selected_file_component].name;
-    var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, selected_file_component, file_password);
-    var base64_encoded = Static_File_Analyzer.base64_encode_array(component_bytes);
+    component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, selected_file_component, file_password);
+  } else {
+    // Code for other componets
+    component_bytes = analyzer_results.file_components[selected_file_component].file_bytes;
+  }
 
+  if (component_bytes !== null && component_bytes !== undefined) {
+    base64_encoded = Static_File_Analyzer.base64_encode_array(component_bytes);
     var hidden_element = document.createElement('a');
     hidden_element.href = 'data:application/octet-stream;base64,' + base64_encoded;
     hidden_element.target = '_blank';
@@ -304,8 +336,6 @@ async function save_selected(e) {
     document.body.appendChild(hidden_element);
     hidden_element.click();
     document.body.removeChild(hidden_element);
-  } else {
-    // Code for other componets
   }
 }
 
@@ -314,6 +344,7 @@ async function save_selected(e) {
  * @async
  * @param {Event}   e The event triggered from the user click.
  * @param {integer} component_index Optional value to select ty component index.
+ * @return {void}
  */
 async function select_file_component(e, component_index=null) {
   if (e !== null) {
@@ -365,25 +396,23 @@ async function select_file_component(e, component_index=null) {
         }
 
         // Enable save toolbar item
-        $("#toolbar_save_svg").css("fill", "#000");
-        $("#toolbar_save_caption").css("color", "#000");
+        enable_save_file_toolbar_button(true);
       } catch(err) {
         // Disable save toolbar item
-        $("#toolbar_save_svg").css("fill", "#999");
-        $("#toolbar_save_caption").css("color", "#999");
+        enable_save_file_toolbar_button(false);
       }
-    } else if (analyzer_results.file_components[component_index].type == "iso") {
+    } else if (analyzer_results.file_components[component_index].type == "udf") {
       var component_bytes = analyzer_results.file_components[component_index].file_bytes;
       var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
 
       display_file_summary(subfile_analyzer_results);
+      enable_save_file_toolbar_button(true);
       $("#file_text").val(get_file_text(component_bytes));
     } else {
       // Code for other componets
 
       // Disable save toolbar item
-      $("#toolbar_save_svg").css("fill", "#999");
-      $("#toolbar_save_caption").css("color", "#999");
+      enable_save_file_toolbar_button(false);
     }
   }
 
@@ -394,6 +423,7 @@ async function select_file_component(e, component_index=null) {
  * Event triggered when the user clicks the top level file in the file tree.
  * @async
  * @param {Event}  e The event triggered from the user click.
+ * @return {void}
  */
 async function select_top_level_file(e) {
   $("#top_level_file").addClass("file_tree_item_selected");
