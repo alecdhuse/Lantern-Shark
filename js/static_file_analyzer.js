@@ -470,7 +470,7 @@ class Static_File_Analyzer {
 
       local_base_path = Static_File_Analyzer.get_string_from_array(local_base_path_bytes);
       if (local_base_path === null) {
-        local_base_path = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i !== 0));
+        local_base_path = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i > 31));
       }
     }
 
@@ -485,13 +485,13 @@ class Static_File_Analyzer {
 
       var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
       var common_path_suffix_start_unicode = (link_info_start+common_path_suffix_offset_unicode);
+
+      var common_path_suffix_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
+      var common_path_suffix_unicode = Static_File_Analyzer.get_string_from_array(common_path_suffix_unicode_bytes);
     }
 
-    var common_path_suffix_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
-    var common_path_suffix = Static_File_Analyzer.get_string_from_array(common_path_suffix_bytes);
-    if (common_path_suffix === null) {
-      common_path_suffix = Static_File_Analyzer.get_ascii(common_path_suffix_bytes.filter(i => i !== 0));
-    }
+    var common_path_suffix_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), false);
+    var common_path_suffix = Static_File_Analyzer.get_ascii(common_path_suffix_bytes.filter(i => i > 31));
 
     if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
       // VolumeID
@@ -575,6 +575,7 @@ class Static_File_Analyzer {
     file_info = this.search_for_iocs(cmd_shell, file_info);
 
     // ExtraData
+    var extra_data_arr = [];
     var block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
 
     while (block_size >= 4) {
@@ -592,36 +593,90 @@ class Static_File_Analyzer {
         }
       } else if (block_sig == 0xA0000002) {
         // ConsoleDataBlock
-        var fill_attributes = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var popup_fill_attributes = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var screen_buffer_size_x = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var screen_buffer_size_y = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var window_size_x = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var window_size_y = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var window_origin_x = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var window_origin_y = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-        var unused1 = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var unused2 = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var font_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var font_family = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var font_weight = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var font_name_bytes = file_bytes.slice(byte_offset,byte_offset+=64);
-        var cursor_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var full_screen = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var quick_edit = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var insert_mode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var auto_position = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var history_buff_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var number_of_history_buffers = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var history_no_dup = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var color_table = file_bytes.slice(byte_offset,byte_offset+=64);
+        extra_data_arr.push({
+          'type': "distributed_link_tracker_properties",
+          'data': {
+            'fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'popup_fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'screen_buffer_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'screen_buffer_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'window_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'window_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'window_origin_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'window_origin_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
+            'unused1': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'unused2': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'font_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'font_family': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'font_weight': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'font_name_bytes': file_bytes.slice(byte_offset,byte_offset+=64),
+            'cursor_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'full_screen': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'quick_edit': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'insert_mode': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'auto_position': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'history_buff_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'number_of_history_buffers': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'history_no_dup': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'color_table': file_bytes.slice(byte_offset,byte_offset+=64)
+          }
+        });
       } else if (block_sig == 0xA0000003) {
         // TrackerDataBlock
         var tracker_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
         var tracker_version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var machine_id = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=16).filter(i => i !== 0));
+        var distributed_link_tracker_properties = {};
+
+        distributed_link_tracker_properties['net_bios_name'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=16).filter(i => i !== 0));
+
         var droid_bytes = file_bytes.slice(byte_offset,byte_offset+=32);
+
+        distributed_link_tracker_properties['droid_volume_identifier'] = [
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(0,4).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(4,6).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(6,8).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(8,10)),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(10,16))
+        ].join('-');
+
+        distributed_link_tracker_properties['droid_file_identifier'] = [
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(16,20).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(20,22).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(22,24).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(24,26)),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(26,32))
+        ].join('-');
+
         var droid_birth_bytes = file_bytes.slice(byte_offset,byte_offset+=32);
+
+        distributed_link_tracker_properties['droid_birth_volume_identifier'] = [
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(0,4).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(4,6).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(6,8).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(8,10)),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(10,16))
+        ].join('-');
+
+        distributed_link_tracker_properties['droid_birth_file_identifier'] = [
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(16,20).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(20,22).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(22,24).reverse()),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(24,26)),
+          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(26,32))
+        ].join('-');
+
+        var mac_address_bytes = droid_birth_bytes.slice(26,32);
+        var mac_address_str = "";
+        for (var mi=0; mi<mac_address_bytes.length; mi++) {
+          mac_address_str += Static_File_Analyzer.get_hex_string_from_byte_array([mac_address_bytes[mi]]);
+
+          if (mac_address_str.length == 2 || mac_address_str.length == 5 || mac_address_str.length == 8 || mac_address_str.length == 11 || mac_address_str.length == 14) {
+            mac_address_str += ":";
+          }
+        }
+
+        distributed_link_tracker_properties['mac_address'] = mac_address_str;
+        extra_data_arr.push({'type': "distributed_link_tracker_properties", 'data': distributed_link_tracker_properties});
       } else if (block_sig == 0xA0000004) {
         // ConsoleFEDataBlock
         var code_page = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
@@ -629,7 +684,7 @@ class Static_File_Analyzer {
         // SpecialFolderDataBlock
         var special_folder_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
         var special_folder_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        // TODO get special forlder info.
+        // TODO get special folder info.
       } else if (block_sig == 0xA0000006) {
         // DarwinDataBlock
         var target_ansi_bytes = file_bytes.slice(byte_offset,byte_offset+=260);
@@ -702,8 +757,6 @@ class Static_File_Analyzer {
 
       block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
     }
-
-    var debug4544=0;
 
     return file_info;
   }
@@ -4186,6 +4239,25 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Converts an array of int values 0-255 to a hex string.
+   *
+   * @param {array}    bytes Array with int values 0-255 representing byte values.
+   * @return {String}  The hex representation of the byte integers in the given array
+   */
+  static get_hex_string_from_byte_array(int_array) {
+    var byte_hex;
+    var hex_string = "";
+
+    for (var i=0; i<int_array.length; i++) {
+      byte_hex = int_array[i].toString(16);
+      byte_hex = (byte_hex.length < 2) ? "0" + byte_hex : byte_hex;
+      hex_string += byte_hex;
+    }
+
+    return hex_string;
+  }
+
+  /**
    * Converts an array with int values 0 or 1 to unsined integer.
    *
    * @param {array}    binary_array Array with int values 0 or 1 representing binary values.
@@ -4350,9 +4422,9 @@ class Static_File_Analyzer {
     var return_array = [];
 
     if (double_byte == false) {
-      for (var i=0; i<bytes.length; i++) {
+      for (var i=0; i<bytes.length-1; i++) {
         return_array.push(bytes[i]);
-        if (bytes[i] == 0) break;
+        if (bytes[i] == 0 && bytes[i+1] < 32) break;
       }
     } else {
       for (var i=0; i<bytes.length-1; i++) {
