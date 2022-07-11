@@ -364,6 +364,10 @@ class Static_File_Analyzer {
     var file_info = this.get_default_file_json();
 
     var drive_types_arr = ['DRIVE_UNKNOWN','DRIVE_NO_ROOT_DIR','DRIVE_REMOVABLE','DRIVE_FIXED','DRIVE_REMOTE','DRIVE_CDROM','DRIVE_RAMDISK'];
+    var guids = {
+      "B725F130-47EF-101A-A5F1-02608C9EEBAC": "System.ItemTypeText",
+      "DABD30ED-0043-4789-A7F8-D013A4736622": "System.ItemFolderPathDisplayNarrow"
+    };
 
     file_info.file_format = "lnk";
     file_info.file_generic_type = "Shortcut";
@@ -586,11 +590,20 @@ class Static_File_Analyzer {
         // EnvironmentVariableDataBlock
         var target_ansi_bytes = file_bytes.slice(byte_offset,byte_offset+=260);
         var env_variable_ansi = Static_File_Analyzer.get_string_from_array(target_ansi_bytes.filter(i => i !== 0));
+        var env_variable_unicode = "";
 
         if (byte_offset < block_end) {
           var target_unicode_bytes = file_bytes.slice(byte_offset,byte_offset+=520);
-          var env_variable_unicode = Static_File_Analyzer.get_string_from_array(target_unicode_bytes.filter(i => i !== 0));
+          env_variable_unicode = Static_File_Analyzer.get_string_from_array(target_unicode_bytes.filter(i => i !== 0));
         }
+
+        extra_data_arr.push({
+          'type': "EnvironmentVariableDataBlock",
+          'data': {
+            'TargetAnsi': env_variable_ansi,
+            'TargetUnicode': env_variable_unicode
+          }
+        });
       } else if (block_sig == 0xA0000002) {
         // ConsoleDataBlock
         extra_data_arr.push({
@@ -676,7 +689,7 @@ class Static_File_Analyzer {
         }
 
         distributed_link_tracker_properties['mac_address'] = mac_address_str;
-        extra_data_arr.push({'type': "distributed_link_tracker_properties", 'data': distributed_link_tracker_properties});
+        extra_data_arr.push({'type': "DistributedLinkTrackerProperties", 'data': distributed_link_tracker_properties});
       } else if (block_sig == 0xA0000004) {
         // ConsoleFEDataBlock
         var code_page = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
@@ -708,42 +721,97 @@ class Static_File_Analyzer {
         break;
       } else if (block_sig == 0xA0000009) {
         // PropertyStoreDataBlock
+        var data_block_properties = [];
         var storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var format_id = file_bytes.slice(byte_offset,byte_offset+=16);
 
-        var guid = "";
-        var guid_index = 0;
-        for (var k=0; k<format_id.length; k++) {
-          var hex_code = format_id[k].toString(16).toUpperCase();
-          guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
-          guid = (k==3||k==5||k==7||k==9) ? guid += "-" : guid;
+        while (storage_size > 0) {
+          var version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var format_id = file_bytes.slice(byte_offset,byte_offset+=16);
+
+          var guid = [
+            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(0,4).reverse()),
+            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(4,6).reverse()),
+            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(6,8).reverse()),
+            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(8,10)),
+            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(10,16))
+          ].join('-').toUpperCase();
+
+          if (guid == "D5CDD505-2E9C-101B-9397-08002B2CF9AE" || guid == "05D5CDD5-9C2E-1B10-9397-08002B2CF9AE") {
+            // String
+            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+            while (value_size != 0 && !isNaN(value_size)) {
+              var name_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+              byte_offset++ // skip reserved byte
+
+              var name_bytes = file_bytes.slice(byte_offset,byte_offset+=name_size);
+              var name_str = Static_File_Analyzer.get_string_from_array(name_bytes);
+
+              var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(value_size-name_bytes));
+              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            }
+          } else {
+            // Serialized Property Value
+            var struct_start = byte_offset;
+            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            var struct_end = struct_start + value_size;
+
+            while (value_size != 0 && !isNaN(value_size)) {
+              var value = "";
+              var value_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+              byte_offset++ // skip reserved byte
+
+              var type = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+              var padding = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+
+              // See: https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-OLEPS/%5bMS-OLEPS%5d.pdf - 2.15 TypedPropertyValue
+              if (type == 0x0000) {
+                // VT_EMPTY
+              } else if (type == 0x0001) {
+                // VT_NULL
+              } else if (type == 0x0002) {
+                // VT_I2 - 16-bit signed integer, followed by zero padding to 4 bytes
+              } else if (type == 0x0003) {
+                // VT_I4 - 32-bit signed integer
+              } else if (type == 0x0004) {
+                // VT_R4 - 4-byte (single-precision) IEEE floating-point number
+              } else if (type == 0x0005) {
+                // VT_R8 - 8-byte (double-precision) IEEE floating-point number
+              } else if (type == 0x0006) {
+                // VT_CY - CURRENCY
+              } else if (type == 0x0007) {
+                // VT_DATE
+              } else if (type == 0x0008) {
+                // VT_BSTR - CodePageString
+              } else if (type == 0x001F) {
+                // VT_LPWSTR - UnicodeString
+                var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+                var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(char_length*2));
+                value = Static_File_Analyzer.get_string_from_array(value_bytes.filter(i => i > 31));
+              } else if (type == 0x0040) {
+                // VT_FILETIME
+                value = this.get_eight_byte_date(file_bytes.slice(byte_offset,byte_offset+=8), this.LITTLE_ENDIAN);
+              }
+
+              data_block_properties.push({
+                'guid': guid,
+                'id': value_id,
+                'value': value
+              });
+
+              // TODO fix something here
+              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            }
+          }
+
+
+          storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
         }
 
-        if (guid == "D5CDD505-2E9C-101B-9397-08002B2CF9AE") {
-          // String
-          var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-
-          while (value_size != 0 && !isNaN(value_size)) {
-            var name_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-            byte_offset++ // skip reserved byte
-
-            var name_bytes = file_bytes.slice(byte_offset,byte_offset+=name_size);
-            var value_bytes = file_bytes.slice(byte_offset,byte_offset+=value_size);
-            value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-          }
-        } else {
-          var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-
-          while (value_size != 0 && !isNaN(value_size)) {
-            var value_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-            byte_offset++ // skip reserved byte
-
-            var value_bytes = file_bytes.slice(byte_offset,byte_offset+=value_size);
-            value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-          }
-        }
-
+        extra_data_arr.push({
+          'type': "PropertyStoreDataBlock",
+          'data': data_block_properties
+        });
       } else if (block_sig == 0xA000000B) {
         // KnownFolderDataBlock
         var known_folder_id_bytes = file_bytes.slice(byte_offset,byte_offset+=16);
