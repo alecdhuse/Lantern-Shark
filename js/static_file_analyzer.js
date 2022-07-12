@@ -699,15 +699,17 @@ class Static_File_Analyzer {
         var tracker_version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
         var distributed_link_tracker_properties = {};
 
-        distributed_link_tracker_properties['net_bios_name'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=16).filter(i => i !== 0));
+        distributed_link_tracker_properties['MachineID'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=16).filter(i => i !== 0));
 
         var droid_bytes = file_bytes.slice(byte_offset,byte_offset+=32);
-        distributed_link_tracker_properties['droid_volume_identifier'] = this.get_guid(droid_bytes.slice(0,16));
-        distributed_link_tracker_properties['droid_file_identifier'] = this.get_guid(droid_bytes.slice(16,32));
+        distributed_link_tracker_properties['Droid'] = {};
+        distributed_link_tracker_properties['Droid']['VolumeIdentifier'] = this.get_guid(droid_bytes.slice(0,16));
+        distributed_link_tracker_properties['Droid']['FileIdentifier'] = this.get_guid(droid_bytes.slice(16,32));
 
         var droid_birth_bytes = file_bytes.slice(byte_offset,byte_offset+=32);
-        distributed_link_tracker_properties['droid_birth_volume_identifier'] = this.get_guid(droid_birth_bytes.slice(0,16));
-        distributed_link_tracker_properties['droid_birth_file_identifier'] = this.get_guid(droid_birth_bytes.slice(16,32));
+        distributed_link_tracker_properties['DroidBirth'] = {};
+        distributed_link_tracker_properties['DroidBirth']['VolumeIdentifier'] = this.get_guid(droid_birth_bytes.slice(0,16));
+        distributed_link_tracker_properties['DroidBirth']['FileIdentifier'] = this.get_guid(droid_birth_bytes.slice(16,32));
 
         var mac_address_bytes = droid_birth_bytes.slice(26,32);
         var mac_address_str = "";
@@ -719,7 +721,7 @@ class Static_File_Analyzer {
           }
         }
 
-        distributed_link_tracker_properties['mac_address'] = mac_address_str;
+        distributed_link_tracker_properties['MAC_Address'] = mac_address_str;
         parsed_lnk['ExtraData'].push({'type': "DistributedLinkTrackerProperties", 'data': distributed_link_tracker_properties});
       } else if (block_sig == 0xA0000004) {
         // ConsoleFEDataBlock
@@ -915,8 +917,11 @@ class Static_File_Analyzer {
       file_info.metadata.creation_os = "Windows";
     }
 
+
+    file_info.parsed = JSON.stringify(parsed_lnk, null, 2);
+
     // DEBUG
-    console.log(parsed_lnk);
+    console.log(file_info.parsed);
 
     return file_info;
   }
@@ -4316,6 +4321,7 @@ class Static_File_Analyzer {
         script_type: "none",
         extracted_script: "",
       },
+      parsed: "Parsed File Not Available",
       analytic_findings: [],
       iocs: []
     };
