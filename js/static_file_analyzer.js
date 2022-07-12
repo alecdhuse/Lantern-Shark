@@ -412,13 +412,17 @@ class Static_File_Analyzer {
 
     };
 
+    var hot_key_high_bit = ["","Shift","Control","","Alt"];
+    var hot_key_low_bit = ["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12","F13","F14","F15","F16","F17","F18","F19","F20","F21","F22","F23","F24","Num Lock","Scroll Lock"];
+
     file_info.file_format = "lnk";
     file_info.file_generic_type = "Shortcut";
     file_info.file_encrypted = "false";
     file_info.file_encryption_type = "none";
 
     var parsed_lnk = {};
-    var link_class_id = file_bytes.slice(4,20);
+    parsed_lnk['HeaderSize'] = this.get_four_byte_int(file_bytes.slice(0,4));
+    parsed_lnk['LinkCLSID'] = this.get_guid(file_bytes.slice(4,20));
 
     var link_flags = this.get_binary_array(file_bytes.slice(20,24));
 
@@ -476,14 +480,22 @@ class Static_File_Analyzer {
       'FILE_ATTRIBUTE_ENCRYPTED': (file_attribute_flags[14]==1) ? true : false,
     };
 
-    file_info.metadata.creation_date = this.get_eight_byte_date(file_bytes.slice(28,36), this.LITTLE_ENDIAN);
-    file_info.metadata.last_modified_date = this.get_eight_byte_date(file_bytes.slice(36,44), this.LITTLE_ENDIAN);
-    var write_time = this.get_eight_byte_date(file_bytes.slice(44,52), this.LITTLE_ENDIAN);
+    parsed_lnk['CreationTime']  = this.get_eight_byte_date(file_bytes.slice(28,36), this.LITTLE_ENDIAN);
+    parsed_lnk['AccessTime'] = this.get_eight_byte_date(file_bytes.slice(36,44), this.LITTLE_ENDIAN);
+    parsed_lnk['WriteTime'] = this.get_eight_byte_date(file_bytes.slice(44,52), this.LITTLE_ENDIAN);
 
-    parsed_lnk['FileSize'] = file_bytes.slice(52,56);
-    parsed_lnk['IconIndex'] = file_bytes.slice(56,60);
-    parsed_lnk['ShowCommand'] = file_bytes.slice(60,64);
-    parsed_lnk['HotKey'] = file_bytes.slice(64,66);
+    file_info.metadata.creation_date = parsed_lnk['CreationTime'];
+    file_info.metadata.last_modified_date = parsed_lnk['AccessTime'];
+
+    parsed_lnk['FileSize'] = this.get_four_byte_int(file_bytes.slice(52,56));
+    parsed_lnk['IconIndex'] = this.get_four_byte_int(file_bytes.slice(56,60));
+    parsed_lnk['ShowCommand'] = this.get_four_byte_int(file_bytes.slice(60,64));
+
+    if (hot_key_high_bit[file_bytes[65]] != "" && hot_key_low_bit[file_bytes[64]] != "") {
+      parsed_lnk['HotKey'] = hot_key_high_bit[file_bytes[65]] + " + " + hot_key_low_bit[file_bytes[64]];
+    } else {
+      parsed_lnk['HotKey'] = "";
+    }
 
     // Skip the 10 reserved bytes
     var byte_offset = 76;
@@ -510,19 +522,13 @@ class Static_File_Analyzer {
     };
 
     var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var drive_data_str = "";
     var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var local_base_path = "";
 
     if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
       // LocalBasePath
       var local_base_path_start = (link_info_start+local_base_path_offset);
       var local_base_path_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start), true);
-
-      local_base_path = Static_File_Analyzer.get_string_from_array(local_base_path_bytes);
-      if (local_base_path === null) {
-        local_base_path = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i > 31));
-      }
+      parsed_lnk['LocalBasePath'] = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i > 31));
     }
 
     var common_network_relative_link_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
@@ -533,34 +539,40 @@ class Static_File_Analyzer {
     if (link_info_header_size >= 0x24) {
       var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
       var local_base_path_start_unicode = (link_info_start+local_base_path_offset_unicode);
+      var local_base_path_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start_unicode), true);
+      parsed_lnk['LocalBasePathUnicode'] = Static_File_Analyzer.get_string_from_array(local_base_path_unicode_bytes);
 
       var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
       var common_path_suffix_start_unicode = (link_info_start+common_path_suffix_offset_unicode);
 
       var common_path_suffix_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
-      var common_path_suffix_unicode = Static_File_Analyzer.get_string_from_array(common_path_suffix_unicode_bytes);
+      parsed_lnk['CommonPathSuffixUnicode'] = Static_File_Analyzer.get_string_from_array(common_path_suffix_unicode_bytes);
     }
 
     var common_path_suffix_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), false);
-    var common_path_suffix = Static_File_Analyzer.get_ascii(common_path_suffix_bytes.filter(i => i > 31));
+    parsed_lnk['CommonPathSuffix'] = Static_File_Analyzer.get_ascii(common_path_suffix_bytes.filter(i => i > 31));
 
     if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
       // VolumeID
       var volume_obj_start = byte_offset;
-      var volume_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var drive_type = drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)];
-      var drive_serial_number = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var drive_volume_lbl_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset;
 
-      if (drive_volume_lbl_offset == 0x14) {
+      parsed_lnk['VolumeID'] = {
+        'VolumeIDSize': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+        'DriveType': drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)],
+        'DriveSerialNumber': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+        'VolumeLabelOffset': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)
+      };
+
+      var drive_volume_lbl_start = volume_obj_start + parsed_lnk['VolumeID']['VolumeLabelOffset'];
+
+      if (parsed_lnk['VolumeID']['VolumeLabelOffset'] == 0x14) {
         // NULL-terminated string of Unicode characters
         var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
         drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset_unicode;
       }
 
       var drive_data_byte = this.get_null_terminated_bytes(file_bytes.slice(drive_volume_lbl_start));
-      drive_data_str = Static_File_Analyzer.get_string_from_array(drive_data_byte);
+      parsed_lnk['VolumeID']['VolumeLabel'] = Static_File_Analyzer.get_ascii(drive_data_byte.filter(i => i > 31));
     }
 
     if (link_info_flags_obj.CommonNetworkRelativeLinkAndPathSuffix) {
@@ -575,7 +587,7 @@ class Static_File_Analyzer {
         var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
       }
 
-      if (drive_volume_lbl_offset > 0x14) {
+      if (parsed_lnk['VolumeID']['VolumeLabelOffset'] > 0x14) {
         var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
       }
     }
@@ -583,39 +595,39 @@ class Static_File_Analyzer {
     byte_offset = link_info_end;
 
     // StringData
-    var string_data = {};
+    parsed_lnk['StringData'] = {};
 
     if (parsed_lnk['LinkFlags'].HasName) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
-      string_data['name_string'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
+      parsed_lnk['StringData']['NAME_STRING'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasRelativePath) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
-      string_data['relative_path'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
+      parsed_lnk['StringData']['RELATIVE_PATH'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasWorkingDir) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
-      string_data['working_dir'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
+      parsed_lnk['StringData']['WORKING_DIR'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasArguments) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
-      string_data['arguments'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
+      parsed_lnk['StringData']['COMMAND_LINE_ARGUMENTS'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasIconLocation) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
-      string_data['icon_location'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
+      parsed_lnk['StringData']['ICON_LOCATION'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
-    var cmd_shell = local_base_path + " " + string_data['working_dir'];
+    var cmd_shell = parsed_lnk['LocalBasePath'] + " " + parsed_lnk['StringData']['WORKING_DIR'];
     this.add_extracted_script("Windows Command Shell", cmd_shell, file_info);
     cmd_shell = cmd_shell.replaceAll(/(?:[^\s]\&\&[^\s]|[^\s]\&\&|\&\&[^\s])/gm, function(match, match_index, input_string) {
       var str_part1 = input_string.slice(match_index, match_index+1);
@@ -852,6 +864,19 @@ class Static_File_Analyzer {
                 'value': value
               });
 
+              // Check for useful metadata
+              if (id_name == "System.ItemFolderPathDisplayNarrow") {
+                var value_parts = value.split("(");
+
+                if (value_parts == 1) {
+                  file_info.metadata.last_saved_location = value_parts[0];
+                } else {
+                  file_info.metadata.last_saved_location = value_parts[1].slice(0, -1) + "\\" + value_parts[0];
+                }
+              } else if (id_name == "System.ItemTypeText") {
+                file_info.metadata.creation_application = value;
+              }
+
               value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
             }
           }
@@ -883,6 +908,11 @@ class Static_File_Analyzer {
       }
 
       block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    }
+
+    // Extract more meta data from what we have already collected.
+    if (/[a-zA-Z]\:\\/gm.test(file_info.metadata.last_saved_location)) {
+      file_info.metadata.creation_os = "Windows";
     }
 
     // DEBUG
