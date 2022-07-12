@@ -364,9 +364,41 @@ class Static_File_Analyzer {
     var file_info = this.get_default_file_json();
 
     var drive_types_arr = ['DRIVE_UNKNOWN','DRIVE_NO_ROOT_DIR','DRIVE_REMOVABLE','DRIVE_FIXED','DRIVE_REMOTE','DRIVE_CDROM','DRIVE_RAMDISK'];
+
+    // For GUID defs see: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-wsp/2dbe759c-c955-4770-a545-e46d7f6332ed
     var guids = {
-      "B725F130-47EF-101A-A5F1-02608C9EEBAC": "System.ItemTypeText",
-      "DABD30ED-0043-4789-A7F8-D013A4736622": "System.ItemFolderPathDisplayNarrow"
+      "28636AA6-953D-11D2-B5D6-00C04FD918D0": {
+        'properties': {
+          5:  "System.ComputerName",
+          8:  "System.ItemPathDisplayNarrow",
+          11: "System.ItemType",
+          24: "System.ParsingName",
+          25: "System.SFGAOFlags",
+          30: "System.ParsingPath"
+        }
+      },
+      "B725F130-47EF-101A-A5F1-02608C9EEBAC": {
+        'properties': {
+          2:  "System.ItemFolderNameDisplay",
+          4:  "System.ItemTypeText",
+          10: "System.ItemNameDisplay",
+          11: "System.ItemStoragePathDeprecated",
+          12: "System.Size",
+          13: "System.FileAttributes",
+          14: "System.DateModified",
+          15: "System.DateCreated",
+          16: "System.DateAccessed",
+          19: "System.Search.Contents",
+          21: "System.FileFRN",
+          22: "System.Search.Scope"
+        }
+      },
+      "DABD30ED-0043-4789-A7F8-D013A4736622": {
+        'properties': {
+          100: "System.ItemFolderPathDisplayNarrow"
+        }
+      }
+
     };
 
     file_info.file_format = "lnk";
@@ -722,6 +754,7 @@ class Static_File_Analyzer {
       } else if (block_sig == 0xA0000009) {
         // PropertyStoreDataBlock
         var data_block_properties = [];
+        var id_name = "Unknown";
         var storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
 
         while (storage_size > 0) {
@@ -783,23 +816,40 @@ class Static_File_Analyzer {
                 // VT_DATE
               } else if (type == 0x0008) {
                 // VT_BSTR - CodePageString
+              } else if (type == 0x0015) {
+                // VT_UI8 - 8-byte unsigned integer
+                value = this.get_eight_byte_int(file_bytes.slice(byte_offset,byte_offset+=8), this.LITTLE_ENDIAN);
+              } else if (type == 0x0016) {
+                // VT_INT - 4-byte signed integer
+              } else if (type == 0x0017) {
+                // VT_UINT - 4-byte unsigned integer
               } else if (type == 0x001F) {
                 // VT_LPWSTR - UnicodeString
                 var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
                 var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(char_length*2));
+
+                // Per the spec, the string must followed by zero padding to a multiple of 4 bytes. Subract three because we have already advanced the byte offset.
+                var pad_bytes = (byte_offset % 4 == 0) ? 0 : 3 - (byte_offset % 4);
+                byte_offset += pad_bytes;
                 value = Static_File_Analyzer.get_string_from_array(value_bytes.filter(i => i > 31));
               } else if (type == 0x0040) {
                 // VT_FILETIME
                 value = this.get_eight_byte_date(file_bytes.slice(byte_offset,byte_offset+=8), this.LITTLE_ENDIAN);
               }
 
+              if (guids.hasOwnProperty(guid) && guids[guid].properties.hasOwnProperty(value_id)) {
+                id_name = guids[guid].properties[value_id];
+              } else {
+                id_name = "Unknown";
+              }
+
               data_block_properties.push({
                 'guid': guid,
-                'id': value_id,
+                'id': id_name,
+                'id_value': value_id,
                 'value': value
               });
 
-              // TODO fix something here
               value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
             }
           }
