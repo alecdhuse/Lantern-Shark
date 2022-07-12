@@ -142,6 +142,23 @@ async function decrypt_file(e) {
         display_file_summary(subfile_analyzer_results);
         select_file_component(null, i);
         $("#summary_file_encrypted_password_txt").addClass("field_valid");
+
+        if (subfile_analyzer_results.file_components.length > 0) {
+          // TODO: Display sub components in list
+
+          /*
+          var item_id = "#component_" + i;
+          var new_id  = "file_components_list_" + i;
+          $(item_id).append("<ul class='nested_item' id='"+ new_id  + "'></ul>");
+
+          for (var i2=0; i2<subfile_analyzer_results.file_components.length; i2++) {
+            var new_name = subfile_analyzer_results.file_components[i2].name;
+            var new_item_id = "component_" + i + "_" + i2;
+            var new_item = "<li id='" + new_item_id + "'>" + new_name + "</li>";
+            $("#"+new_id).append(new_item);
+          }
+          */
+        }
         break;
       }
     }

@@ -2473,6 +2473,17 @@ class Static_File_Analyzer {
       });
     }
 
+    // Decompress zip bytes
+    if (window.zip) {
+      try {
+        var file_password = "";
+        var component_index = file_info.file_components.length - 1;
+        // TODO: implement auto zip decompresion.
+        //var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+        //file_info.file_components[component_index]['file_bytes'] = component_bytes;
+      } catch (err) {}
+    }
+
     // Check if this file is really an OOXML Document / Office document
     // Ref: http://officeopenxml.com/anatomyofOOXML.php
     if (has_content_types_xml == true && has_rels_dir == true) {
