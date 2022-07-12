@@ -403,7 +403,9 @@ class Static_File_Analyzer {
 
     file_info.file_format = "lnk";
     file_info.file_generic_type = "Shortcut";
-
+    file_info.file_encrypted = "false";
+    file_info.file_encryption_type = "none";
+    
     var link_class_id = file_bytes.slice(4,20);
 
     var link_flags = this.get_binary_array(file_bytes.slice(20,24));
