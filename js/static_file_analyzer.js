@@ -367,7 +367,7 @@ class Static_File_Analyzer {
 
     // For GUID defs see: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-wsp/2dbe759c-c955-4770-a545-e46d7f6332ed
     var guids = {
-      "28636AA6-953D-11D2-B5D6-00C04FD918D0": {
+      '28636AA6-953D-11D2-B5D6-00C04FD918D0': {
         'properties': {
           5:  "System.ComputerName",
           8:  "System.ItemPathDisplayNarrow",
@@ -377,13 +377,18 @@ class Static_File_Analyzer {
           30: "System.ParsingPath"
         }
       },
-      "446D16B1-8DAD-4870-A748-402EA43D788C": {
+      '446D16B1-8DAD-4870-A748-402EA43D788C': {
         'properties': {
           100: "System.ThumbnailCacheId",
           104: "System.VolumeId"
         }
       },
-      "B725F130-47EF-101A-A5F1-02608C9EEBAC": {
+      '46588AE2-4CBC-4338-BBFC-139326986DCE': {
+        'properties': {
+          4:  "SID"
+        }
+      },
+      'B725F130-47EF-101A-A5F1-02608C9EEBAC': {
         'properties': {
           2:  "System.ItemFolderNameDisplay",
           4:  "System.ItemTypeText",
@@ -399,7 +404,7 @@ class Static_File_Analyzer {
           22: "System.Search.Scope"
         }
       },
-      "DABD30ED-0043-4789-A7F8-D013A4736622": {
+      'DABD30ED-0043-4789-A7F8-D013A4736622': {
         'properties': {
           100: "System.ItemFolderPathDisplayNarrow"
         }
@@ -412,10 +417,12 @@ class Static_File_Analyzer {
     file_info.file_encrypted = "false";
     file_info.file_encryption_type = "none";
 
+    var parsed_lnk = {};
     var link_class_id = file_bytes.slice(4,20);
 
     var link_flags = this.get_binary_array(file_bytes.slice(20,24));
-    var link_flags_obj = {
+
+    parsed_lnk['LinkFlags'] = {
       'HasLinkTargetIDList': (link_flags[0]==1) ? true : false,
       'HasLinkInfo': (link_flags[1]==1) ? true : false,
       'HasName': (link_flags[2]==1) ? true : false,
@@ -451,7 +458,7 @@ class Static_File_Analyzer {
     };
 
     var file_attribute_flags = this.get_binary_array(file_bytes.slice(24,28));
-    var file_attribute_flags_obj = {
+    parsed_lnk['FileAttributes'] = {
       'FILE_ATTRIBUTE_READONLY': (file_attribute_flags[0]==1) ? true : false,
       'FILE_ATTRIBUTE_HIDDEN': (file_attribute_flags[1]==1) ? true : false,
       'FILE_ATTRIBUTE_SYSTEM': (file_attribute_flags[2]==1) ? true : false,
@@ -473,10 +480,10 @@ class Static_File_Analyzer {
     file_info.metadata.last_modified_date = this.get_eight_byte_date(file_bytes.slice(36,44), this.LITTLE_ENDIAN);
     var write_time = this.get_eight_byte_date(file_bytes.slice(44,52), this.LITTLE_ENDIAN);
 
-    var file_size = file_bytes.slice(52,56);
-    var icon_index = file_bytes.slice(56,60);
-    var show_cmd = file_bytes.slice(60,64);
-    var hot_key = file_bytes.slice(64,66);
+    parsed_lnk['FileSize'] = file_bytes.slice(52,56);
+    parsed_lnk['IconIndex'] = file_bytes.slice(56,60);
+    parsed_lnk['ShowCommand'] = file_bytes.slice(60,64);
+    parsed_lnk['HotKey'] = file_bytes.slice(64,66);
 
     // Skip the 10 reserved bytes
     var byte_offset = 76;
@@ -578,33 +585,33 @@ class Static_File_Analyzer {
     // StringData
     var string_data = {};
 
-    if (link_flags_obj.HasName) {
+    if (parsed_lnk['LinkFlags'].HasName) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-      char_count = (link_flags_obj.IsUnicode) ? char_count*2 : char_count;
+      char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       string_data['name_string'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
-    if (link_flags_obj.HasRelativePath) {
+    if (parsed_lnk['LinkFlags'].HasRelativePath) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-      char_count = (link_flags_obj.IsUnicode) ? char_count*2 : char_count;
+      char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       string_data['relative_path'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
-    if (link_flags_obj.HasWorkingDir) {
+    if (parsed_lnk['LinkFlags'].HasWorkingDir) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-      char_count = (link_flags_obj.IsUnicode) ? char_count*2 : char_count;
+      char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       string_data['working_dir'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
-    if (link_flags_obj.HasArguments) {
+    if (parsed_lnk['LinkFlags'].HasArguments) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-      char_count = (link_flags_obj.IsUnicode) ? char_count*2 : char_count;
+      char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       string_data['arguments'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
-    if (link_flags_obj.HasIconLocation) {
+    if (parsed_lnk['LinkFlags'].HasIconLocation) {
       var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-      char_count = (link_flags_obj.IsUnicode) ? char_count*2 : char_count;
+      char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       string_data['icon_location'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
@@ -619,7 +626,7 @@ class Static_File_Analyzer {
     file_info = this.search_for_iocs(cmd_shell, file_info);
 
     // ExtraData
-    var extra_data_arr = [];
+    parsed_lnk['ExtraData'] = [];
     var block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
 
     while (block_size >= 4) {
@@ -637,7 +644,7 @@ class Static_File_Analyzer {
           env_variable_unicode = Static_File_Analyzer.get_string_from_array(target_unicode_bytes.filter(i => i !== 0));
         }
 
-        extra_data_arr.push({
+        parsed_lnk['ExtraData'].push({
           'type': "EnvironmentVariableDataBlock",
           'data': {
             'TargetAnsi': env_variable_ansi,
@@ -646,7 +653,7 @@ class Static_File_Analyzer {
         });
       } else if (block_sig == 0xA0000002) {
         // ConsoleDataBlock
-        extra_data_arr.push({
+        parsed_lnk['ExtraData'].push({
           'type': "distributed_link_tracker_properties",
           'data': {
             'fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
@@ -683,40 +690,12 @@ class Static_File_Analyzer {
         distributed_link_tracker_properties['net_bios_name'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=16).filter(i => i !== 0));
 
         var droid_bytes = file_bytes.slice(byte_offset,byte_offset+=32);
-
-        distributed_link_tracker_properties['droid_volume_identifier'] = [
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(0,4).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(4,6).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(6,8).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(8,10)),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(10,16))
-        ].join('-');
-
-        distributed_link_tracker_properties['droid_file_identifier'] = [
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(16,20).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(20,22).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(22,24).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(24,26)),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_bytes.slice(26,32))
-        ].join('-');
+        distributed_link_tracker_properties['droid_volume_identifier'] = this.get_guid(droid_bytes.slice(0,16));
+        distributed_link_tracker_properties['droid_file_identifier'] = this.get_guid(droid_bytes.slice(16,32));
 
         var droid_birth_bytes = file_bytes.slice(byte_offset,byte_offset+=32);
-
-        distributed_link_tracker_properties['droid_birth_volume_identifier'] = [
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(0,4).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(4,6).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(6,8).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(8,10)),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(10,16))
-        ].join('-');
-
-        distributed_link_tracker_properties['droid_birth_file_identifier'] = [
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(16,20).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(20,22).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(22,24).reverse()),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(24,26)),
-          Static_File_Analyzer.get_hex_string_from_byte_array(droid_birth_bytes.slice(26,32))
-        ].join('-');
+        distributed_link_tracker_properties['droid_birth_volume_identifier'] = this.get_guid(droid_birth_bytes.slice(0,16));
+        distributed_link_tracker_properties['droid_birth_file_identifier'] = this.get_guid(droid_birth_bytes.slice(16,32));
 
         var mac_address_bytes = droid_birth_bytes.slice(26,32);
         var mac_address_str = "";
@@ -729,7 +708,7 @@ class Static_File_Analyzer {
         }
 
         distributed_link_tracker_properties['mac_address'] = mac_address_str;
-        extra_data_arr.push({'type': "DistributedLinkTrackerProperties", 'data': distributed_link_tracker_properties});
+        parsed_lnk['ExtraData'].push({'type': "DistributedLinkTrackerProperties", 'data': distributed_link_tracker_properties});
       } else if (block_sig == 0xA0000004) {
         // ConsoleFEDataBlock
         var code_page = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
@@ -768,14 +747,7 @@ class Static_File_Analyzer {
         while (storage_size > 0) {
           var version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
           var format_id = file_bytes.slice(byte_offset,byte_offset+=16);
-
-          var guid = [
-            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(0,4).reverse()),
-            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(4,6).reverse()),
-            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(6,8).reverse()),
-            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(8,10)),
-            Static_File_Analyzer.get_hex_string_from_byte_array(format_id.slice(10,16))
-          ].join('-').toUpperCase();
+          var guid = this.get_guid(format_id.slice(0,16));
 
           if (guid == "D5CDD505-2E9C-101B-9397-08002B2CF9AE" || guid == "05D5CDD5-9C2E-1B10-9397-08002B2CF9AE") {
             // String
@@ -895,7 +867,7 @@ class Static_File_Analyzer {
           }
         }
 
-        extra_data_arr.push({
+        parsed_lnk['ExtraData'].push({
           'type': "PropertyStoreDataBlock",
           'data': data_block_properties
         });
@@ -912,6 +884,9 @@ class Static_File_Analyzer {
 
       block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
     }
+
+    // DEBUG
+    console.log(parsed_lnk);
 
     return file_info;
   }
