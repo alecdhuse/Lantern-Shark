@@ -377,6 +377,12 @@ class Static_File_Analyzer {
           30: "System.ParsingPath"
         }
       },
+      "446D16B1-8DAD-4870-A748-402EA43D788C": {
+        'properties': {
+          100: "System.ThumbnailCacheId",
+          104: "System.VolumeId"
+        }
+      },
       "B725F130-47EF-101A-A5F1-02608C9EEBAC": {
         'properties': {
           2:  "System.ItemFolderNameDisplay",
@@ -405,7 +411,7 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "Shortcut";
     file_info.file_encrypted = "false";
     file_info.file_encryption_type = "none";
-    
+
     var link_class_id = file_bytes.slice(4,20);
 
     var link_flags = this.get_binary_array(file_bytes.slice(20,24));
@@ -793,6 +799,7 @@ class Static_File_Analyzer {
 
             while (value_size != 0 && !isNaN(value_size)) {
               var value = "";
+              var value_type = "";
               var value_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
               byte_offset++ // skip reserved byte
 
@@ -802,31 +809,46 @@ class Static_File_Analyzer {
               // See: https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-OLEPS/%5bMS-OLEPS%5d.pdf - 2.15 TypedPropertyValue
               if (type == 0x0000) {
                 // VT_EMPTY
+                value_type = "VT_EMPTY";
+                value = "";
               } else if (type == 0x0001) {
                 // VT_NULL
+                value_type = "VT_NULL";
+                value = null;
               } else if (type == 0x0002) {
                 // VT_I2 - 16-bit signed integer, followed by zero padding to 4 bytes
+                value_type = "VT_I2";
               } else if (type == 0x0003) {
                 // VT_I4 - 32-bit signed integer
+                value_type = "VT_I4";
               } else if (type == 0x0004) {
                 // VT_R4 - 4-byte (single-precision) IEEE floating-point number
+                value_type = "VT_R4";
               } else if (type == 0x0005) {
                 // VT_R8 - 8-byte (double-precision) IEEE floating-point number
+                value_type = "VT_R8";
               } else if (type == 0x0006) {
                 // VT_CY - CURRENCY
+                value_type = "VT_CY";
               } else if (type == 0x0007) {
                 // VT_DATE
+                value_type = "VT_DATE";
               } else if (type == 0x0008) {
                 // VT_BSTR - CodePageString
+                value_type = "VT_BSTR";
               } else if (type == 0x0015) {
                 // VT_UI8 - 8-byte unsigned integer
+                value_type = "VT_UI8";
                 value = this.get_eight_byte_int(file_bytes.slice(byte_offset,byte_offset+=8), this.LITTLE_ENDIAN);
               } else if (type == 0x0016) {
                 // VT_INT - 4-byte signed integer
+                value_type = "VT_INT";
               } else if (type == 0x0017) {
                 // VT_UINT - 4-byte unsigned integer
+                value_type = "VT_UINT";
               } else if (type == 0x001F) {
                 // VT_LPWSTR - UnicodeString
+                value_type = "VT_LPWSTR";
                 var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
                 var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(char_length*2));
 
@@ -836,7 +858,12 @@ class Static_File_Analyzer {
                 value = Static_File_Analyzer.get_string_from_array(value_bytes.filter(i => i > 31));
               } else if (type == 0x0040) {
                 // VT_FILETIME
+                value_type = "VT_FILETIME";
                 value = this.get_eight_byte_date(file_bytes.slice(byte_offset,byte_offset+=8), this.LITTLE_ENDIAN);
+              } else if (type == 0x0048) {
+                // VT_CLSID - MUST be a GUID
+                value_type = "VT_CLSID";
+                value = this.get_guid(file_bytes.slice(byte_offset,byte_offset+=16));
               }
 
               if (guids.hasOwnProperty(guid) && guids[guid].properties.hasOwnProperty(value_id)) {
@@ -849,6 +876,7 @@ class Static_File_Analyzer {
                 'guid': guid,
                 'id': id_name,
                 'id_value': value_id,
+                'value_type': value_type,
                 'value': value
               });
 
@@ -858,6 +886,13 @@ class Static_File_Analyzer {
 
 
           storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+          if (storage_size > (file_bytes.length - byte_offset)) {
+            // Byte index is off, or this file is malformed.
+            // Try backing up two bytes and re-reading.
+            byte_offset -= 2;
+            storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          }
         }
 
         extra_data_arr.push({
@@ -4446,6 +4481,24 @@ class Static_File_Analyzer {
     }
 
     return parseInt(int_bits, 2);
+  }
+
+  /**
+   * Converts an array with sixteen int values 0-255 to a Microsoft GUID.
+   *
+   * @param {array}    bytes Array with two int values 0-255 representing byte values.
+   * @return {integer} The GUID value.
+   */
+  get_guid(bytes) {
+    var guid = [
+      Static_File_Analyzer.get_hex_string_from_byte_array(bytes.slice(0,4).reverse()),
+      Static_File_Analyzer.get_hex_string_from_byte_array(bytes.slice(4,6).reverse()),
+      Static_File_Analyzer.get_hex_string_from_byte_array(bytes.slice(6,8).reverse()),
+      Static_File_Analyzer.get_hex_string_from_byte_array(bytes.slice(8,10)),
+      Static_File_Analyzer.get_hex_string_from_byte_array(bytes.slice(10,16))
+    ].join('-').toUpperCase();
+
+    return guid;
   }
 
   /**
