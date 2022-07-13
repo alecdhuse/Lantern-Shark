@@ -627,7 +627,13 @@ class Static_File_Analyzer {
       parsed_lnk['StringData']['ICON_LOCATION'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
-    var cmd_shell = parsed_lnk['LocalBasePath'] + " " + parsed_lnk['StringData']['WORKING_DIR'];
+    var cmd_shell = "";
+    if (parsed_lnk['StringData']['WORKING_DIR'] !== null && parsed_lnk['StringData']['WORKING_DIR'] !== undefined) {
+      cmd_shell = parsed_lnk['LocalBasePath'] + " " + parsed_lnk['StringData']['WORKING_DIR'];
+    } else {
+      cmd_shell = parsed_lnk['LocalBasePath'] + " " + parsed_lnk['StringData']['NAME_STRING'];
+    }
+
     this.add_extracted_script("Windows Command Shell", cmd_shell, file_info);
     cmd_shell = cmd_shell.replaceAll(/(?:[^\s]\&\&[^\s]|[^\s]\&\&|\&\&[^\s])/gm, function(match, match_index, input_string) {
       var str_part1 = input_string.slice(match_index, match_index+1);
@@ -1485,6 +1491,9 @@ class Static_File_Analyzer {
         var position_start = 0;
         var file_list = [];
 
+        var file_enrty_index = 0;
+        var file_identifiers = [];
+
         while (current_descriptor_index < descriptors.length) {
           if (descriptors[current_descriptor_index].type == "Partition Descriptor") {
             position_start = descriptors[current_descriptor_index].descriptor.byte_start;
@@ -1497,49 +1506,60 @@ class Static_File_Analyzer {
                 // Skip over root directory.
                 continue;
               } else {
-                if (current_descriptor_index+i < descriptors.length) {
-                  if (descriptors[current_descriptor_index+i].type == "Extended File Entry" ||
-                      descriptors[current_descriptor_index+i].type == "File Entry") {
-
-                    current_fe = descriptors[current_descriptor_index+i].descriptor;
-
-                    var file_length = current_fe.allocation_descriptors[0].extent_length;
-                    var file_location = current_fe.allocation_descriptors[0].extent_position;
-                    var file_byte_location = position_start + (file_location * sector_size);
-                    var c_file_bytes = file_bytes.slice(file_byte_location,file_byte_location+file_length);
-
-                    // Check to see if the file has been added, this might be the reserve (duplicate) data.
-                    var is_duplicate = false;
-                    for (var fli=0; fli<file_list.length; fli++) {
-                      if (file_list[fli].name == current_fid[i].file_identifier) {
-                        if (file_list[fli].file_bytes.length == c_file_bytes.length) {
-                          is_duplicate = true;
-                          break;
-                        }
-                      }
-                    }
-
-                    if (is_duplicate == true) {
-                      // File already added, assume we have entered the reserve data and break the loop.
-                      break;
-                    }
-
-                    file_list.push({
-                      'name': current_fid[i].file_identifier,
-                      'directory': current_fid[i].file_characteristics.directory,
-                      'file_bytes': c_file_bytes,
-                      'type': "udf"
-                    });
-                  }
-                }
+                file_identifiers.push({
+                  'name': current_fid[i].file_identifier,
+                  'directory': current_fid[i].file_characteristics.directory,
+                });
               }
             }
 
             current_descriptor_index++;
+          } else if (descriptors[current_descriptor_index].type == "Extended File Entry" ||
+                     descriptors[current_descriptor_index].type == "File Entry") {
+
+             if (file_enrty_index >= file_identifiers.length) {
+               current_descriptor_index++;
+               continue;
+             }
+
+             current_fe = descriptors[current_descriptor_index].descriptor;
+
+             var file_length = current_fe.allocation_descriptors[0].extent_length;
+             var file_location = current_fe.allocation_descriptors[0].extent_position;
+             var file_byte_location = position_start + (file_location * sector_size);
+             var c_file_bytes = file_bytes.slice(file_byte_location,file_byte_location+file_length);
+
+             // Check to see if the file has been added, this might be the reserve (duplicate) data.
+             var is_duplicate = false;
+             for (var fli=0; fli<file_list.length; fli++) {
+               if (file_list[fli].name == file_identifiers[file_enrty_index].name) {
+                 if (file_list[fli].file_bytes.length == c_file_bytes.length) {
+                   is_duplicate = true;
+                   break;
+                 }
+               }
+             }
+
+             if (is_duplicate == true) {
+               // File already added, assume we have entered the reserve data and break the loop.
+               break;
+             }
+
+             file_list.push({
+               'name': file_identifiers[file_enrty_index].name,
+               'directory': file_identifiers[file_enrty_index].directory,
+               'file_bytes': c_file_bytes,
+               'type': "udf"
+             });
+
+             file_enrty_index++;
+             current_descriptor_index++;
           } else {
             current_descriptor_index++;
           }
         }
+
+        console.log(descriptors);
 
         // Add parsed files to ISO file components
         file_info.file_components = file_info.file_components.concat(file_list);
