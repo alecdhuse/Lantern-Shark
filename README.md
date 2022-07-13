@@ -13,6 +13,7 @@ See the table below for a list of supported file types and types of data extract
 | File Extension | File Type ID | File Attributes | Components List | Metadata | Script Detection | Script Extraction |
 | -------------- | ------------ | --------------- | --------------- | -------- | ---------------- | ----------------- |
 | ACE            | X            | X               |                 |          |                  |                   |
+| DLL            | X            |                 |                 |          |                  |                   |
 | DOCX           | X            | X               | X               | X        |                  |                   |
 | EXE            | X            | X               |                 |          |                  |                   |
 | GZ             | X            | X               |                 |          |                  |                   |
