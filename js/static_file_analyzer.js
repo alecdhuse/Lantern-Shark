@@ -1489,6 +1489,8 @@ class Static_File_Analyzer {
 
               if (identifier_name == "Microsoft IMAPI2 1.0") {
                 file_info.metadata.creation_os = "Windows";
+              } else if (identifier_name == "UDF Image Creator") {
+                file_info.metadata.creation_os = "Windows";
               }
             }
           }
@@ -1571,7 +1573,7 @@ class Static_File_Analyzer {
         }
 
         file_info.parsed = JSON.stringify(descriptors, null, 2);
-        
+
         // Add parsed files to ISO file components
         file_info.file_components = file_info.file_components.concat(file_list);
       }
