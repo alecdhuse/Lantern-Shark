@@ -1486,8 +1486,14 @@ class Static_File_Analyzer {
           }
 
           if (udf_sector.descriptor.hasOwnProperty("implementation_identifier")) {
-            if (udf_sector.descriptor.implementation_identifier.identifier == "Microsoft IMAPI2 1.0") {
-              file_info.metadata.creation_os = "Windows";
+            if (udf_sector.descriptor.implementation_identifier.hasOwnProperty("identifier")) {
+              var identifier_name = udf_sector.descriptor.implementation_identifier.identifier;
+              identifier_name = (identifier_name.charAt(0) == "*") ? identifier_name.slice(1) : identifier_name;
+              file_info.metadata.creation_application = identifier_name;
+
+              if (identifier_name == "Microsoft IMAPI2 1.0") {
+                file_info.metadata.creation_os = "Windows";
+              }
             }
           }
 
