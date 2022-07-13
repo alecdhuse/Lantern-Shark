@@ -251,12 +251,21 @@ class Static_File_Analyzer {
    */
   analyze_exe(file_bytes) {
     var file_info = this.get_default_file_json();
-
-    file_info.file_format = "exe";
-    file_info.file_generic_type = "Executable";
+    var id_byte_vals = [1,3,5,7,15,129,201];
 
     // Header offset starts at 3C / 60
     var header_offset = this.get_two_byte_int(file_bytes.slice(60,62), this.LITTLE_ENDIAN);
+    var file_type_id_byte = file_bytes[header_offset+23];
+
+    if (id_byte_vals.includes(file_type_id_byte)) {
+      // File is an EXE
+      file_info.file_format = "exe";
+      file_info.file_generic_type = "Executable";
+    } else {
+      // File is a DLL
+      file_info.file_format = "dll";
+      file_info.file_generic_type = "Shared Library";
+    }
 
     // Get compile time
     var compile_time_offset = header_offset + 8;
