@@ -33,6 +33,10 @@ body {
   margin: 4px;
 }
 
+.file_tree_item_not_selected {
+  font-weight: normal;
+}
+
 .file_tree_item_selected {
   font-weight: bold;
 }

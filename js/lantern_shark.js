@@ -146,7 +146,7 @@ async function decrypt_file(e) {
         if (subfile_analyzer_results.file_components.length > 0) {
           // TODO: Display sub components in list
 
-          /*
+
           var item_id = "#component_" + i;
           var new_id  = "file_components_list_" + i;
           $(item_id).append("<ul class='nested_item' id='"+ new_id  + "'></ul>");
@@ -154,10 +154,11 @@ async function decrypt_file(e) {
           for (var i2=0; i2<subfile_analyzer_results.file_components.length; i2++) {
             var new_name = subfile_analyzer_results.file_components[i2].name;
             var new_item_id = "component_" + i + "_" + i2;
-            var new_item = "<li id='" + new_item_id + "'>" + new_name + "</li>";
+            var new_item = "<li class='file_tree_item_not_selected' id='" + new_item_id + "'>" + new_name + "</li>";
             $("#"+new_id).append(new_item);
+            document.getElementById(new_item_id).addEventListener('click', select_file_component, false);
           }
-          */
+
         }
         break;
       }
@@ -364,23 +365,28 @@ async function save_selected_file(e) {
  * @return {void}
  */
 async function select_file_component(e, component_index=null) {
+  var component_info = [];
+
   if (e !== null) {
     var component_id = e.currentTarget.id;
-    var component_index = parseInt(component_id.split("_")[1]);
+    component_info = component_id.split("_").slice(1);
+    component_index = parseInt(component_info[0]);
+  } else {
+    component_info = [component_index];
   }
 
   selected_file_component = component_index;
 
   if (component_index !== null) {
-    // Change UI to show selected component
+    // Remove all selected classes
     $("#top_level_file").removeClass("file_tree_item_selected");
+    $("#top_level_file").find("*").removeClass("file_tree_item_selected");
+    $("#top_level_file").find("*").addClass("file_tree_item_not_selected");
 
-    for (var i = 0; i < analyzer_results.file_components.length; i++) {
-      var new_id = "#component_" + i;
-      $(new_id).removeClass("file_tree_item_selected");
-    }
-
-    $("#component_" + component_index).addClass("file_tree_item_selected");
+    // Change UI to show selected component
+    var to_select = "#component_" + component_info.join("_");
+    $(to_select).removeClass("file_tree_item_not_selected");
+    $(to_select).addClass("file_tree_item_selected");
 
     if (analyzer_results.file_components[component_index].type == "zip") {
       file_password = ($("#summary_file_encrypted_password_txt").val().length > 0) ? $("#summary_file_encrypted_password_txt").val() : null;
@@ -409,6 +415,12 @@ async function select_file_component(e, component_index=null) {
           $("#analytic_findings").val("");
         } else {
           var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
+
+          if (component_info.length > 1 && subfile_analyzer_results.file_components.length > 0) {
+            var sub_component_bytes = subfile_analyzer_results.file_components[component_info[1]].file_bytes;
+            subfile_analyzer_results = await new Static_File_Analyzer(Array.from(sub_component_bytes));
+          }
+
           display_file_summary(subfile_analyzer_results);
         }
 
