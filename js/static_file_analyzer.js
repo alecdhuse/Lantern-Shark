@@ -48,7 +48,7 @@ class Static_File_Analyzer {
       file_info = this.analyze_gz(file_bytes);
     } else if (this.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
                this.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
-      file_info = this.analyze_iso9660(file_bytes);
+      file_info = this.analyze_iso9660(file_bytes, file_text);
     } else if (this.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
       file_info = this.analyze_jpeg(file_bytes);
     } else if (this.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
@@ -319,6 +319,7 @@ class Static_File_Analyzer {
       var parsed_iso = new ISO_9660_Parser(file_bytes);
       file_info.metadata = parsed_iso.metadata;
       file_info.file_components = parsed_iso.files;
+      file_info.file_format_ver = "ISO 9660";
     } else {
       // Assume this is a Universal Disk Format (UDF) formatted ISO
       file_info = this.analyze_udf(file_bytes, file_text);
@@ -7069,7 +7070,7 @@ class ISO_9660_Parser {
     };
 
     // An ISO 9660 filesystem begins begins at byte 32768
-    for (var i=32768; i<file_bytes.length; i++) {
+    for (var i=32768; i<file_bytes.length; i+=sector_size) {
       sector_bytes = file_bytes.slice(i,i+sector_size);
       descriptor_tag = ISO_9660_Parser.parse_descriptor_tag(sector_bytes);
 
@@ -7121,7 +7122,8 @@ class ISO_9660_Parser {
               break;
             }
           }
-
+        } else if (descriptor_tag.type_code == 255) {
+          // Volume Descriptor Set Terminator
           break;
         }
       }
