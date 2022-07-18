@@ -430,7 +430,7 @@ async function select_file_component(e, component_index=null) {
         // Disable save toolbar item
         enable_save_file_toolbar_button(false);
       }
-    } else if (analyzer_results.file_components[component_index].type == "udf") {
+    } else if (analyzer_results.file_components[component_index].type == "udf" || analyzer_results.file_components[component_index].type == "iso") {
       var component_bytes = analyzer_results.file_components[component_index].file_bytes;
       var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
 

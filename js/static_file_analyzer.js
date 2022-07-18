@@ -314,6 +314,11 @@ class Static_File_Analyzer {
       // This format does not support encryption
       file_info.file_encrypted = "false";
       file_info.file_encryption_type = "none";
+    } else if (this.array_equals(file_bytes.slice(34817,34822), [67,68,48,48,49])) {
+      // iso9660
+      var parsed_iso = new ISO_9660_Parser(file_bytes);
+      file_info.metadata = parsed_iso.metadata;
+      file_info.file_components = parsed_iso.files;
     } else {
       // Assume this is a Universal Disk Format (UDF) formatted ISO
       file_info = this.analyze_udf(file_bytes, file_text);
@@ -7033,6 +7038,245 @@ class Static_File_Analyzer {
       'urls': found_urls,
       'findings': findings
     }
+  }
+}
+
+class ISO_9660_Parser {
+  /**
+   * Call to initiate the parsing of the ISO 9660 file.
+   *
+   * @param {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}     file_text  [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
+   * @return {object}    An object with analyzed parsed ISO_9660.
+   */
+  constructor(file_bytes, file_text="") {
+    var descriptor_tag;
+    var sector_bytes = [];
+    var sector_size = 2048;
+
+    var parsed_file = {
+      'files': [],
+      'metadata': {
+        author: "unknown",
+        creation_application: "unknown",
+        creation_os: "unknown",
+        creation_date: "0000-00-00 00:00:00",
+        description: "unknown",
+        last_modified_date: "0000-00-00 00:00:00",
+        last_saved_location: "unknown",
+        title: "unknown"
+      }
+    };
+
+    // An ISO 9660 filesystem begins begins at byte 32768
+    for (var i=32768; i<file_bytes.length; i++) {
+      sector_bytes = file_bytes.slice(i,i+sector_size);
+      descriptor_tag = ISO_9660_Parser.parse_descriptor_tag(sector_bytes);
+
+      if (descriptor_tag.valid) {
+        if (descriptor_tag.type_code == 1) {
+          // Primary Volume Descriptor
+
+          // Gather metadata
+          parsed_file.metadata.creation_application = descriptor_tag.parsed_data.application_identifier;
+          parsed_file.metadata.creation_os = descriptor_tag.parsed_data.system_identifier
+          parsed_file.metadata.creation_date = descriptor_tag.parsed_data.volume_creation_timestamp;
+          parsed_file.metadata.last_modified_date = descriptor_tag.parsed_data.volume_modification_timestamp;
+          parsed_file.metadata.title = descriptor_tag.parsed_data.volume_identifier;
+
+          // Path Table, we don't use this.
+          var path_table_size = descriptor_tag.parsed_data.path_table_size;
+          var l_path_table_location = descriptor_tag.parsed_data.l_path_table_location * descriptor_tag.parsed_data.logical_block_size;
+          var m_path_table_location = descriptor_tag.parsed_data.m_path_table_location * descriptor_tag.parsed_data.logical_block_size;
+          var l_path_table_bytes = file_bytes.slice(l_path_table_location, l_path_table_location+path_table_size);
+          var m_path_table_bytes = file_bytes.slice(m_path_table_location, m_path_table_location+path_table_size);
+          var l_path_table = ISO_9660_Parser.parse_path_table(l_path_table_bytes, "LITTLE_ENDIAN");
+          var m_path_table = ISO_9660_Parser.parse_path_table(m_path_table_bytes, "BIG_ENDIAN");
+
+          var root_directory_record = ISO_9660_Parser.parse_directory_record(descriptor_tag.parsed_data.root_directory_entry);
+          var root_directory_files_location = root_directory_record.location_of_extent * sector_size;
+          var root_directory_files_bytes = file_bytes.slice(root_directory_files_location, root_directory_files_location+root_directory_record.data_length);
+
+          var dir;
+          var i2=0;
+
+          while (i2<root_directory_files_bytes.length) {
+            dir = ISO_9660_Parser.parse_directory_record(root_directory_files_bytes.slice(i2));
+
+            if (dir.length_of_file_identifier > 1) {
+              var file_btye_start = dir.location_of_extent * sector_size;
+              var c_file_bytes = file_bytes.slice(file_btye_start, file_btye_start+dir.data_length);
+
+              parsed_file.files.push({
+                'name': dir.file_identifier,
+                'directory': dir.file_flags.directory,
+                'file_bytes': c_file_bytes,
+                'type': "iso"
+              });
+            }
+
+            if (dir.directory_record_length > 0) {
+              i2 += dir.directory_record_length;
+            } else {
+              break;
+            }
+          }
+
+          break;
+        }
+      }
+    }
+
+    return parsed_file;
+  }
+
+  /**
+   * Converts an array with twelve int values 0-255 to a timestamp.
+   *
+   * @see https://wiki.osdev.org/ISO_9660#Date.2Ftime_format
+   *
+   * @param {array}   bytes Array with twelve int values 0-255 representing byte values.
+   * @return {String} The timestamp converted from the four byte array.
+   */
+  static get_timestamp(bytes) {
+    var year = Static_File_Analyzer.get_ascii(bytes.slice(0,4).filter(i => i > 31));
+    var month = Static_File_Analyzer.get_ascii(bytes.slice(4,6).filter(i => i > 31));
+    var day = Static_File_Analyzer.get_ascii(bytes.slice(6,8).filter(i => i > 31));
+    var hour = Static_File_Analyzer.get_ascii(bytes.slice(8,10).filter(i => i > 31));
+    var minute = Static_File_Analyzer.get_ascii(bytes.slice(10,12).filter(i => i > 31));
+    var second = Static_File_Analyzer.get_ascii(bytes.slice(12,14).filter(i => i > 31));
+
+    var timestamp = year + "-" + month + "-" + day + " " + hour + ":" + minute + ":" + second;
+    return timestamp;
+  }
+
+  /**
+   * Parses the descriptor tag for a ISO_9660.
+   *
+   * @see https://wiki.osdev.org/ISO_9660
+   *
+   * @param {array}   decr_tag_buffer Byte buffer with the 16 bytes that make up the descriptor tag.
+   * @return {Object}  An object with the parsed descriptor tag.
+   */
+  static parse_descriptor_tag(decr_tag_buffer) {
+    var tag_identifiers = [0x0000,0x0001,0x0002,0x0003,0x0004,0xFF];
+
+    var descriptor_tag = {
+      'type_code': -1,
+      'identifier': "",
+      'version': "",
+      'data:': [],
+      'parsed_data': {},
+      'valid': false
+    };
+
+    descriptor_tag.type_code = decr_tag_buffer[0];
+    descriptor_tag.identifier = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(1,6).filter(i => i > 31));
+    descriptor_tag.version = decr_tag_buffer[6];
+    descriptor_tag.data = decr_tag_buffer.slice(7, 2048);
+
+    if (tag_identifiers.includes(descriptor_tag.type_code) && descriptor_tag.identifier.length > 0) {
+      descriptor_tag.valid = true;
+
+      if (descriptor_tag.type_code == 0) {
+        // Boot Record
+        descriptor_tag.parsed_data['boot_system_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(7,39).filter(i => i > 31));
+        descriptor_tag.parsed_data['boot_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(39,71).filter(i => i > 31));
+      } else if (descriptor_tag.type_code == 1) {
+        // Primary Volume Descriptor
+        descriptor_tag.parsed_data['system_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(8,40).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['volume_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(40,72).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['volume_space_size'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(80,84), "LITTLE_ENDIAN");
+        descriptor_tag.parsed_data['volume_set_size'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(120,122), "LITTLE_ENDIAN");
+        descriptor_tag.parsed_data['volume_sequence_number'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(124,126), "LITTLE_ENDIAN");
+        descriptor_tag.parsed_data['logical_block_size'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(128,130), "LITTLE_ENDIAN");
+        descriptor_tag.parsed_data['path_table_size'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(132,136), "LITTLE_ENDIAN");
+        descriptor_tag.parsed_data['l_path_table_location'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(140,144), "LITTLE_ENDIAN");
+        descriptor_tag.parsed_data['optional_l_path_table_location'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(144,148), "LITTLE_ENDIAN");
+        descriptor_tag.parsed_data['m_path_table_location'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(148,152), "BIG_ENDIAN");
+        descriptor_tag.parsed_data['optional_m_path_table_location'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(152,156), "BIG_ENDIAN");
+        descriptor_tag.parsed_data['root_directory_entry'] = decr_tag_buffer.slice(156,190);
+        descriptor_tag.parsed_data['volume_set_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(190,318).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['publisher_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(318,446).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['data_preparer_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(446,574).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['application_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(574,702).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['copyright_file_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(702,739).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['abstract_file_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(739,776).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['bibliographic_file_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(776,813).filter(i => i > 31)).trim();
+        descriptor_tag.parsed_data['volume_creation_timestamp'] = ISO_9660_Parser.get_timestamp(decr_tag_buffer.slice(813,830));
+        descriptor_tag.parsed_data['volume_modification_timestamp'] = ISO_9660_Parser.get_timestamp(decr_tag_buffer.slice(830,847));
+        descriptor_tag.parsed_data['volume_expiration_timestamp'] = ISO_9660_Parser.get_timestamp(decr_tag_buffer.slice(847,864));
+        descriptor_tag.parsed_data['volume_effective_timestamp'] = ISO_9660_Parser.get_timestamp(decr_tag_buffer.slice(864,881));
+        descriptor_tag.parsed_data['file_structure_version'] = decr_tag_buffer[881];
+        descriptor_tag.parsed_data['application_used'] = decr_tag_buffer.slice(883,1395);
+      } else if (descriptor_tag.type_code == 2) {
+        // Supplementary Volume Descriptor
+      } else if (descriptor_tag.type_code == 3) {
+        // Volume Partition Descriptor
+      } else if (descriptor_tag.type_code == 255) {
+        // Volume Descriptor Set Terminator
+      }
+    }
+
+    return descriptor_tag;
+  }
+
+  /**
+   * Parses a directory record for a ISO_9660.
+   *
+   * @see https://wiki.osdev.org/ISO_9660#Directories
+   *
+   * @param {array}    bytes Byte buffer
+   * @return {Object}  An object with the parsed descriptor tag.
+   */
+  static parse_directory_record(bytes) {
+    var file_flags = Universal_Disk_Format_Parser.get_binary_array([bytes[25]]).reverse();
+
+    var directory_record = {
+      'directory_record_length': bytes[0],
+      'extended_attribute_record_length': bytes[1],
+      'location_of_extent': Static_File_Analyzer.get_int_from_bytes(bytes.slice(2,6), "LITTLE_ENDIAN"),
+      'data_length': Static_File_Analyzer.get_int_from_bytes(bytes.slice(10,14), "LITTLE_ENDIAN"),
+      'recording_timestamp': bytes.slice(18,25),
+      'file_flags': {
+        'hidden': (file_flags[0] == 1) ? true : false,
+        'directory': (file_flags[1] == 1) ? true : false,
+        'associated_file': (file_flags[2] == 1) ? true : false
+      },
+      'file_unit_size': bytes[26],
+      'interleave_gap_size': bytes[27],
+      'volume_sequence_number': Static_File_Analyzer.get_int_from_bytes(bytes.slice(28,30), "LITTLE_ENDIAN"),
+      'length_of_file_identifier': bytes[32],
+      'file_identifier': ""
+    };
+
+    var file_identifier = Static_File_Analyzer.get_ascii(bytes.slice(33,33+directory_record.length_of_file_identifier)).split(";");
+    directory_record.file_identifier = file_identifier[0];
+    directory_record['file_id'] = file_identifier[1];
+
+    return directory_record;
+  }
+
+  /**
+   * Parses the path table
+   *
+   * @see https://wiki.osdev.org/ISO_9660#The_Path_Table
+   *
+   * @param {array}    bytes Byte buffer with the 16 bytes that make up the descriptor tag.
+   * @return {Object}  An object with the parsed path table.
+   */
+  static parse_path_table(bytes, byte_format) {
+    var path_table = {
+      'directory_identifier_length': bytes[0],
+      'extended_attribute_record_length': bytes[1],
+      'location_of_extent': Static_File_Analyzer.get_int_from_bytes(bytes.slice(2,6), byte_format),
+      'parent_directory_number': Static_File_Analyzer.get_int_from_bytes(bytes.slice(6,8), byte_format),
+      'directory_identifier': ""
+    };
+
+    path_table.directory_identifier = bytes.slice(8,8+path_table.directory_identifier_length);
+
+    return path_table;
   }
 }
 
