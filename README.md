@@ -17,8 +17,8 @@ See the table below for a list of supported file types and types of data extract
 | DOCX           | X            | X               | X               | X        |                  |                   |
 | EXE            | X            | X               |                 |          |                  |                   |
 | GZ             | X            | X               |                 |          |                  |                   |
-| ISO            | X            | X               |                 |          |                  |                   |
-| [ISO - UDF](https://github.com/alecdhuse/Lantern-Shark/wiki/Universal-Disk-Format)      | X            | X               | X               | X        |                  |                   |
+|[ISO - ISO 9660](https://github.com/alecdhuse/Lantern-Shark/wiki/ISO-9660)| X | X | X | X |      |                   |
+|[ISO - UDF](https://github.com/alecdhuse/Lantern-Shark/wiki/Universal-Disk-Format)| X | X | X | X |  |               |
 | JPEG           | X            | X               |                 |          |                  |                   |
 | LNK            | X            | X               |                 | X        | X                | X                 |
 | PDF            | X            | X               |                 | X        | X                | X                 |
