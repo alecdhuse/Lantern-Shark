@@ -2251,7 +2251,7 @@ class Static_File_Analyzer {
           cell_data_obj = this.parse_xls_label_set_record(cell_records[i], string_constants, byte_order);
           document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
           formula_cell_name  = "";
-          console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
+          //console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
         } else if (cell_records[i].record_type == "MulBlank") {
           var blank_cell_name;
           var row = this.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
@@ -2264,14 +2264,14 @@ class Static_File_Analyzer {
               'formula': null,
               'value': ""
             }
-            console.log(cell_records[i].sheet_name + " " + blank_cell_name + " - [blank]");
+            //console.log(cell_records[i].sheet_name + " " + blank_cell_name + " - [blank]");
           }
 
         } else if (cell_records[i].record_type == "RK") {
           cell_data_obj = this.parse_xls_rk_record(cell_records[i], byte_order);
           document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
           formula_cell_name  = "";
-          console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
+          //console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
         } else if (cell_records[i].record_type == "String") {
           // If the last record was a formula this string is the precal value, fill cell with this value.
           if (formula_cell_name != "") {
@@ -2326,7 +2326,7 @@ class Static_File_Analyzer {
 
           // DEBUG
           if (cell_data_obj.cell_data.value != string_val) {
-            console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " Cell precalc missmatch - calc: " + cell_data_obj.cell_data.value + " precalc: " + string_val);
+            //console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " Cell precalc missmatch - calc: " + cell_data_obj.cell_data.value + " precalc: " + string_val);
 
             cell_data_obj.cell_data.value = string_val;
             cell_data_obj.cell_recalc = false;
@@ -2345,13 +2345,13 @@ class Static_File_Analyzer {
 
           if (cell_data_obj.cell_recalc == false) {
             document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
-            console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
+            //console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
           }
 
         }
       }
 
-      console.log("~~Recalc cells") // DEBUG
+      //console.log("~~Recalc cells") // DEBUG
       var last_recalc_len = document_obj.recalc_objs.length;
       // Re-parse cells needing recalculation.
       while (document_obj.recalc_objs.length > 0) {
@@ -2370,7 +2370,7 @@ class Static_File_Analyzer {
                 document_obj.sheets[cell_data_obj.sheet_name].data[cell_data_obj.cell_name] = cell_data_obj.cell_data;
 
                 if (cell_data_obj.cell_recalc == false) {
-                  console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
+                  //console.log(cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.formula + " - "+ cell_data_obj.cell_data.value);
                 } else {
                   var debug45=54;
                 }
@@ -2484,6 +2484,12 @@ class Static_File_Analyzer {
       // File format error.
       console.log("No BOF record found.");
     }
+
+    // Format document object for user output
+    delete  document_obj['byte_order'];
+    delete  document_obj['recalc_objs'];
+    delete  document_obj['unknown_cells_are_blank'];
+    file_info.parsed = JSON.stringify(document_obj, null, 2);
 
     return file_info;
   }
