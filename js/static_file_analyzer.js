@@ -2487,6 +2487,8 @@ class Static_File_Analyzer {
 
     // Format document object for user output
     delete  document_obj['byte_order'];
+    delete  document_obj['current_cell'];
+    delete  document_obj['indexed_cells'];
     delete  document_obj['recalc_objs'];
     delete  document_obj['unknown_cells_are_blank'];
     file_info.parsed = JSON.stringify(document_obj, null, 2);
