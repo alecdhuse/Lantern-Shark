@@ -383,6 +383,11 @@ class Static_File_Analyzer {
 
     // For GUID defs see: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-wsp/2dbe759c-c955-4770-a545-e46d7f6332ed
     var guids = {
+      '20D04FE0-3AEA-1069-A2D8-08002B30309D': {
+        'properties': {
+          0: "My Computer"
+        }
+      },
       '28636AA6-953D-11D2-B5D6-00C04FD918D0': {
         'properties': {
           5:  "System.ComputerName",
@@ -538,10 +543,33 @@ class Static_File_Analyzer {
       var id_list_offset = 0;
       var item_id_bytes = [];
       var item_id_size;
+      var item_id_code;
 
       while (id_list_offset < id_list_bytes.length) {
-        item_id_size = this.get_two_byte_int(id_list_bytes.slice(id_list_offset,id_list_offset+=2), this.LITTLE_ENDIAN);
+        item_id_size = this.get_two_byte_int(id_list_bytes.slice(id_list_offset,id_list_offset+=2), this.LITTLE_ENDIAN) - 2;
         item_id_bytes = id_list_bytes.slice(id_list_offset,id_list_offset+=item_id_size);
+        item_id_code = this.get_two_byte_int(item_id_bytes.slice(0,2), this.LITTLE_ENDIAN);
+
+        if (item_id_code == 17199) {
+          // Drive
+          var drive = Static_File_Analyzer.get_ascii(item_id_bytes.slice(1,6).filter(i => i > 31));
+
+          parsed_lnk['TargetIDList'].push({
+            'type': "Drive",
+            'value': drive
+          });
+        } else if (item_id_code == 20511) {
+          // Class ID ?
+          var item_id_guid = this.get_guid(item_id_bytes.slice(2,18));
+          var item_id_guid_name = guids[item_id_guid].properties[0];
+
+          parsed_lnk['TargetIDList'].push({
+            'type': "CLSID",
+            'value': item_id_guid + " = " + item_id_guid_name
+          });
+        } else {
+          break;
+        }
       }
     }
 
@@ -955,6 +983,8 @@ class Static_File_Analyzer {
       cmd_shell = parsed_lnk['LocalBasePathUnicode'];
     } else if (parsed_lnk['LocalBasePath'] !== null && parsed_lnk['LocalBasePath'] !== undefined) {
       cmd_shell = parsed_lnk['LocalBasePath'];
+    } else if (parsed_lnk['StringData']['RELATIVE_PATH'] !== null && parsed_lnk['StringData']['RELATIVE_PATH'] !== undefined) {
+      cmd_shell = parsed_lnk['StringData']['RELATIVE_PATH'];
     } else {
       for (var ed=0; ed<parsed_lnk['ExtraData'].length; ed++) {
         if (parsed_lnk['ExtraData'][ed].type == "EnvironmentVariableDataBlock") {
