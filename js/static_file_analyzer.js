@@ -429,6 +429,7 @@ class Static_File_Analyzer {
 
     var hot_key_high_bit = ["","Shift","Control","","Alt"];
     var hot_key_low_bit = ["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12","F13","F14","F15","F16","F17","F18","F19","F20","F21","F22","F23","F24","Num Lock","Scroll Lock"];
+    var show_commands = ["","SW_SHOWNORMAL","","SW_SHOWMAXIMIZED","","","","SW_SHOWMINNOACTIVE",""];
 
     file_info.file_format = "lnk";
     file_info.file_generic_type = "Shortcut";
@@ -436,10 +437,17 @@ class Static_File_Analyzer {
     file_info.file_encryption_type = "none";
 
     var parsed_lnk = {};
-    parsed_lnk['HeaderSize'] = this.get_four_byte_int(file_bytes.slice(0,4));
+    parsed_lnk['HeaderSize'] = this.get_four_byte_int(file_bytes.slice(0,4), this.LITTLE_ENDIAN);
     parsed_lnk['LinkCLSID'] = this.get_guid(file_bytes.slice(4,20));
 
-    var link_flags = this.get_binary_array(file_bytes.slice(20,24));
+    var link_flags_arr = [
+      this.get_binary_array([file_bytes[20]]).reverse(),
+      this.get_binary_array([file_bytes[21]]).reverse(),
+      this.get_binary_array([file_bytes[22]]).reverse(),
+      this.get_binary_array([file_bytes[23]]).reverse(),
+    ];
+
+    var link_flags = [].concat.apply([], link_flags_arr);
 
     parsed_lnk['LinkFlags'] = {
       'HasLinkTargetIDList': (link_flags[0]==1) ? true : false,
@@ -499,12 +507,17 @@ class Static_File_Analyzer {
     parsed_lnk['AccessTime'] = this.get_eight_byte_date(file_bytes.slice(36,44), this.LITTLE_ENDIAN);
     parsed_lnk['WriteTime'] = this.get_eight_byte_date(file_bytes.slice(44,52), this.LITTLE_ENDIAN);
 
-    file_info.metadata.creation_date = parsed_lnk['CreationTime'];
-    file_info.metadata.last_modified_date = parsed_lnk['AccessTime'];
+    if (parsed_lnk['CreationTime'] != "1601-01-01T00:00:00.000Z") {
+      file_info.metadata.creation_date = parsed_lnk['CreationTime'];
+    }
 
-    parsed_lnk['FileSize'] = this.get_four_byte_int(file_bytes.slice(52,56));
-    parsed_lnk['IconIndex'] = this.get_four_byte_int(file_bytes.slice(56,60));
-    parsed_lnk['ShowCommand'] = this.get_four_byte_int(file_bytes.slice(60,64));
+    if (parsed_lnk['AccessTime'] != "1601-01-01T00:00:00.000Z") {
+      file_info.metadata.last_modified_date = parsed_lnk['AccessTime'];
+    }
+
+    parsed_lnk['FileSize'] = this.get_four_byte_int(file_bytes.slice(52,56), this.LITTLE_ENDIAN);
+    parsed_lnk['IconIndex'] = this.get_four_byte_int(file_bytes.slice(56,60), this.LITTLE_ENDIAN);
+    parsed_lnk['ShowCommand'] = show_commands[this.get_four_byte_int(file_bytes.slice(60,64), this.LITTLE_ENDIAN)];
 
     if (hot_key_high_bit[file_bytes[65]] != "" && hot_key_low_bit[file_bytes[64]] != "") {
       parsed_lnk['HotKey'] = hot_key_high_bit[file_bytes[65]] + " + " + hot_key_low_bit[file_bytes[64]];
@@ -515,99 +528,117 @@ class Static_File_Analyzer {
     // Skip the 10 reserved bytes
     var byte_offset = 76;
 
-    if (link_flags[0] == 1) {
+    if (parsed_lnk['LinkFlags']['HasLinkTargetIDList'] == true) {
       // HasLinkTargetIDList
+      parsed_lnk['TargetIDList'] = [];
       var id_list_size = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-      var id_list_bytes = file_bytes.slice(byte_offset,byte_offset+id_list_size);
-      byte_offset += id_list_size;
-    }
+      var id_list_bytes = file_bytes.slice(byte_offset,byte_offset+=id_list_size);
 
-    // LinkInfo
-    var link_info_start = byte_offset;
-    var link_info_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var link_info_header_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var link_info_end = link_info_start + link_info_size;
+      var id_list_offset = 0;
+      var item_id_bytes = [];
+      var item_id_size;
 
-    var link_info_flags = this.get_bin_from_int(file_bytes[byte_offset]).reverse();
-    byte_offset+=4;
-
-    var link_info_flags_obj = {
-      'VolumeIDAndLocalBasePath': (link_info_flags[0]==1) ? true : false,
-      'CommonNetworkRelativeLinkAndPathSuffix': (link_info_flags[1]==1) ? true : false
-    };
-
-    var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-
-    if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
-      // LocalBasePath
-      var local_base_path_start = (link_info_start+local_base_path_offset);
-      var local_base_path_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start), true);
-      parsed_lnk['LocalBasePath'] = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i > 31));
-    }
-
-    var common_network_relative_link_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-
-    var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-    var common_path_suffix_start = (link_info_start+common_path_suffix_offset);
-
-    if (link_info_header_size >= 0x24) {
-      var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var local_base_path_start_unicode = (link_info_start+local_base_path_offset_unicode);
-      var local_base_path_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start_unicode), true);
-      parsed_lnk['LocalBasePathUnicode'] = Static_File_Analyzer.get_string_from_array(local_base_path_unicode_bytes);
-
-      var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var common_path_suffix_start_unicode = (link_info_start+common_path_suffix_offset_unicode);
-
-      var common_path_suffix_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
-      parsed_lnk['CommonPathSuffixUnicode'] = Static_File_Analyzer.get_string_from_array(common_path_suffix_unicode_bytes);
-    }
-
-    var common_path_suffix_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), false);
-    parsed_lnk['CommonPathSuffix'] = Static_File_Analyzer.get_ascii(common_path_suffix_bytes.filter(i => i > 31));
-
-    if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
-      // VolumeID
-      var volume_obj_start = byte_offset;
-
-      parsed_lnk['VolumeID'] = {
-        'VolumeIDSize': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-        'DriveType': drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)],
-        'DriveSerialNumber': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-        'VolumeLabelOffset': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)
-      };
-
-      var drive_volume_lbl_start = volume_obj_start + parsed_lnk['VolumeID']['VolumeLabelOffset'];
-
-      if (parsed_lnk['VolumeID']['VolumeLabelOffset'] == 0x14) {
-        // NULL-terminated string of Unicode characters
-        var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset_unicode;
-      }
-
-      var drive_data_byte = this.get_null_terminated_bytes(file_bytes.slice(drive_volume_lbl_start));
-      parsed_lnk['VolumeID']['VolumeLabel'] = Static_File_Analyzer.get_ascii(drive_data_byte.filter(i => i > 31));
-    }
-
-    if (link_info_flags_obj.CommonNetworkRelativeLinkAndPathSuffix) {
-      // CommonNetworkRelativeLink
-      var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var cnrl_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
-      var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-
-      if (net_name_offset > 0x14) {
-        var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-      }
-
-      if (parsed_lnk['VolumeID']['VolumeLabelOffset'] > 0x14) {
-        var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      while (id_list_offset < id_list_bytes.length) {
+        item_id_size = this.get_two_byte_int(id_list_bytes.slice(id_list_offset,id_list_offset+=2), this.LITTLE_ENDIAN);
+        item_id_bytes = id_list_bytes.slice(id_list_offset,id_list_offset+=item_id_size);
       }
     }
 
-    byte_offset = link_info_end;
+    if (parsed_lnk['LinkFlags']['HasLinkInfo'] == true) {
+      // LinkInfo
+      var link_info_start = byte_offset;
+      var link_info_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+      if (link_info_size < file_bytes.length) {
+        var link_info_header_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var link_info_end = link_info_start + link_info_size;
+
+        var link_info_flags = this.get_bin_from_int(file_bytes[byte_offset]).reverse();
+        byte_offset+=4;
+
+        var link_info_flags_obj = {
+          'VolumeIDAndLocalBasePath': (link_info_flags[0]==1) ? true : false,
+          'CommonNetworkRelativeLinkAndPathSuffix': (link_info_flags[1]==1) ? true : false
+        };
+
+        var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+        if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
+          // LocalBasePath
+          var local_base_path_start = (link_info_start+local_base_path_offset);
+          var local_base_path_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start), true);
+          parsed_lnk['LocalBasePath'] = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i > 31));
+        }
+
+        var common_network_relative_link_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+        var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var common_path_suffix_start = (link_info_start+common_path_suffix_offset);
+
+        if (link_info_header_size >= 0x24) {
+          var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var local_base_path_start_unicode = (link_info_start+local_base_path_offset_unicode);
+          var local_base_path_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start_unicode), true);
+          parsed_lnk['LocalBasePathUnicode'] = Static_File_Analyzer.get_string_from_array(local_base_path_unicode_bytes);
+
+          var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var common_path_suffix_start_unicode = (link_info_start+common_path_suffix_offset_unicode);
+
+          var common_path_suffix_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
+          parsed_lnk['CommonPathSuffixUnicode'] = Static_File_Analyzer.get_string_from_array(common_path_suffix_unicode_bytes);
+        }
+
+        var common_path_suffix_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), false);
+        parsed_lnk['CommonPathSuffix'] = Static_File_Analyzer.get_ascii(common_path_suffix_bytes.filter(i => i > 31));
+
+        if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
+          // VolumeID
+          var volume_obj_start = byte_offset;
+
+          parsed_lnk['VolumeID'] = {
+            'VolumeIDSize': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'DriveType': drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)],
+            'DriveSerialNumber': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'VolumeLabelOffset': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)
+          };
+
+          var drive_volume_lbl_start = volume_obj_start + parsed_lnk['VolumeID']['VolumeLabelOffset'];
+
+          if (parsed_lnk['VolumeID']['VolumeLabelOffset'] == 0x14) {
+            // NULL-terminated string of Unicode characters
+            var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset_unicode;
+          }
+
+          var drive_data_byte = this.get_null_terminated_bytes(file_bytes.slice(drive_volume_lbl_start));
+          parsed_lnk['VolumeID']['VolumeLabel'] = Static_File_Analyzer.get_ascii(drive_data_byte.filter(i => i > 31));
+        }
+
+        if (link_info_flags_obj.CommonNetworkRelativeLinkAndPathSuffix) {
+          // CommonNetworkRelativeLink
+          var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var cnrl_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
+          var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+          if (net_name_offset > 0x14) {
+            var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          }
+
+          if (parsed_lnk['VolumeID']['VolumeLabelOffset'] > 0x14) {
+            var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          }
+        }
+
+        byte_offset = link_info_end;
+      } else {
+        console.log("Error parsing LNK file: Invalid LinkInfoSize.");
+        byte_offset -= 4;
+      }
+
+    }
 
     // StringData
     parsed_lnk['StringData'] = {};
@@ -641,22 +672,6 @@ class Static_File_Analyzer {
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['ICON_LOCATION'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
-
-    var cmd_shell = "";
-    if (parsed_lnk['StringData']['WORKING_DIR'] !== null && parsed_lnk['StringData']['WORKING_DIR'] !== undefined) {
-      cmd_shell = parsed_lnk['LocalBasePath'] + " " + parsed_lnk['StringData']['WORKING_DIR'];
-    } else {
-      cmd_shell = parsed_lnk['LocalBasePath'] + " " + parsed_lnk['StringData']['NAME_STRING'];
-    }
-
-    this.add_extracted_script("Windows Command Shell", cmd_shell, file_info);
-    cmd_shell = cmd_shell.replaceAll(/(?:[^\s]\&\&[^\s]|[^\s]\&\&|\&\&[^\s])/gm, function(match, match_index, input_string) {
-      var str_part1 = input_string.slice(match_index, match_index+1);
-      var str_part2 = input_string.slice(match_index+3, match_index+4);
-      return str_part1 + " && " + str_part2;
-    });
-
-    file_info = this.search_for_iocs(cmd_shell, file_info);
 
     // ExtraData
     parsed_lnk['ExtraData'] = [];
@@ -932,6 +947,37 @@ class Static_File_Analyzer {
 
       block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
     }
+
+    // Build LNK shell code
+    var cmd_shell = "";
+    if (parsed_lnk['LocalBasePathUnicode'] !== null && parsed_lnk['LocalBasePathUnicode'] !== undefined) {
+      cmd_shell = parsed_lnk['LocalBasePathUnicode'];
+    } else if (parsed_lnk['LocalBasePath'] !== null && parsed_lnk['LocalBasePath'] !== undefined) {
+      cmd_shell = parsed_lnk['LocalBasePath'];
+    } else {
+      for (var ed=0; ed<parsed_lnk['ExtraData'].length; ed++) {
+        if (parsed_lnk['ExtraData'][ed].type == "EnvironmentVariableDataBlock") {
+          if (parsed_lnk['ExtraData'][ed].data.TargetUnicode !== null && parsed_lnk['ExtraData'][ed].data.TargetUnicode !== undefined) {
+            cmd_shell = parsed_lnk['ExtraData'][ed].data.TargetUnicode;
+          } else {
+            cmd_shell = parsed_lnk['ExtraData'][ed].data.TargetAnsi;
+          }
+        }
+      }
+    }
+
+    if (parsed_lnk['ExtraData']['COMMAND_LINE_ARGUMENTS'] !== null && parsed_lnk['StringData']['COMMAND_LINE_ARGUMENTS'] !== undefined) {
+      cmd_shell += " " + parsed_lnk['StringData']['COMMAND_LINE_ARGUMENTS'];
+    }
+
+    this.add_extracted_script("Windows Command Shell", cmd_shell, file_info);
+    cmd_shell = cmd_shell.replaceAll(/(?:[^\s]\&\&[^\s]|[^\s]\&\&|\&\&[^\s])/gm, function(match, match_index, input_string) {
+      var str_part1 = input_string.slice(match_index, match_index+1);
+      var str_part2 = input_string.slice(match_index+3, match_index+4);
+      return str_part1 + " && " + str_part2;
+    });
+
+    file_info = this.search_for_iocs(cmd_shell, file_info);
 
     // Extract more meta data from what we have already collected.
     if (/[a-zA-Z]\:\\/gm.test(file_info.metadata.last_saved_location)) {
