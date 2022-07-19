@@ -120,6 +120,10 @@ body {
   width: 120px
 }
 
+#tab_parsed_file {
+  display: none;
+}
+
 #tab_row {
   margin-bottom: 8px;
 }

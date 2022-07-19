@@ -7,6 +7,7 @@ var zip_file_extentions = ["docx", "docm", "pptx", "pptm", "xlsb", "xlsx", "xlsm
 window.addEventListener('load', (event) => {
   document.getElementById('tab_summary').addEventListener('click', change_tab, false);
   document.getElementById('tab_text').addEventListener('click', change_tab, false);
+  document.getElementById('tab_parsed').addEventListener('click', change_tab, false);
   document.getElementById('summary_file_encrypted_password_img').addEventListener('click', decrypt_file, false);
   document.getElementById('summary_file_encrypted_password_force_img').addEventListener('click', brute_force_zip, false);
   document.getElementById('summary_file_encrypted_password_txt').addEventListener('keydown', password_field_keydown, false);
@@ -110,9 +111,11 @@ function change_tab(e) {
   // Hide all tabs
   $("#tab_body_summary").hide();
   $("#tab_body_text").hide();
+  $("#tab_parsed_file").hide();
 
   $("#tab_summary").removeClass("tab_selected");
   $("#tab_text").removeClass("tab_selected");
+  $("#tab_parsed").removeClass("tab_selected");
 
   if (tab_id == "tab_summary") {
     $("#tab_body_summary").show();
@@ -120,6 +123,9 @@ function change_tab(e) {
   } else if (tab_id == "tab_text") {
     $("#tab_body_text").show();
     $("#tab_text").addClass("tab_selected");
+  } else if (tab_id == "tab_parsed") {
+    $("#tab_parsed_file").show();
+    $("#tab_parsed").addClass("tab_selected");
   }
 }
 
@@ -320,6 +326,7 @@ function read_file(e) {
       display_file_summary(analyzer_results);
 
       $("#file_text").val(get_file_text(array));
+      $("#parsed_file_text").val(analyzer_results.parsed);
     }
   };
 }
@@ -393,7 +400,9 @@ async function select_file_component(e, component_index=null) {
 
       try {
         var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+
         $("#file_text").val(get_file_text(component_bytes));
+        $("#parsed_file_text").val(analyzer_results.parsed);
 
         if (component_bytes.length == 0) {
           // This is a directory
@@ -437,6 +446,7 @@ async function select_file_component(e, component_index=null) {
       display_file_summary(subfile_analyzer_results);
       enable_save_file_toolbar_button(true);
       $("#file_text").val(get_file_text(component_bytes));
+      $("#parsed_file_text").val(subfile_analyzer_results.parsed);
     } else {
       // Code for other componets
 
@@ -464,4 +474,5 @@ async function select_top_level_file(e) {
 
   display_file_summary(analyzer_results);
   $("#file_text").val(get_file_text(file_byte_array));
+  $("#parsed_file_text").val(analyzer_results.parsed);
 }

@@ -320,6 +320,7 @@ class Static_File_Analyzer {
       file_info.metadata = parsed_iso.metadata;
       file_info.file_components = parsed_iso.files;
       file_info.file_format_ver = "ISO 9660";
+      file_info.parsed = JSON.stringify(parsed_iso.descriptors, null, 2);
     } else {
       // Assume this is a Universal Disk Format (UDF) formatted ISO
       file_info = this.analyze_udf(file_bytes, file_text);
@@ -7102,6 +7103,7 @@ class ISO_9660_Parser {
     var sector_size = 2048;
 
     var parsed_file = {
+      'descriptors': [],
       'files': [],
       'metadata': {
         author: "unknown",
@@ -7121,6 +7123,8 @@ class ISO_9660_Parser {
       descriptor_tag = ISO_9660_Parser.parse_descriptor_tag(sector_bytes);
 
       if (descriptor_tag.valid) {
+        parsed_file.descriptors.push(descriptor_tag);
+
         if (descriptor_tag.type_code == 1) {
           // Primary Volume Descriptor
 
@@ -7211,6 +7215,7 @@ class ISO_9660_Parser {
 
     var descriptor_tag = {
       'type_code': -1,
+      'type_name': "",
       'identifier': "",
       'version': "",
       'data:': [],
@@ -7228,10 +7233,12 @@ class ISO_9660_Parser {
 
       if (descriptor_tag.type_code == 0) {
         // Boot Record
+        descriptor_tag.type_name = "Boot Record";
         descriptor_tag.parsed_data['boot_system_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(7,39).filter(i => i > 31));
         descriptor_tag.parsed_data['boot_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(39,71).filter(i => i > 31));
       } else if (descriptor_tag.type_code == 1) {
         // Primary Volume Descriptor
+        descriptor_tag.type_name = "Primary Volume Descriptor";
         descriptor_tag.parsed_data['system_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(8,40).filter(i => i > 31)).trim();
         descriptor_tag.parsed_data['volume_identifier'] = Static_File_Analyzer.get_ascii(decr_tag_buffer.slice(40,72).filter(i => i > 31)).trim();
         descriptor_tag.parsed_data['volume_space_size'] = Static_File_Analyzer.get_int_from_bytes(decr_tag_buffer.slice(80,84), "LITTLE_ENDIAN");
@@ -7259,10 +7266,13 @@ class ISO_9660_Parser {
         descriptor_tag.parsed_data['application_used'] = decr_tag_buffer.slice(883,1395);
       } else if (descriptor_tag.type_code == 2) {
         // Supplementary Volume Descriptor
+        descriptor_tag.type_name = "Supplementary Volume Descriptor";
       } else if (descriptor_tag.type_code == 3) {
         // Volume Partition Descriptor
+        descriptor_tag.type_name = "Volume Partition Descriptor";
       } else if (descriptor_tag.type_code == 255) {
         // Volume Descriptor Set Terminator
+        descriptor_tag.type_name = "Volume Descriptor Set Terminator";
       }
     }
 
