@@ -10,27 +10,27 @@ A live demo of this project can be viewed [here](https://alecdhuse.github.io/Lan
 This project is under heavy development, and currently only supports a small number of file types.
 See the table below for a list of supported file types and types of data extracted from each.
 
-| File Extension | File Type ID | File Attributes | Components List | Metadata | Script Detection | Script Extraction |
-| -------------- | ------------ | --------------- | --------------- | -------- | ---------------- | ----------------- |
-| ACE            | X            | X               |                 |          |                  |                   |
-| DLL            | X            |                 |                 |          |                  |                   |
-| DOCX           | X            | X               | X               | X        |                  |                   |
-| EXE            | X            | X               |                 |          |                  |                   |
-| GZ             | X            | X               |                 |          |                  |                   |
-|[ISO - ISO 9660](https://github.com/alecdhuse/Lantern-Shark/wiki/ISO-9660)| X | X | X | X |      |                   |
-|[ISO - UDF](https://github.com/alecdhuse/Lantern-Shark/wiki/Universal-Disk-Format)| X | X | X | X |  |               |
-| JPEG           | X            | X               |                 |          |                  |                   |
-| LNK            | X            | X               |                 | X        | X                | X                 |
-| PDF            | X            | X               |                 | X        | X                | X                 |
-| RAR            | X            | X               |                 |          |                  |                   |
-| RTF            | X            | X               |                 | X        |                  |                   |
-| PNG            | X            | X               |                 | X        |                  |                   |
-| PPTX           | X            | X               | X               | X        |                  |                   |
-| XLS            | X            | X               |                 | X        | X                | X                 |
-| XLSB           | X            | X               | X               | X        | X                | X                 |
-| XLSX           | X            | X               | X               | X        | X                | X                 |
-| XML            | X            |                 |                 |          |                  |                   |
-| ZIP            | X            | X               | X               |          |                  |                   |
+| File Extension | File Type ID | File Attributes | Components List | Metadata | Script Detection & Extraction |
+| -------------- | ------------ | --------------- | --------------- | -------- | ----------------------------- |
+| ACE            | X            | X               |                 |          |                               |
+| DLL            | X            |                 |                 |          |                               |
+| DOCX           | X            | X               | X               | X        |                               |
+| EXE            | X            | X               |                 |          |                               |
+| GZ             | X            | X               |                 |          |                               |
+|[ISO - ISO 9660](https://github.com/alecdhuse/Lantern-Shark/wiki/ISO-9660)| X | X | X | X |                   |
+|[ISO - UDF](https://github.com/alecdhuse/Lantern-Shark/wiki/Universal-Disk-Format)| X | X | X | X |           |
+| JPEG           | X            | X               |                 |          |                               |
+| LNK            | X            | X               |                 | X        | X                             |
+| PDF            | X            | X               |                 | X        | X                             |
+| RAR            | X            | X               |                 |          |                               |
+| RTF            | X            | X               |                 | X        |                               |
+| PNG            | X            | X               |                 | X        |                               |
+| PPTX           | X            | X               | X               | X        |                               |
+| XLS            | X            | X               |                 | X        | X                             |
+| XLSB           | X            | X               | X               | X        | X                             |
+| XLSX           | X            | X               | X               | X        | X                             |
+| XML            | X            |                 |                 |          |                               |
+| ZIP            | X            | X               | X               |          |                               |
 
 # CVE Detection
 Lantern Shark should be able to detect the following CVEs:
