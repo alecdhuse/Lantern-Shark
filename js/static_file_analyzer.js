@@ -269,11 +269,19 @@ class Static_File_Analyzer {
       file_info.file_generic_type = "Shared Library";
     }
 
+    // Get current date
+    var current_date_obj = new Date();
+    var current_date = current_date_obj.toISOString().split("T")[0];
+
     // Get compile time
     var compile_time_offset = header_offset + 8;
     var compile_timestamp_int = this.get_four_byte_int(file_bytes.slice(compile_time_offset,compile_time_offset+4), this.LITTLE_ENDIAN);
     var compile_timestamp = new Date(compile_timestamp_int*1000);
     file_info.metadata.creation_date = compile_timestamp.toISOString().slice(0, 19).replace("T", " ");;
+
+    if (file_info.metadata.creation_date.split(" ")[0] > current_date) {
+      file_info.analytic_findings.push("SUSPICIOUS - Future Compile Date");
+    }
 
     // Get optional header size
     var optional_header_size = this.get_four_byte_int(file_bytes.slice(header_offset+20,header_offset+22), this.LITTLE_ENDIAN);
