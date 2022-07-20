@@ -246,6 +246,8 @@ class Static_File_Analyzer {
   /**
    * Extracts meta data and other information from .exe executable files.
    *
+   * @see https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
+   *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
@@ -272,6 +274,24 @@ class Static_File_Analyzer {
     var compile_timestamp_int = this.get_four_byte_int(file_bytes.slice(compile_time_offset,compile_time_offset+4), this.LITTLE_ENDIAN);
     var compile_timestamp = new Date(compile_timestamp_int*1000);
     file_info.metadata.creation_date = compile_timestamp.toISOString().slice(0, 19).replace("T", " ");;
+
+    // Get optional header size
+    var optional_header_size = this.get_four_byte_int(file_bytes.slice(header_offset+20,header_offset+22), this.LITTLE_ENDIAN);
+
+    if (optional_header_size > 0) {
+      var optional_header_offset = header_offset+24;
+      var optional_header_bytes = file_bytes.slice(optional_header_offset, optional_header_offset+optional_header_size);
+
+      if (optional_header_bytes.length > 67) {
+        var checksum = this.get_four_byte_int(optional_header_bytes.slice(64,68), this.LITTLE_ENDIAN);
+
+        if (checksum == 0) {
+          file_info.analytic_findings.push("SUSPICIOUS - No Image File Checksum");
+        }
+      }
+
+    }
+
 
     return file_info;
   }
