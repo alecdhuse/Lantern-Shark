@@ -78,7 +78,7 @@ class Static_File_Analyzer {
   }
 
   /**
-   * Extracts meta data and other information from ACE archive files.
+   * Add found extracted script to output.
    *
    * @param  {String}    script_type Name of the script type to add.
    * @param  {String}    script_text The actual script text.
@@ -2017,14 +2017,14 @@ class Static_File_Analyzer {
     document_obj.byte_order = byte_order;
 
     var sector_size = cmb_obj.sector_size; // Size in bytes
-    var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), byte_order);
-    var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), byte_order);
+    //var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), byte_order);
+    //var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), byte_order);
     var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), byte_order);
-    var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), byte_order);
-    var short_sec_id_1 = this.get_four_byte_int(file_bytes.slice(60,64), byte_order);
-    var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), byte_order);
-    var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), byte_order);
-    var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), byte_order);
+    //var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), byte_order);
+    //var short_sec_id_1 = this.get_four_byte_int(file_bytes.slice(60,64), byte_order);
+    //var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), byte_order);
+    //var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), byte_order);
+    //var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), byte_order);
 
     var sec_1_pos = 512 + (sec_id_1 * sector_size); // Should be Root Entry
     var workbook_pos = sec_1_pos + 128;
@@ -6694,22 +6694,20 @@ class Static_File_Analyzer {
 
         if (((typeof stack_result) == "string") && stack_result.indexOf("=CALL") >= 0) {
           this.add_extracted_script("Excel 4.0 Macro", stack_result, file_info);
+          let analyzed_results = this.analyze_embedded_script(stack_result);
 
-          if (file_info.scripts.extracted_script.indexOf(stack_result) < 0) {
-            var analyzed_results = this.analyze_embedded_script(stack_result);
-
-            for (var f=0; f<analyzed_results.findings.length; f++) {
-              if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
-                file_info.analytic_findings.push(analyzed_results.findings[f]);
-              }
-            }
-
-            for (var f=0; f<analyzed_results.iocs.length; f++) {
-              if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
-                file_info.iocs.push(analyzed_results.iocs[f]);
-              }
+          for (var f=0; f<analyzed_results.findings.length; f++) {
+            if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
+              file_info.analytic_findings.push(analyzed_results.findings[f]);
             }
           }
+
+          for (var f=0; f<analyzed_results.iocs.length; f++) {
+            if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
+              file_info.iocs.push(analyzed_results.iocs[f]);
+            }
+          }
+
         }
       }
 
