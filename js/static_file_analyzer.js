@@ -928,11 +928,16 @@ class Static_File_Analyzer {
               } else if (type == 0x001F) {
                 // VT_LPWSTR - UnicodeString
                 value_type = "VT_LPWSTR";
-                var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+                var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN) - 1;
                 var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(char_length*2));
 
-                // Per the spec, the string must followed by zero padding to a multiple of 4 bytes. Subract three because we have already advanced the byte offset.
-                var pad_bytes = (byte_offset % 4 == 0) ? 0 : 3 - (byte_offset % 4);
+                var two_bit = [6,15];
+                var four_bit = [0,2,4,7,9,11]
+
+                var pad_bytes = 4;
+                if (two_bit.includes(byte_offset % 16)) pad_bytes = 2;
+
+                // Per the spec, the string must followed by zero padding to a multiple of 4 bytes.
                 byte_offset += pad_bytes;
                 value = Static_File_Analyzer.get_string_from_array(value_bytes.filter(i => i > 31));
               } else if (type == 0x0040) {
@@ -973,6 +978,13 @@ class Static_File_Analyzer {
               }
 
               value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+
+              if (value_size > (file_bytes.length - byte_offset)) {
+                // Byte index is off, or this file is malformed.
+                // Try backing up two bytes and re-reading.
+                byte_offset -= 5;
+                value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+              }
             }
           }
 
