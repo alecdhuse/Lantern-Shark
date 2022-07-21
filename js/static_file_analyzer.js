@@ -126,6 +126,91 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Extracts meta data and other information from Excel Binary File Format (.xls) files.
+   *
+   * @see http://www.openoffice.org/sc/compdocfileformat.pdf
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_cbf(file_bytes) {
+    let file_info = this.get_default_file_json();
+
+    file_info.file_format = "cbf";
+
+    let document_obj = {
+      'type': "unknown",
+      'byte_order': this.LITTLE_ENDIAN,
+      'document_properties': {},
+      'compound_file_binary': {}
+    };
+
+    document_obj.compound_file_binary = this.parse_compound_file_binary(file_bytes);
+    document_obj.byte_order = document_obj.compound_file_binary.byte_order; // Byte order LITTLE_ENDIAN or BIG_ENDIAN
+    file_info.file_format_ver = document_obj.compound_file_binary.format_version_major;
+
+    var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), document_obj.byte_order);
+    var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), document_obj.byte_order);
+    var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), document_obj.byte_order);
+    var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), document_obj.byte_order);
+    var short_sec_id_1 = this.get_four_byte_int(file_bytes.slice(60,64), document_obj.byte_order);
+    var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), document_obj.byte_order);
+    var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), document_obj.byte_order);
+    var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), document_obj.byte_order);
+
+    var sec_1_pos = 512 + (sec_id_1 * document_obj.compound_file_binary.sector_size); // Should be Root Entry
+    var workbook_pos = sec_1_pos + 128;
+    var summary_info_pos = workbook_pos + 128;
+    var doc_summary_info_pos = summary_info_pos + 128;
+
+    if (this.array_equals(file_bytes.slice(workbook_pos, workbook_pos+13),[0x45,0x00,0x6E,0x00,0x63,0x00,0x72,0x00,0x79,0x00,0x70,0x00,0x74])) {
+      file_info.file_encrypted = "true";
+    } else {
+      file_info.file_encrypted = "false";
+    }
+
+    for (var c=0; c<document_obj.compound_file_binary.entries.length; c++) {
+      if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() != "root entry") {
+        file_info.file_components.push({
+          'name': document_obj.compound_file_binary.entries[c].entry_name,
+          'type': "cfb"
+        });
+      }
+
+      if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "summaryinformation") {
+        document_obj.document_properties = document_obj.compound_file_binary.entries[c].entry_properties;
+        var creation_os = "unknown";
+
+        if (document_obj.document_properties.hasOwnProperty("os")) {
+          creation_os = document_obj.document_properties.os + " " + (document_obj.document_properties.hasOwnProperty("os_version") ? document_obj.document_properties.os_version : "");
+        }
+
+        file_info.metadata.author = (document_obj.document_properties.hasOwnProperty("author")) ? document_obj.document_properties.author : "unknown";
+        file_info.metadata.creation_application = (document_obj.document_properties.hasOwnProperty("creating_application")) ? document_obj.document_properties.creating_application : "unknown";
+        file_info.metadata.creation_os = creation_os;
+        file_info.metadata.creation_date = (document_obj.document_properties.hasOwnProperty("create_date")) ? document_obj.document_properties.create_date : "0000-00-00 00:00:00";
+        file_info.metadata.description = (document_obj.document_properties.hasOwnProperty("subject")) ? document_obj.document_properties.subject : "unknown";
+        file_info.metadata.last_modified_date = (document_obj.document_properties.hasOwnProperty("last_saved")) ? document_obj.document_properties.last_saved : "0000-00-00 00:00:00";
+        file_info.metadata.title = (document_obj.document_properties.hasOwnProperty("title")) ? document_obj.document_properties.title : "unknown";
+      } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "worddocument") {
+        file_info.file_format = "doc";
+        file_info.file_generic_type = "Document";
+        document_obj.type = "document";
+      } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "workbook") {
+        file_info.file_format = "xls";
+        file_info.file_generic_type = "Spreadsheet";
+        document_obj.type = "spreadsheet";
+      }
+    }
+
+    if (file_info.file_format == "xls") {
+      file_info = this.analyze_xls(file_bytes, file_info, document_obj);
+    }
+
+    return file_info;
+  }
+
+  /**
    * Uses an aray of regex rules to find potentialy malicious code in a given script.
    * The output of this cunvtion is an array of string in the format:
    * [INFO,SUSPICIOUS,MALICIOUS] - Description of the finding.
@@ -1937,69 +2022,6 @@ class Static_File_Analyzer {
   /**
    * Extracts meta data and other information from Excel Binary File Format (.xls) files.
    *
-   * @see http://www.openoffice.org/sc/compdocfileformat.pdf
-   *
-   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
-   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
-   */
-  analyze_cbf(file_bytes) {
-    let file_info = this.get_default_file_json();
-
-    file_info.file_format = "cbf";
-
-    let document_obj = {
-      'type': "unknown",
-      'byte_order': this.LITTLE_ENDIAN,
-      'document_properties': {},
-      'compound_file_binary': {}
-    };
-
-    document_obj.compound_file_binary = this.parse_compound_file_binary(file_bytes);
-
-    for (var c=0; c<document_obj.compound_file_binary.entries.length; c++) {
-      if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() != "root entry") {
-        file_info.file_components.push({
-          'name': document_obj.compound_file_binary.entries[c].entry_name,
-          'type': "cfb"
-        });
-      }
-
-      if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "summaryinformation") {
-        document_obj.document_properties = document_obj.compound_file_binary.entries[c].entry_properties;
-        var creation_os = "unknown";
-
-        if (document_obj.document_properties.hasOwnProperty("os")) {
-          creation_os = document_obj.document_properties.os + " " + (document_obj.document_properties.hasOwnProperty("os_version") ? document_obj.document_properties.os_version : "");
-        }
-
-        file_info.metadata.author = (document_obj.document_properties.hasOwnProperty("author")) ? document_obj.document_properties.author : "unknown";
-        file_info.metadata.creation_application = (document_obj.document_properties.hasOwnProperty("creating_application")) ? document_obj.document_properties.creating_application : "unknown";
-        file_info.metadata.creation_os = creation_os;
-        file_info.metadata.creation_date = (document_obj.document_properties.hasOwnProperty("create_date")) ? document_obj.document_properties.create_date : "0000-00-00 00:00:00";
-        file_info.metadata.description = (document_obj.document_properties.hasOwnProperty("subject")) ? document_obj.document_properties.subject : "unknown";
-        file_info.metadata.last_modified_date = (document_obj.document_properties.hasOwnProperty("last_saved")) ? document_obj.document_properties.last_saved : "0000-00-00 00:00:00";
-        file_info.metadata.title = (document_obj.document_properties.hasOwnProperty("title")) ? document_obj.document_properties.title : "unknown";
-      } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "worddocument") {
-        file_info.file_format = "doc";
-        file_info.file_generic_type = "Document";
-        document_obj.type = "document";
-      } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "workbook") {
-        file_info.file_format = "xls";
-        file_info.file_generic_type = "Spreadsheet";
-        document_obj.type = "spreadsheet";
-      }
-    }
-
-    if (file_info.file_format == "xls") {
-      file_info = this.analyze_xls(file_bytes, file_info, document_obj);
-    }
-
-    return file_info;
-  }
-
-  /**
-   * Extracts meta data and other information from Excel Binary File Format (.xls) files.
-   *
    * @see https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cd03cb5f-ca02-4934-a391-bb674cb8aa06
    * @see https://www.loc.gov/preservation/digital/formats/fdd/fdd000510.shtml
    * @see https://blog.reversinglabs.com/blog/excel-4.0-macros
@@ -2046,12 +2068,6 @@ class Static_File_Analyzer {
     var workbook_pos = sec_1_pos + 128;
     var summary_info_pos = workbook_pos + 128;
     var doc_summary_info_pos = summary_info_pos + 128;
-
-    if (this.array_equals(file_bytes.slice(workbook_pos, workbook_pos+13),[0x45,0x00,0x6E,0x00,0x63,0x00,0x72,0x00,0x79,0x00,0x70,0x00,0x74])) {
-      file_info.file_encrypted = "true";
-    } else {
-      file_info.file_encrypted = "false";
-    }
 
     // Find BOF - Beginning of file record
     for (var i=sector_size; i<file_bytes.length; i++) {
