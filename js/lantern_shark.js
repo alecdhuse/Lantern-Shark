@@ -401,9 +401,6 @@ async function select_file_component(e, component_index=null) {
       try {
         var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
 
-        $("#file_text").val(get_file_text(component_bytes));
-        $("#parsed_file_text").val(analyzer_results.parsed);
-
         if (component_bytes.length == 0) {
           // This is a directory
           $("#summary_file_format").html("Directory");
@@ -424,6 +421,9 @@ async function select_file_component(e, component_index=null) {
           $("#analytic_findings").val("");
         } else {
           var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
+
+          $("#file_text").val(get_file_text(component_bytes));
+          $("#parsed_file_text").val(subfile_analyzer_results.parsed);
 
           if (component_info.length > 1 && subfile_analyzer_results.file_components.length > 0) {
             var sub_component_bytes = subfile_analyzer_results.file_components[component_info[1]].file_bytes;
