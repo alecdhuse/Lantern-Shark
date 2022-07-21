@@ -192,14 +192,64 @@ class Static_File_Analyzer {
         file_info.metadata.description = (document_obj.document_properties.hasOwnProperty("subject")) ? document_obj.document_properties.subject : "unknown";
         file_info.metadata.last_modified_date = (document_obj.document_properties.hasOwnProperty("last_saved")) ? document_obj.document_properties.last_saved : "0000-00-00 00:00:00";
         file_info.metadata.title = (document_obj.document_properties.hasOwnProperty("title")) ? document_obj.document_properties.title : "unknown";
+      } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "start") {
+        if (file_info.file_format == "vba") {
+          let script_start = document_obj.compound_file_binary.entries[c].entry_start;
+          let script_end = file_bytes.length;
+
+          if (document_obj.compound_file_binary.entries.length > c+1) {
+            script_end = document_obj.compound_file_binary.entries[c+1].entry_start;
+          }
+
+          let section_bytes = file_bytes.slice(script_start,script_end);
+
+          while (section_bytes.length > 0) {
+            if (section_bytes[2] == 0xB0) {
+              // Not VBA code
+              let block_size = section_bytes[1];
+              section_bytes = section_bytes.slice(192);
+            } else if (section_bytes[2] == 0xB1) {
+              // VBA code
+              let decompressed_bytes = this.decompress_vba(section_bytes);
+              let vba_code = Static_File_Analyzer.get_ascii(decompressed_bytes);
+              file_info.parsed = vba_code;
+
+              // Extract VBA code
+              var matches = vba_code.match(/Attribute[^\n\r]+(?:\n|\r)*/g);
+              var last_match = matches[matches.length-1];
+              var extracted_vba = vba_code.substring(vba_code.indexOf(last_match) + last_match.length);
+              this.add_extracted_script("VBA Macro", this.pretty_print_vba(extracted_vba), file_info);
+
+              var analyzed_results = this.analyze_embedded_script(extracted_vba);
+
+              for (var f=0; f<analyzed_results.findings.length; f++) {
+                if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
+                  file_info.analytic_findings.push(analyzed_results.findings[f]);
+                }
+              }
+
+              for (var f=0; f<analyzed_results.iocs.length; f++) {
+                if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
+                  file_info.iocs.push(analyzed_results.iocs[f]);
+                }
+              }
+              break;
+            }
+          }
+        }
+      } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "vba") {
+        file_info.file_format = "vba";
+        file_info.file_generic_type = "Embedded Script";
       } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "worddocument") {
         file_info.file_format = "doc";
         file_info.file_generic_type = "Document";
         document_obj.type = "document";
       } else if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "workbook") {
-        file_info.file_format = "xls";
-        file_info.file_generic_type = "Spreadsheet";
-        document_obj.type = "spreadsheet";
+        if (file_info.file_format != "vba") {
+          file_info.file_format = "xls";
+          file_info.file_generic_type = "Spreadsheet";
+          document_obj.type = "spreadsheet";
+        }
       }
     }
 
