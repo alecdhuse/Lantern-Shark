@@ -29,11 +29,12 @@ class Static_File_Analyzer {
   /**
    * Created the default object structure for the output of this class.
    *
-   * @param {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
-   * @param {String}     file_text  [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
+   * @param {Uint8Array} file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}     file_text     [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
+   * @param {String}     file_password [Optional] File password for encrypted or protected files.
    * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
    */
-  constructor(file_bytes, file_text="") {
+  constructor(file_bytes, file_text="", file_password=undefined) {
     this.BIG_ENDIAN = "BIG_ENDIAN";
     this.LITTLE_ENDIAN = "LITTLE_ENDIAN";
     this.XML_DOMAINS = ["openoffice.org","purl.org","schemas.microsoft.com","schemas.openxmlformats.org","w3.org"];
@@ -68,7 +69,7 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
-      file_info = this.analyze_zip(file_bytes);
+      file_info = this.analyze_zip(file_bytes, file_password);
     } else {
       // Probably a text or mark up/down language
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
@@ -2745,15 +2746,20 @@ class Static_File_Analyzer {
    * @see https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
    * @see http://officeopenxml.com/anatomyofOOXML.php
    *
-   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
-   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   * @param {Uint8Array}  file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}      file_password [optional] Decrypt password for this file.
+   * @return {Object}     file_info     A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  async analyze_zip(file_bytes) {
+  async analyze_zip(file_bytes, file_password=undefined) {
     var zip_os_list  = ["MS-DOS", "Amiga", "OpenVMS", "UNIX", "VM/CMS", "Atari ST", "OS/2 H.P.F.S.", "Macintosh", "Z-System", "CP/M", "Windows NTFS", "MVS", "VSE", "Acorn Risc", "VFAT", "alternate MVS", "BeOS", "Tandem", "OS/400", "OS X (Darwin)"];
     var file_info = this.get_default_file_json();
 
     file_info.file_format = "zip";
     file_info.file_generic_type = "File Archive";
+
+    if (file_password !== null && file_password !== undefined) {
+      file_info.file_password = file_password;
+    }
 
     // For OOXML Documents
     var has_content_types_xml = false;
@@ -2783,26 +2789,45 @@ class Static_File_Analyzer {
       if (file_entry.file_name.toLowerCase().substring(0, 6) == "_rels/") {
         has_rels_dir = true;
       }
+      let component_bytes = [];
+
+      // Decompress zip bytes
+      try {
+        if (file_password === undefined) {
+          component_bytes = Array.from(await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i));
+        } else {
+          try {
+            component_bytes = Array.from(await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i, file_password));
+          } catch (err) {
+            file_password = undefined;
+            file_info.file_password = "unknown";
+          }
+        }
+
+      } catch (err) {
+        // Probably password protected
+        let common_passwords = ['infected','abc123','abc321','malware','virus','decreto','mise'];
+
+        for (let p=0; p<common_passwords.length; p++) {
+          try {
+            component_bytes = Array.from(await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i, common_passwords[p]));
+            file_password = common_passwords[p];
+            file_info.file_password = file_password;
+            break;
+          } catch (err) {}
+        }
+      }
 
       archive_files.push(file_entry);
       file_info.file_components.push({
         'name': file_entry.file_name,
         'type': "zip",
         'directory': file_entry.directory,
+        'file_bytes': component_bytes,
+        'file_password': file_password,
         'last_modified_date': file_entry.lastModDate.toISOString(),
         'uncompressed_size': file_entry.uncompressedSize
       });
-    }
-
-    // Decompress zip bytes
-    if (window.zip) {
-      try {
-        var file_password = "";
-        var component_index = file_info.file_components.length - 1;
-        // TODO: implement auto zip decompresion.
-        //var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
-        //file_info.file_components[component_index]['file_bytes'] = component_bytes;
-      } catch (err) {}
     }
 
     // Check if this file is really an OOXML Document / Office document
@@ -4698,6 +4723,7 @@ class Static_File_Analyzer {
       file_encrypted: "unknown",
       file_encryption_type: "unknown",
       file_components: [],
+      file_password: "unknown",
       metadata: {
         author: "unknown",
         creation_application: "unknown",
