@@ -141,7 +141,7 @@ async function decrypt_file(e) {
 
   try {
     for (var i=0; i<analyzer_results.file_components.length; i++) {
-      if (analyzer_results.file_components[i].uncompressed_size > 1) {
+      if (analyzer_results.file_components[i].directory == false) {
         // Analyze the first file that is not a directory.
         var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, i, file_password);
         var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
@@ -317,9 +317,30 @@ function read_file(e) {
         var new_name = analyzer_results.file_components[i].name;
         var new_id = "component_" + i;
         var new_item = "<li id='" + new_id + "'>" + new_name + "</li>";
-
         $("#file_components_list").append(new_item);
         document.getElementById(new_id).addEventListener('click', select_file_component, false);
+
+        // Check for componets in this component, if it is not a directory.
+        if (analyzer_results.file_components[i].directory == false) {
+          if (analyzer_results.file_components[i].hasOwnProperty("file_bytes")) {
+            var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(analyzer_results.file_components[i].file_bytes));
+
+            if (subfile_analyzer_results.file_components.length > 0) {
+              var item_id = "#component_" + i;
+              var new_id  = "file_components_list_" + i;
+              $(item_id).append("<ul class='nested_item' id='"+ new_id  + "'></ul>");
+
+              for (var i2=0; i2<subfile_analyzer_results.file_components.length; i2++) {
+                var new_name = subfile_analyzer_results.file_components[i2].name;
+                var new_item_id = "component_" + i + "_" + i2;
+                var new_item = "<li class='file_tree_item_not_selected' id='" + new_item_id + "'>" + new_name + "</li>";
+                $("#"+new_id).append(new_item);
+                document.getElementById(new_item_id).addEventListener('click', select_file_component, false);
+              }              
+            }
+          }
+
+        }
       }
 
       // Load summary info
@@ -402,6 +423,7 @@ async function select_file_component(e, component_index=null) {
 
       try {
         var component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, component_index, file_password);
+        file_byte_array = component_bytes;
 
         if (component_bytes.length == 0) {
           // This is a directory
@@ -442,8 +464,9 @@ async function select_file_component(e, component_index=null) {
         enable_save_file_toolbar_button(false);
       }
     } else if (component_file_types.includes(analyzer_results.file_components[component_index].type)) {
-      // Other filetypes with componets
+      // Other file types with componets
       var component_bytes = analyzer_results.file_components[component_index].file_bytes;
+      file_byte_array = component_bytes;
 
       enable_save_file_toolbar_button(true);
       $("#file_text").val(get_file_text(component_bytes));

@@ -225,7 +225,8 @@ class Static_File_Analyzer {
       if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() != "root entry") {
         file_info.file_components.push({
           'name': document_obj.compound_file_binary.entries[c].entry_name,
-          'type': "cfb"
+          'type': "cfb",
+          'directory': false
         });
       }
 
