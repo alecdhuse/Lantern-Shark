@@ -395,6 +395,8 @@ async function select_file_component(e, component_index=null) {
     $(to_select).removeClass("file_tree_item_not_selected");
     $(to_select).addClass("file_tree_item_selected");
 
+    let component_file_types = ["html","iso","udf"];
+
     if (analyzer_results.file_components[component_index].type == "zip") {
       file_password = ($("#summary_file_encrypted_password_txt").val().length > 0) ? $("#summary_file_encrypted_password_txt").val() : null;
 
@@ -439,14 +441,21 @@ async function select_file_component(e, component_index=null) {
         // Disable save toolbar item
         enable_save_file_toolbar_button(false);
       }
-    } else if (analyzer_results.file_components[component_index].type == "udf" || analyzer_results.file_components[component_index].type == "iso") {
+    } else if (component_file_types.includes(analyzer_results.file_components[component_index].type)) {
+      // Other filetypes with componets
       var component_bytes = analyzer_results.file_components[component_index].file_bytes;
-      var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
 
-      display_file_summary(subfile_analyzer_results);
       enable_save_file_toolbar_button(true);
       $("#file_text").val(get_file_text(component_bytes));
-      $("#parsed_file_text").val(subfile_analyzer_results.parsed);
+
+      try {
+        var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(component_bytes));
+
+        display_file_summary(subfile_analyzer_results);
+        $("#parsed_file_text").val(subfile_analyzer_results.parsed);
+      } catch (err) {
+        console.log("Error parsing file component: " + err);
+      }
     } else {
       // Code for other componets
 

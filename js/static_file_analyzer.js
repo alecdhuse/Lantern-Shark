@@ -40,41 +40,93 @@ class Static_File_Analyzer {
 
     var file_info = this.get_default_file_json();
 
-    if (this.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
       file_info = this.analyze_ace(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,2), [77,90])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
       file_info = this.analyze_exe(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,2), [31,139])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [31,139])) {
       file_info = this.analyze_gz(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
-               this.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
+               Static_File_Analyzer.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
       file_info = this.analyze_iso9660(file_bytes, file_text);
-    } else if (this.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
       file_info = this.analyze_jpeg(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
       file_info = this.analyze_lnk(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,6), [82,97,114,33,26,7])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,6), [82,97,114,33,26,7])) {
       file_info = this.analyze_rar(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,4), [0x7b,0x5c,0x72,0x74])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x7b,0x5c,0x72,0x74])) {
       file_info = this.analyze_rtf(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,4), [37,80,68,70])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [37,80,68,70])) {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_pdf(file_bytes, file_text);
-    } else if (this.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_png(file_bytes, file_text);
-    } else if (this.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
       file_info = this.analyze_cbf(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       file_info = this.analyze_xml(file_bytes);
-    } else if (this.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
       file_info = this.analyze_zip(file_bytes);
     } else {
       // Probably a text or mark up/down language
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
+
+      if (/\<(?:html|\!doctype\s+html|script|meta\s+content)/gmi.test(file_text)) {
+        file_info = this.analyze_html(file_bytes, file_text);
+      }
     }
 
     return file_info;
+  }
+
+  /**
+   * Attempts to validate if an array of bytes represents a valid file.
+   *
+   * @param  {array}    file_bytes
+   * @return {{'is_valid','type'}} Object that returns if this is a valid file and it's type.
+   */
+  static is_valid_file(file_bytes) {
+    var return_val = {'is_valid': false, 'type': "unknown"};
+
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
+      return_val = {'is_valid': true, 'type': "ace"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
+      return_val = {'is_valid': true, 'type': "exe"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [31,139])) {
+      return_val = {'is_valid': true, 'type': "gz"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
+               Static_File_Analyzer.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
+      return_val = {'is_valid': true, 'type': "iso"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
+      return_val = {'is_valid': true, 'type': "jpeg"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
+      return_val = {'is_valid': true, 'type': "lnk"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,6), [82,97,114,33,26,7])) {
+      return_val = {'is_valid': true, 'type': "rar"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x7b,0x5c,0x72,0x74])) {
+      return_val = {'is_valid': true, 'type': "rtf"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [37,80,68,70])) {
+      return_val = {'is_valid': true, 'type': "pdf"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
+      return_val = {'is_valid': true, 'type': "png"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
+      return_val = {'is_valid': true, 'type': "cbf"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
+      return_val = {'is_valid': true, 'type': "xml"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
+      return_val = {'is_valid': true, 'type': "zip"};
+    } else {
+      // Probably a text or mark up/down language
+      if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes.split(0,128));
+
+      if (/\<(?:html|\!doctype\s+html|script|meta\s+content)/gmi.test(file_text)) {
+        return_val = {'is_valid': true, 'type': "html"};
+      }
+    }
+
+    return return_val;
   }
 
   /**
@@ -163,7 +215,7 @@ class Static_File_Analyzer {
     var summary_info_pos = workbook_pos + 128;
     var doc_summary_info_pos = summary_info_pos + 128;
 
-    if (this.array_equals(file_bytes.slice(workbook_pos, workbook_pos+13),[0x45,0x00,0x6E,0x00,0x63,0x00,0x72,0x00,0x79,0x00,0x70,0x00,0x74])) {
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(workbook_pos, workbook_pos+13),[0x45,0x00,0x6E,0x00,0x63,0x00,0x72,0x00,0x79,0x00,0x70,0x00,0x74])) {
       file_info.file_encrypted = "true";
     } else {
       file_info.file_encrypted = "false";
@@ -459,10 +511,32 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Extracts meta data and other information from HTML files.
+   *
+   * @param {Uint8Array}  file_bytes  Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}      file_text   The HTML text of the file.
+   * @return {Object}     file_info   A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_html(file_bytes, file_text) {
+    var file_info = this.get_default_file_json();
+
+    file_info.file_format = "html";
+    file_info.file_generic_type = "Document";
+
+    let html_obj = new HTML_Parser(file_bytes, file_text);
+
+    file_info.file_components = html_obj.file_components;
+    file_info.analytic_findings = html_obj.analytic_findings;
+
+    return file_info;
+  }
+
+  /**
    * Extracts meta data and other information from .iso image files.
    *
-   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
-   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   * @param {Uint8Array}  file_bytes  Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}      file_text   The text of the file.
+   * @return {Object}     file_info   A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_iso9660(file_bytes, file_text="") {
     var file_info = this.get_default_file_json();
@@ -471,13 +545,13 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "File Archive";
 
     // Check for El Torito format
-    if (this.array_equals(file_bytes.slice(34821,34832), [49,1,69,76,32,84,79,82,73,84,79])) {
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(34821,34832), [49,1,69,76,32,84,79,82,73,84,79])) {
       file_info.file_format_ver = "El Torito V1";
 
       // This format does not support encryption
       file_info.file_encrypted = "false";
       file_info.file_encryption_type = "none";
-    } else if (this.array_equals(file_bytes.slice(34817,34822), [67,68,48,48,49])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(34817,34822), [67,68,48,48,49])) {
       // iso9660
       var parsed_iso = new ISO_9660_Parser(file_bytes);
       file_info.metadata = parsed_iso.metadata;
@@ -490,7 +564,7 @@ class Static_File_Analyzer {
     }
 
     // Check creation application
-    if (this.array_equals(file_bytes.slice(33342,33349), [73,77,71,66,85,82,78])) {
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(33342,33349), [73,77,71,66,85,82,78])) {
       var app_version = Static_File_Analyzer.get_ascii(file_bytes.slice(33350,33359)).trim();
       file_info.metadata.creation_application = "ImgBurn " + app_version;
       file_info.metadata.creation_os = "Windows"; // ImgBurn is Windows Only
@@ -2138,7 +2212,7 @@ class Static_File_Analyzer {
       var biff_version = file_bytes[current_byte+5];
       var xlm_val = file_bytes.slice(current_byte+6,current_byte+8);
 
-      if (this.array_equals(xlm_val, [40,0])) {
+      if (Static_File_Analyzer.array_equals(xlm_val, [40,0])) {
         // Excel 4.0 macro sheet
         file_info.scripts.script_type = "Excel 4.0 Macro";
       }
@@ -3346,6 +3420,65 @@ class Static_File_Analyzer {
 	}
 
   /**
+   * Converts a base64 encoded string to a byte array.
+   *
+   * @param  {String} base64 The base64 to convert.
+   * @return {array}  The coverted base64 in byte array form.
+   */
+  static convert_base64_to_array(base64) {
+    var byte_array, char_code;
+    var array_length = 0;
+    var string_length = base64.length;
+
+    for (var map_index = 0; map_index < string_length; map_index++) {
+      char_code = base64.charCodeAt(map_index);
+      array_length += char_code < 0x80 ? 1 : char_code < 0x800 ? 2 : char_code < 0x10000 ? 3 : char_code < 0x200000 ? 4 : char_code < 0x4000000 ? 5 : 6;
+    }
+
+    byte_array = new Uint8Array(array_length);
+
+    for (var i = 0, ci = 0; i < array_length; ci++) {
+      char_code = base64.charCodeAt(ci);
+      if (char_code < 128) {
+        /* one byte */
+        byte_array[i++] = char_code;
+      } else if (char_code < 0x800) {
+        /* two bytes */
+        byte_array[i++] = 192 + (char_code >>> 6);
+        byte_array[i++] = 128 + (char_code & 63);
+      } else if (char_code < 0x10000) {
+        /* three bytes */
+        byte_array[i++] = 224 + (char_code >>> 12);
+        byte_array[i++] = 128 + (char_code >>> 6 & 63);
+        byte_array[i++] = 128 + (char_code & 63);
+      } else if (char_code < 0x200000) {
+        /* four bytes */
+        byte_array[i++] = 240 + (char_code >>> 18);
+        byte_array[i++] = 128 + (char_code >>> 12 & 63);
+        byte_array[i++] = 128 + (char_code >>> 6 & 63);
+        byte_array[i++] = 128 + (char_code & 63);
+      } else if (char_code < 0x4000000) {
+        /* five bytes */
+        byte_array[i++] = 248 + (char_code >>> 24);
+        byte_array[i++] = 128 + (char_code >>> 18 & 63);
+        byte_array[i++] = 128 + (char_code >>> 12 & 63);
+        byte_array[i++] = 128 + (char_code >>> 6 & 63);
+        byte_array[i++] = 128 + (char_code & 63);
+      } else {
+        /* six bytes */
+        byte_array[i++] = 252 + (char_code >>> 30);
+        byte_array[i++] = 128 + (char_code >>> 24 & 63);
+        byte_array[i++] = 128 + (char_code >>> 18 & 63);
+        byte_array[i++] = 128 + (char_code >>> 12 & 63);
+        byte_array[i++] = 128 + (char_code >>> 6 & 63);
+        byte_array[i++] = 128 + (char_code & 63);
+      }
+    }
+
+    return byte_array;
+  }
+
+  /**
    * Converts a number in Roman Numerals to an arabic numerals integer.
    *
    * @param {String} roman_numeral A string representation of a Roman Numeral.
@@ -4395,9 +4528,9 @@ class Static_File_Analyzer {
 
     // Find Attributes
     for (var i=0; i<file_bytes.length-19;i++) {
-      if (this.array_equals(file_bytes.slice(i,i+19), [82,0,111,0,111,0,116,0,32,0,69,0,110,0,116,0,114,0,121])) {
+      if (Static_File_Analyzer.array_equals(file_bytes.slice(i,i+19), [82,0,111,0,111,0,116,0,32,0,69,0,110,0,116,0,114,0,121])) {
         root_entry_start = i;
-      } else if (this.array_equals(file_bytes.slice(i,i+5), [73,68,61,34,123])) {
+      } else if (Static_File_Analyzer.array_equals(file_bytes.slice(i,i+5), [73,68,61,34,123])) {
         // ID="{
         var project_stream_start = i;
         var project_stream_end = project_stream_start + 639;
@@ -4406,7 +4539,7 @@ class Static_File_Analyzer {
         // End any open attributes
         var decompressed_vba_attribute_bytes = this.decompress_vba(file_bytes.slice(attribute_start, i));
         vba_data.attributes.push(Static_File_Analyzer.get_ascii(decompressed_vba_attribute_bytes));
-      } else if (this.array_equals(file_bytes.slice(i,i+8), [65,116,116,114,105,98,117,116])) {
+      } else if (Static_File_Analyzer.array_equals(file_bytes.slice(i,i+8), [65,116,116,114,105,98,117,116])) {
         // Attribute
         if (attribute_start > 0) {
           var decompressed_vba_attribute_bytes = this.decompress_vba(file_bytes.slice(attribute_start, i));
@@ -4428,8 +4561,8 @@ class Static_File_Analyzer {
    * @param {array}  b Any array to compare.
    * @return {boolean} Returns true if every value in the two given arrays are equal.
    */
-  array_equals(a, b) {
-    if ((this.is_typed_array(a) || Array.isArray(a)) && (this.is_typed_array(b) || Array.isArray(b))) {
+  static array_equals(a, b) {
+    if ((Static_File_Analyzer.is_typed_array(a) || Array.isArray(a)) && (Static_File_Analyzer.is_typed_array(b) || Array.isArray(b))) {
       return a.length === b.length && a.every((val, index) => val === b[index]);
     } else {
       return false;
@@ -5349,7 +5482,7 @@ class Static_File_Analyzer {
    * @param {array}    array Any array.
    * @return {boolean} Returns true if the given array is an instance of ArrayBuffer.
    */
-  is_typed_array(array) {
+  static is_typed_array(array) {
     return !!(array.buffer instanceof ArrayBuffer && array.BYTES_PER_ELEMENT);
   }
 
@@ -5362,7 +5495,7 @@ class Static_File_Analyzer {
    * @return {Object} An object representing the parsed compound file binary.
    */
   parse_compound_file_binary(file_bytes) {
-    if (this.array_equals(file_bytes.slice(0,4), [0xD0,0xCF,0x11,0xE0])) {
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0xD0,0xCF,0x11,0xE0])) {
       var cmb_obj = {
         byte_order: "LITTLE_ENDIAN",
         format_version_major: 0,
@@ -5375,9 +5508,9 @@ class Static_File_Analyzer {
       var compound_file_binary_minor_ver_bytes = file_bytes.slice(24,26);
       var compound_file_binary_major_ver_bytes = file_bytes.slice(26,28);
 
-      if (this.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
+      if (Static_File_Analyzer.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
         cmb_obj.format_version_major = "3";
-      } else if (this.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
+      } else if (Static_File_Analyzer.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
         cmb_obj.format_version_major = "4";
       }
 
@@ -5393,9 +5526,9 @@ class Static_File_Analyzer {
       cmb_obj.sector_size = 512; // Size in bytes
 
       //Sector size will indicate where the beginning of file record starts.
-      if (this.array_equals(sector_size_bytes, [9,0])) {
+      if (Static_File_Analyzer.array_equals(sector_size_bytes, [9,0])) {
         cmb_obj.sector_size = 512;
-      } else if (this.array_equals(sector_size_bytes, [12,0])) {
+      } else if (Static_File_Analyzer.array_equals(sector_size_bytes, [12,0])) {
         cmb_obj.sector_size = 4096;
       }
 
@@ -5426,17 +5559,17 @@ class Static_File_Analyzer {
       for (var di=0; di<difat_loc.length; di++) {
         var next_sector = file_bytes.slice(difat_loc[di], difat_loc[di]+4);
 
-        if (this.array_equals(next_sector, [0xFA,0xFF,0xFF,0xFF])) {
+        if (Static_File_Analyzer.array_equals(next_sector, [0xFA,0xFF,0xFF,0xFF])) {
           // MAXREGSECT
-        } else if (this.array_equals(next_sector, [0xFB,0xFF,0xFF,0xFF])) {
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFB,0xFF,0xFF,0xFF])) {
           // Reserved for future use
-        } else if (this.array_equals(next_sector, [0xFC,0xFF,0xFF,0xFF])) {
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFC,0xFF,0xFF,0xFF])) {
           // DIFSECT
-        } else if (this.array_equals(next_sector, [0xFD,0xFF,0xFF,0xFF])) {
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFD,0xFF,0xFF,0xFF])) {
           // FATSECT
-        } else if (this.array_equals(next_sector, [0xFE,0xFF,0xFF,0xFF])) {
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFE,0xFF,0xFF,0xFF])) {
           // ENDOFCHAIN
-        } else if (this.array_equals(next_sector, [0xFF,0xFF,0xFF,0xFF])) {
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFF,0xFF,0xFF,0xFF])) {
           // FREESECT
         }
       }
@@ -5448,7 +5581,7 @@ class Static_File_Analyzer {
       var sec_1_pos = 512 + (sec_id_1 * cmb_obj.sector_size); // Should be Root Entry
       var next_directory_entry = sec_1_pos;
 
-      while (!this.array_equals(file_bytes.slice(next_directory_entry,next_directory_entry+4), [0,0,0,0])) {
+      while (!Static_File_Analyzer.array_equals(file_bytes.slice(next_directory_entry,next_directory_entry+4), [0,0,0,0])) {
         var directory_name_bytes = file_bytes.slice(next_directory_entry, next_directory_entry+64);
         var directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 5));
         directory_name = (directory_name !== null) ? directory_name.trim() : "";
@@ -5518,10 +5651,10 @@ class Static_File_Analyzer {
         var summary_information_end = -1;
 
         for (var fbi=0; fbi<file_bytes.length; fbi++) {
-          if (this.array_equals(file_bytes.slice(fbi,fbi+25), [0x00,0x00,0x05,0x00,0x53,0x00,0x75,0x00,0x6D,0x00,0x6D,0x00,0x61,0x00,0x72,0x00,0x79,0x00,0x49,0x00,0x6E,0x00,0x66,0x00,0x6F])) {
+          if (Static_File_Analyzer.array_equals(file_bytes.slice(fbi,fbi+25), [0x00,0x00,0x05,0x00,0x53,0x00,0x75,0x00,0x6D,0x00,0x6D,0x00,0x61,0x00,0x72,0x00,0x79,0x00,0x49,0x00,0x6E,0x00,0x66,0x00,0x6F])) {
             has_summary_information = true;
             continue;
-          } else if (summary_information_start > 0 && this.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
+          } else if (summary_information_start > 0 && Static_File_Analyzer.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
             summary_information_end = fbi;
             var summary_stream = file_bytes.slice(summary_information_start, summary_information_end);
             stream_properties = this.parse_cfb_summary_information(summary_stream, cmb_obj);
@@ -5536,7 +5669,7 @@ class Static_File_Analyzer {
             });
 
             break;
-          } else if (has_summary_information && this.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
+          } else if (has_summary_information && Static_File_Analyzer.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
             summary_information_start = fbi;
             continue;
           }
@@ -5567,7 +5700,7 @@ class Static_File_Analyzer {
   parse_cfb_summary_information(stream_bytes, cmb_obj) {
     var stream_properties = {};
 
-    if (this.array_equals(stream_bytes.slice(0,4), [0xFE,0xFF,0x00,0x00])) {
+    if (Static_File_Analyzer.array_equals(stream_bytes.slice(0,4), [0xFE,0xFF,0x00,0x00])) {
       stream_properties['os_version'] = stream_bytes[4] + "." + stream_bytes[5];
       stream_properties['os'] = (stream_bytes[6] == 2) ? "Windows" : (stream_bytes[6] == 1) ? "MacOS" : "Other OS";
 
@@ -7245,6 +7378,94 @@ class Static_File_Analyzer {
       'findings': findings
     }
   }
+}
+
+class HTML_Parser {
+  /**
+   * Call to initiate the parsing of an HTML file.
+   *
+   * @param {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}     file_text  [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
+   * @return {object}    An object with analyzed, parsed HTML file.
+   */
+  constructor(file_bytes, file_text="") {
+    if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
+
+    let return_val = {
+      'analytic_findings': [],
+      'file_components': []
+    };
+
+    // Try to detect HTML Smuggling
+    let possible_b64_literals = HTML_Parser.find_base64_literals(file_text);
+    var decoded_base64;
+    var is_valid;
+
+    for (let i=0; i<possible_b64_literals.length; i++) {
+      decoded_base64 = HTML_Parser.decode_base64(possible_b64_literals[i]);
+      if (decoded_base64 != possible_b64_literals[i]) {
+        // This is a valid base64 encoded literal, might still be a false positive.
+        let decoded_b64_bytes = Array.from(Static_File_Analyzer.convert_base64_to_array(decoded_base64));
+        is_valid = Static_File_Analyzer.is_valid_file(decoded_b64_bytes);
+
+        if (is_valid.is_valid) {
+          let file_name = "Smuggled." + is_valid.type;
+
+          return_val.file_components.push({
+            'name': file_name,
+            'type': "html",
+            'directory': false,
+            'file_bytes': decoded_b64_bytes
+          });
+
+          return_val.analytic_findings.push("SUSPICIOUS - Detected HTML Smuggling");
+        }
+
+      }
+    }
+
+    return return_val;
+  }
+
+  /**
+   * Decode a Base64 encoded string.
+   *
+   * @param  {String}   str       The Base64 encoded string.
+   * @param  {String}   encoding  [Optional] The string encoding type.
+   * @return {String}   The decoded string.
+   */
+  static decode_base64(str, encoding="utf-8") {
+    try {
+      let decoded = window.atob(str);
+
+      return decoded;
+    } catch(err) {
+      return str;
+    }
+
+    // Fail
+    return str;
+  }
+
+  /**
+   * Finds possible Base64 encoded string literals within a given string.
+   *
+   * @param  {String}   str The string to search for Base64 leterals in.
+   * @return {array}    An array of possible Base64 encoded string literals.
+   */
+  static find_base64_literals(str) {
+    let base64_regex = /[\"\']([a-z0-9\+\/\=]+)[\"\']/gmi;
+    let base64_match = base64_regex.exec(str);
+    let return_val = [];
+
+    while (base64_match !== null) {
+      return_val.push(base64_match[1]);
+      base64_match = base64_regex.exec(str);
+    }
+
+    return return_val;
+  }
+
 }
 
 class ISO_9660_Parser {
