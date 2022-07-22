@@ -7436,7 +7436,11 @@ class HTML_Parser {
         is_valid = Static_File_Analyzer.is_valid_file(decoded_b64_bytes);
 
         if (is_valid.is_valid) {
+          // default name, try to find the real name.
           let file_name = "Smuggled." + is_valid.type;
+          let file_name_match = /file\_?name\s*\=\s*[\"\']([^\"\']+)/gmi.exec(file_text);
+
+          if (file_name_match !== null) file_name = file_name_match[1];
 
           return_val.file_components.push({
             'name': file_name,
