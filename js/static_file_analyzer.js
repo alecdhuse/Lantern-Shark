@@ -7405,7 +7405,7 @@ class HTML_Parser {
       decoded_base64 = HTML_Parser.decode_base64(possible_b64_literals[i]);
       if (decoded_base64 != possible_b64_literals[i]) {
         // This is a valid base64 encoded literal, might still be a false positive.
-        let decoded_b64_bytes = Array.from(Static_File_Analyzer.convert_base64_to_array(decoded_base64));
+        let decoded_b64_bytes = HTML_Parser.decode_smuggled_file(possible_b64_literals[i]);
         is_valid = Static_File_Analyzer.is_valid_file(decoded_b64_bytes);
 
         if (is_valid.is_valid) {
@@ -7425,6 +7425,31 @@ class HTML_Parser {
     }
 
     return return_val;
+  }
+
+  /**
+   * Decode a Base64 encoded string.
+   *
+   * @param  {String}   base64_string The Base64 encoded string of the smuggled file.
+   * @param  {integer}  slice_size    [options] The decoding slice size.
+   * @return {array}    The decoded file in byte array form.
+   */
+  static decode_smuggled_file(base64_string, slice_size=512) {
+    const byte_characters = atob(base64_string);
+    var byte_arrays = [];
+
+    for (let offset = 0; offset < byte_characters.length; offset += slice_size) {
+      let slice = byte_characters.slice(offset, offset + slice_size);
+      let byte_codes = new Array(slice.length);
+
+      for (let i = 0; i < slice.length; i++) {
+        byte_codes[i] = slice.charCodeAt(i);
+      }
+
+      byte_arrays = byte_arrays.concat(byte_codes);
+    }
+
+    return byte_arrays;
   }
 
   /**
