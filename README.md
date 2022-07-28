@@ -4,7 +4,8 @@ Lantern Shark is a file analyzer written in HTML and JavaScript. It can extract 
 A live demo of this project can be viewed [here](https://alecdhuse.github.io/Lantern-Shark/).
 
 # Additional Features
-  - Deobfuscation of extracted scripts via inserted comments. Look for the comment caracter followed by the 🦈 shark emoji.
+  - Deobfuscation of extracted scripts via inserted comments. Look for the comment character followed by the 🦈 shark emoji.
+  - Excel 4.0 Macro emulation and deobfuscation.
 
 # Notes
 This project is under heavy development, and currently only supports a small number of file types.
