@@ -547,12 +547,16 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "File Archive";
 
     // Check for El Torito format
-    if (Static_File_Analyzer.array_equals(file_bytes.slice(34821,34832), [49,1,69,76,32,84,79,82,73,84,79])) {
-      file_info.file_format_ver = "El Torito V1";
-
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(34821,34832), [49,1,69,76,32,84,79,82,73,84,79])) {      
       // This format does not support encryption
       file_info.file_encrypted = "false";
       file_info.file_encryption_type = "none";
+
+      var parsed_iso = new ISO_9660_Parser(file_bytes);
+      file_info.file_format_ver = "El Torito V1";
+      file_info.metadata = parsed_iso.metadata;
+      file_info.file_components = parsed_iso.files;
+      file_info.parsed = JSON.stringify(parsed_iso.descriptors, null, 2);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(34817,34822), [67,68,48,48,49])) {
       // iso9660
       var parsed_iso = new ISO_9660_Parser(file_bytes);
