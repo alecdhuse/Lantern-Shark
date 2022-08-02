@@ -544,10 +544,10 @@ class Static_File_Analyzer {
     var file_info = this.get_default_file_json();
 
     file_info.file_format = "iso";
-    file_info.file_generic_type = "File Archive";
+    file_info.file_generic_type = "Disk Image";
 
     // Check for El Torito format
-    if (Static_File_Analyzer.array_equals(file_bytes.slice(34821,34832), [49,1,69,76,32,84,79,82,73,84,79])) {      
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(34821,34832), [49,1,69,76,32,84,79,82,73,84,79])) {
       // This format does not support encryption
       file_info.file_encrypted = "false";
       file_info.file_encryption_type = "none";
@@ -1713,7 +1713,7 @@ class Static_File_Analyzer {
     var file_info = this.get_default_file_json();
 
     file_info.file_format = "iso";
-    file_info.file_generic_type = "File Archive";
+    file_info.file_generic_type = "Disk Image";
 
     // If the file text is not given, generate it from the bytes
     if (file_text.length == 0) {
