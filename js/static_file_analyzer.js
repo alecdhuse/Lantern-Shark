@@ -2859,6 +2859,16 @@ class Static_File_Analyzer {
             xml_target_match = xml_target_regex.exec(xml_text);
           }
 
+          // Look for external targets
+          var xml_target_regex2 = /Target\s*\=\s*[\"\'](https?\:[^\"\']+)/gmi;
+          var xml_target_match2 = xml_target_regex2.exec(xml_text);
+
+          while (xml_target_match2 !== null) {
+            file_info.analytic_findings.push("SUSPICIOUS - External XML Schema Target: " + xml_target_match2[1]);
+            file_info = this.search_for_iocs(xml_target_match2[1], file_info);
+            xml_target_match2 = xml_target_regex2.exec(xml_text);
+          }
+
           // Look for suspicious XML domains
           var xml_type_regex = /[^\:\w]Type\s*\=\s*[\"\']([a-zA-Z]+\:\/?\/?([^\/\>\<\"\']+)\/[^\"\']+)/gmi;
           var xml_type_match = xml_type_regex.exec(xml_text);
