@@ -574,8 +574,10 @@ class Static_File_Analyzer {
       var app_version = Static_File_Analyzer.get_ascii(file_bytes.slice(33350,33359)).trim();
       file_info.metadata.creation_application = "ImgBurn " + app_version;
       file_info.metadata.creation_os = "Windows"; // ImgBurn is Windows Only
+      file_info.file_encrypted = "false";
     } else if (file_info.metadata.creation_application.startsWith("OSCDIMG")) {
       file_info.metadata.creation_os = "Windows"; // Oscdimg is a Windows command-line tool
+      file_info.file_encrypted = "false";
     }
 
     return file_info;
@@ -7597,39 +7599,7 @@ class ISO_9660_Parser {
           var m_path_table = ISO_9660_Parser.parse_path_table(m_path_table_bytes, "BIG_ENDIAN");
 
           var root_directory_record = ISO_9660_Parser.parse_directory_record(descriptor_tag.parsed_data.root_directory_entry);
-          var root_directory_files_location = root_directory_record.location_of_extent * sector_size;
-          var root_directory_files_bytes = file_bytes.slice(root_directory_files_location, root_directory_files_location+root_directory_record.data_length);
-
-          var dir;
-          var i2=0;
-
-          while (i2<root_directory_files_bytes.length) {
-            dir = ISO_9660_Parser.parse_directory_record(root_directory_files_bytes.slice(i2));
-
-            if (dir.length_of_file_identifier > 1) {
-              var file_byte_start = dir.location_of_extent * sector_size;
-              var c_file_bytes = file_bytes.slice(file_byte_start, file_byte_start+dir.data_length);
-
-              parsed_file.files.push({
-                'name': dir.file_identifier,
-                'directory': dir.file_flags.directory,
-                'file_bytes': c_file_bytes,
-                'type': "iso"
-              });
-
-              if (dir.file_flags.directory === true) {
-                let sub_dir = ISO_9660_Parser.parse_directory_record(c_file_bytes, true);
-                let sub_dir_files = ISO_9660_Parser.parse_directory_files(file_bytes, sub_dir, sector_size);
-                parsed_file.files = parsed_file.files.concat(sub_dir_files);
-              }
-            }
-
-            if (dir.directory_record_length > 0) {
-              i2 += dir.directory_record_length;
-            } else {
-              break;
-            }
-          }
+          parsed_file.files = ISO_9660_Parser.parse_directory_files(file_bytes, root_directory_record, sector_size);
         } else if (descriptor_tag.type_code == 2) {
           // Supplementary Volume Descriptor
 
@@ -7651,39 +7621,7 @@ class ISO_9660_Parser {
           var m_path_table = ISO_9660_Parser.parse_path_table(m_path_table_bytes, "BIG_ENDIAN");
 
           var root_directory_record = ISO_9660_Parser.parse_directory_record(descriptor_tag.parsed_data.root_directory_entry);
-          var root_directory_files_location = root_directory_record.location_of_extent * sector_size;
-          var root_directory_files_bytes = file_bytes.slice(root_directory_files_location, root_directory_files_location+root_directory_record.data_length);
-
-          var dir;
-          var i2=0;
-
-          while (i2<root_directory_files_bytes.length) {
-            dir = ISO_9660_Parser.parse_directory_record(root_directory_files_bytes.slice(i2), true);
-
-            if (dir.length_of_file_identifier > 1) {
-              var file_byte_start = dir.location_of_extent * sector_size;
-              var c_file_bytes = file_bytes.slice(file_byte_start, file_byte_start+dir.data_length);
-
-              parsed_file.files.push({
-                'name': dir.file_identifier,
-                'directory': dir.file_flags.directory,
-                'file_bytes': c_file_bytes,
-                'type': "iso"
-              });
-
-              if (dir.file_flags.directory === true) {
-                let sub_dir = ISO_9660_Parser.parse_directory_record(c_file_bytes, true);
-                let sub_dir_files = ISO_9660_Parser.parse_directory_files(file_bytes, sub_dir, sector_size);
-                parsed_file.files = parsed_file.files.concat(sub_dir_files);
-              }
-            }
-
-            if (dir.directory_record_length > 0) {
-              i2 += dir.directory_record_length;
-            } else {
-              break;
-            }
-          }
+          parsed_file.files = ISO_9660_Parser.parse_directory_files(file_bytes, root_directory_record, sector_size);
         } else if (descriptor_tag.type_code == 255) {
           // Volume Descriptor Set Terminator
           break;
