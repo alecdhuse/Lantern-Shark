@@ -2864,11 +2864,19 @@ class Static_File_Analyzer {
           }
 
           // Look for external targets
-          var xml_target_regex2 = /Target\s*\=\s*[\"\'](https?\:[^\"\']+)/gmi;
+          var xml_target_regex2 = /\<[a-zA-Z0-9\=\.\:\\\/\"\'\s]+Target\s*\=\s*[\"\'](https?\:[^\"\']+)/gmi;
           var xml_target_match2 = xml_target_regex2.exec(xml_text);
 
           while (xml_target_match2 !== null) {
-            file_info.analytic_findings.push("SUSPICIOUS - External XML Schema Target: " + xml_target_match2[1]);
+            // Check if the relation is a hyperlink
+            let relationship_type_regex = /Type\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi;
+            let relationship_type_match = relationship_type_regex.exec(xml_target_match2[0]);
+
+            if (relationship_type_match !== null && !relationship_type_match[1].toLowerCase().endsWith("hyperlink")) {
+              // If this is a hyperlink don't report it as an External XML Schema Target.
+              file_info.analytic_findings.push("SUSPICIOUS - External XML Schema Target: " + xml_target_match2[1]);
+            }
+
             file_info = this.search_for_iocs(xml_target_match2[1], file_info);
             xml_target_match2 = xml_target_regex2.exec(xml_text);
           }
@@ -7386,7 +7394,7 @@ class Static_File_Analyzer {
     var found_urls = [];
     var findings = [];
 
-    var url_regex = /((?:https?\:\/\/|\\\\)[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]+)/gmi;
+    var url_regex = /((?:https?\:\/\/|\\\\)[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]+(?:(?<=\&amp)\;[a-zA-Z0-9\.\/\-\:\_\~\?\#\[\]\@\!\$\&\(\)\*\+\%\=]*)*)/gmi;
     var url_match = url_regex.exec(search_text);
 
     while (url_match !== null) {
