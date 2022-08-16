@@ -1575,6 +1575,11 @@ class Static_File_Analyzer {
       file_info.metadata.creation_os = "Unix";
     }
 
+    let header_crc = this.get_four_byte_int(file_bytes.slice(8,12));
+    let byte_index = [12];
+    let header_size = RAR_Parser.read_vinteger(file_bytes, byte_index);
+    let header_type = RAR_Parser.read_vinteger(file_bytes, byte_index);
+    
     return file_info;
   }
 
@@ -7873,6 +7878,90 @@ class ISO_9660_Parser {
     path_table.directory_identifier = bytes.slice(8,8+path_table.directory_identifier_length);
 
     return path_table;
+  }
+}
+
+class RAR_Parser {
+
+  /**
+   * Converts an array with int values 0-255 to a binary array.
+   *
+   * @param {array} u8int_array Array with int values 0-255 representing byte values.
+   * @return {array}  An array with int values of 0 or 1, representing the binary value of the given integer.
+   */
+  static get_binary_array(u8int_array) {
+    var binary_array = Array(u8int_array.length * 8);
+    var bin_str = "";
+
+    for (var bi=0; bi<u8int_array.length; bi++) {
+      bin_str = ("00000000" + (u8int_array[bi]).toString(2)).slice(-8);
+
+      binary_array[bi*8+0] = parseInt(bin_str.charAt(0));
+      binary_array[bi*8+1] = parseInt(bin_str.charAt(1));
+      binary_array[bi*8+2] = parseInt(bin_str.charAt(2));
+      binary_array[bi*8+3] = parseInt(bin_str.charAt(3));
+      binary_array[bi*8+4] = parseInt(bin_str.charAt(4));
+      binary_array[bi*8+5] = parseInt(bin_str.charAt(5));
+      binary_array[bi*8+6] = parseInt(bin_str.charAt(6));
+      binary_array[bi*8+7] = parseInt(bin_str.charAt(7));
+    }
+
+    return binary_array;
+  }
+
+  /**
+   * Converts an array with int values 0 or 1 to unsined integer.
+   *
+   * @param {array}    binary_array Array with int values 0 or 1 representing binary values.
+   * @param {String}   endianness Value indicating how to interperate the bit order of the binary array. Default is BIG_ENDIAN.
+   * @return {integer} The integer value of the given bit array.
+   */
+  static get_int_from_bin(binary_array, endianness = "LITTLE_ENDIAN") {
+    var int_val = 0;
+
+    if (endianness == "LITTLE_ENDIAN") {
+      for (var i=0; i<binary_array.length; i++) {
+        int_val += binary_array[i] * Math.pow(2, i);
+      }
+    } else {
+      var bit_pos = 0;
+      for (var i=binary_array.length-1; i>=0; i--) {
+        int_val += binary_array[i] * Math.pow(2, bit_pos);
+        bit_pos++;
+      }
+    }
+
+    return int_val;
+  }
+
+  /**
+   * Converts an array with int values 0-255 to an integer.
+   *
+   * The lower 7 bits of every byte contain integer data and highest bit
+   * in every byte is the continuation flag. If highest bit is 0, this is the
+   * last byte in sequence.
+   *
+   * @see https://www.rarlab.com/technote.htm#vint
+   *
+   * @param {array}     bytes Array with int values 0-255 representing byte values.
+   * @return {integer}  The read integer value
+   */
+  static read_vinteger(bytes, byte_index) {
+    let byte_array = [];
+    let continue_reading = true;
+    let current_byte = byte_index[0];
+
+    while (continue_reading == true) {
+      let byte_bits = RAR_Parser.get_binary_array([bytes[current_byte]]);
+      byte_array.push(RAR_Parser.get_int_from_bin(byte_bits.slice(0,7)));
+      if (byte_bits[7] == 0) continue_reading = false;
+      current_byte++;
+    }
+
+    let int_result = Static_File_Analyzer.get_int_from_bytes(byte_array);
+    byte_index[0] = current_byte;
+
+    return int_result;
   }
 }
 
