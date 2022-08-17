@@ -224,6 +224,12 @@ class Static_File_Analyzer {
 
     for (var c=0; c<document_obj.compound_file_binary.entries.length; c++) {
       if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() != "root entry") {
+        if (document_obj.compound_file_binary.entries[c].entry_name.toUpperCase() == "VBA" && document_obj.compound_file_binary.entries[c].entry_bytes.length == 0) {
+          if (document_obj.compound_file_binary.entries[0].entry_name.toLowerCase() == "root entry") {
+            document_obj.compound_file_binary.entries[c].entry_bytes = document_obj.compound_file_binary.entries[0].entry_bytes;
+          }
+        }
+
         file_info.file_components.push({
           'name': document_obj.compound_file_binary.entries[c].entry_name,
           'type': "cfb",
@@ -236,7 +242,7 @@ class Static_File_Analyzer {
           if (document_obj.compound_file_binary.entries[c].entry_properties.creation_time < file_info.metadata.creation_date ||
               file_info.metadata.creation_date == "0000-00-00 00:00:00") {
             file_info.metadata.creation_date = document_obj.compound_file_binary.entries[c].entry_properties.creation_time;
-          }          
+          }
         }
 
         if (document_obj.compound_file_binary.entries[c].entry_properties.modification_time > file_info.metadata.last_modified_date) {
@@ -5560,6 +5566,7 @@ class Static_File_Analyzer {
   /**
    * Parses compound file binary files and streams.
    *
+   * @see https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b
    * @see https://msdn.microsoft.com/en-us/library/dd942421.aspx
    *
    * @param {array}   file_bytes The bytes representing the compound file binary.
