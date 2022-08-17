@@ -15,7 +15,7 @@ See the table below for a list of supported file types and types of data extract
 | -------------- | ------------ | --------------- | --------------- | -------- | ----------------------------- |
 | ACE            | X            | X               |                 |          |                               |
 | DLL            | X            |                 |                 |          |                               |
-| DOCX           | X            | X               | X               | X        |                               |
+| DOCX           | X            | X               | X               | X        | X                             |
 | EXE            | X            | X               |                 |          |                               |
 | GZ             | X            | X               |                 |          |                               |
 |[ISO - ISO 9660](https://github.com/alecdhuse/Lantern-Shark/wiki/ISO-9660)| X | X | X | X |                   |

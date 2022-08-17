@@ -224,12 +224,6 @@ class Static_File_Analyzer {
 
     for (var c=0; c<document_obj.compound_file_binary.entries.length; c++) {
       if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() != "root entry") {
-        if (document_obj.compound_file_binary.entries[c].entry_name.toUpperCase() == "VBA" && document_obj.compound_file_binary.entries[c].entry_bytes.length == 0) {
-          if (document_obj.compound_file_binary.entries[0].entry_name.toLowerCase() == "root entry") {
-            document_obj.compound_file_binary.entries[c].entry_bytes = document_obj.compound_file_binary.entries[0].entry_bytes;
-          }
-        }
-
         file_info.file_components.push({
           'name': document_obj.compound_file_binary.entries[c].entry_name,
           'type': "cfb",
@@ -2953,6 +2947,70 @@ class Static_File_Analyzer {
         } else if (archive_files[i].file_name.toLowerCase().substring(0, 5) == "word/") {
           file_info.file_format = "docx";
           file_info.file_generic_type = "Document";
+
+          if (archive_files[i].file_name.toLowerCase() == "word/_rels/document.xml.rels" ||
+              archive_files[i].file_name.toLowerCase() == "word/_rels/document.bin.rels") {
+
+              //TODO: Refactor this into the MS_Document_Parser class.
+
+              // If this is a binary file convert it to text
+              if (archive_files[i].file_name.indexOf(".bin") > 0) {
+                var workbook_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
+                xml_text = Static_File_Analyzer.get_string_from_array(workbook_xml_bytes);
+              }
+
+              let document_relations = MS_Document_Parser.parse_document_relations(file_info, xml_text);
+              spreadsheet_sheet_relations = Object.assign({}, spreadsheet_sheet_relations, document_relations);
+
+              // This will build the relationships for this document
+              var relationship_regex = /<\s*Relationship([^\>]+)\>/gmi;
+              var relationship_matches = relationship_regex.exec(xml_text);
+
+              while (relationship_matches != null) {
+                var type_match = /Type\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+                var target_match = /Target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+                var rid_match = /Id\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+
+                var type = (type_match !== null) ? type_match[1] : "";
+                var target = (target_match !== null) ? target_match[1] : "";
+                var rid = (rid_match !== null) ? rid_match[1] : "";
+
+                if (type.toLowerCase().endsWith("vbaproject")) {
+                  if (target !== "vbaProject.bin") {
+                    file_info.analytic_findings.push("SUSPICIOUS - Nonstandard VBA Project File Name: " + target);
+                  }
+
+                  file_info.scripts.script_type = "VBA Macro";
+
+                  // Find the VBA projec file.
+                  var vba_file_index = -1;
+                  for (var fci=0; fci<file_info.file_components.length; fci++) {
+                    if (file_info.file_components[fci].name.split("/")[1] == target) {
+                      vba_file_index = fci;
+                      break;
+                    }
+                  }
+
+                  if (vba_file_index >= 0) {
+                    var macro_data = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, vba_file_index);
+                    var vba_data = this.extract_vba(macro_data);
+
+                    for (var s = 0; s < vba_data.attributes.length; s++) {
+                      var sub_match = /\n[a-z\s]+Sub[^\(]+\([^\)]*\)/gmi.exec(vba_data.attributes[s]);
+
+                      if (sub_match != null) {
+                        var vba_code = vba_data.attributes[s].substring(sub_match.index).trim();
+                        vba_code = this.pretty_print_vba(vba_code);
+                        this.add_extracted_script("VBA Macro", vba_code, file_info);
+                      }
+                    }
+                  }
+
+                }
+
+                relationship_matches = relationship_regex.exec(xml_text);
+              }
+          }
         } else if (archive_files[i].file_name.toLowerCase().substring(0, 3) == "xl/") {
           file_info.file_format = (file_info.file_format != "xlsm" && file_info.file_format != "xlsb") ? "xlsx" : file_info.file_format;
           file_info.file_generic_type = "Spreadsheet";
@@ -3269,8 +3327,6 @@ class Static_File_Analyzer {
                         'value': cell_value
                       }
                     }
-
-                    var debug_t=0;
                   } else if (current_record_info.record_number == 37) {
                     // BrtACBegin
                   } else if (current_record_info.record_number == 38) {
@@ -3656,7 +3712,6 @@ class Static_File_Analyzer {
       }
 
       // Token Sequences
-      var debug = "";
       while (current_byte < compressed_data.length) {
         compression_flags = this.get_binary_array(Uint8Array.from([compressed_data[current_byte]])).reverse();
         current_byte++;
@@ -6055,10 +6110,6 @@ class Static_File_Analyzer {
     var cell_value;
     var formula_calc_stack = [];
 
-    if (document_obj.current_cell == "DA13074") {
-      var debug773=33;
-    }
-
     while (current_rgce_byte < rgce_bytes.length) {
       // Ptg / formula_type - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/9310c3bb-d73f-4db0-8342-28e1e0fcb68f
       formula_type = rgce_bytes[current_rgce_byte];
@@ -7901,6 +7952,57 @@ class ISO_9660_Parser {
     path_table.directory_identifier = bytes.slice(8,8+path_table.directory_identifier_length);
 
     return path_table;
+  }
+}
+
+class MS_Document_Parser {
+
+  /**
+   * Parses a OOXML Document relations file.
+   *
+   * @param  {object} file_info  The file_info object to add findings to.
+   * @param  {string} xml_text   The text of the relations file.
+   * @return {object} An object with all the parsed relationships.
+   */
+  static parse_document_relations(file_info, xml_text, file_bytes) {
+    let document_relations = {};
+    let relation_type_name = "unknown";
+
+    // This will build the relationships for this document
+    var relationship_regex = /<\s*Relationship([^\>]+)\>/gmi;
+    var relationship_matches = relationship_regex.exec(xml_text);
+
+    while (relationship_matches != null) {
+      relation_type_name = "unknown";
+      var type_match = /Type\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+      var target_match = /Target\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+      var rid_match = /Id\s*\=\s*[\"\']([^\"\']+)[\"\']/gmi.exec(relationship_matches[1]);
+
+      var type = (type_match !== null) ? type_match[1] : "";
+      var target = (target_match !== null) ? target_match[1] : "";
+      var rid = (rid_match !== null) ? rid_match[1] : "";
+
+      if (type.toLowerCase().endsWith("vbaproject")) {
+        if (target !== "vbaProject.bin") {
+          file_info.analytic_findings.push("SUSPICIOUS - Nonstandard VBA Project File Name: " + target);
+        }
+
+        file_info.scripts.script_type = "VBA Macro";
+        relation_type_name = "vba";
+      }
+
+      if (rid != "") {
+        document_relations[rid] = {
+          'type':      type,
+          'target':    target,
+          'type_name': relation_type_name
+        }
+      }
+
+      relationship_matches = relationship_regex.exec(xml_text);
+    }
+
+    return document_relations;
   }
 }
 
