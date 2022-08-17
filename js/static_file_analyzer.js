@@ -227,8 +227,21 @@ class Static_File_Analyzer {
         file_info.file_components.push({
           'name': document_obj.compound_file_binary.entries[c].entry_name,
           'type': "cfb",
-          'directory': false
+          'directory': false,
+          'file_bytes': document_obj.compound_file_binary.entries[c].entry_bytes
         });
+
+        // Update creation and modification date/times
+        if (document_obj.compound_file_binary.entries[c].entry_properties.creation_time != "1601-01-01T00:00:00.000Z") {
+          if (document_obj.compound_file_binary.entries[c].entry_properties.creation_time < file_info.metadata.creation_date ||
+              file_info.metadata.creation_date == "0000-00-00 00:00:00") {
+            file_info.metadata.creation_date = document_obj.compound_file_binary.entries[c].entry_properties.creation_time;
+          }          
+        }
+
+        if (document_obj.compound_file_binary.entries[c].entry_properties.modification_time > file_info.metadata.last_modified_date) {
+          file_info.metadata.last_modified_date = document_obj.compound_file_binary.entries[c].entry_properties.modification_time;
+        }
       }
 
       if (document_obj.compound_file_binary.entries[c].entry_name.toLowerCase() == "summaryinformation") {
@@ -1579,7 +1592,7 @@ class Static_File_Analyzer {
     let byte_index = [12];
     let header_size = RAR_Parser.read_vinteger(file_bytes, byte_index);
     let header_type = RAR_Parser.read_vinteger(file_bytes, byte_index);
-    
+
     return file_info;
   }
 
@@ -5665,6 +5678,9 @@ class Static_File_Analyzer {
         var stream_start = 512 + (entry_sec_id * cmb_obj.sector_size);
         var stream_bytes = file_bytes.slice(stream_start, stream_start+stream_size);
         var stream_properties = {};
+
+        stream_properties['creation_time'] = creation_time;
+        stream_properties['modification_time'] = modification_time;
 
         var guid = "";
         for (var k=0; k<unique_id1.length; k++) {
