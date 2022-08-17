@@ -319,8 +319,15 @@ function read_file(e) {
       analyzer_results = await new Static_File_Analyzer(file_byte_array);
       await display_sub_components(analyzer_results, "top_level_file");
 
-      // Load summary info
-      display_file_summary(analyzer_results);
+      // If the file is a type of file archive or disk image and it contains a single file.
+      // Auto open to that one file.
+      if ((analyzer_results.file_generic_type == "File Archive" || analyzer_results.file_generic_type == "Disk Image" ) && analyzer_results.file_components.length == 1) {
+        // Load subfile summary info
+        select_file_component(null, 0);
+      } else {
+        // Load main file summary info
+        display_file_summary(analyzer_results);
+      }
 
       $("#file_text").val(get_file_text(array));
       $("#parsed_file_text").val(analyzer_results.parsed);
@@ -389,15 +396,6 @@ async function save_selected_file(e) {
   var file_name = selected_file_component.name;
   file_password = $("#summary_file_encrypted_password_txt").val();
   component_bytes = selected_file_component.file_bytes;
-
-  /**
-  if (analyzer_results.file_components[selected_file_component].type == "zip") {
-    component_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_byte_array, selected_file_component, file_password);
-  } else {
-    // Code for other componets
-    component_bytes = selected_file_component.file_bytes;
-  }
-  */
 
   if (component_bytes !== null && component_bytes !== undefined) {
     base64_encoded = Static_File_Analyzer.base64_encode_array(component_bytes);
