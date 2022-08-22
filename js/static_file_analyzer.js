@@ -120,7 +120,13 @@ class Static_File_Analyzer {
       return_val = {'is_valid': true, 'type': "zip"};
     } else {
       // Probably a text or mark up/down language
-      if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes.split(0,128));
+      let file_text = "";
+
+      if (file_bytes.length > 128) {
+        file_text = Static_File_Analyzer.get_ascii(file_bytes.split(0,128));
+      } else {
+        file_text = Static_File_Analyzer.get_ascii(file_bytes);
+      }
 
       if (/\<(?:html|\!doctype\s+html|script|meta\s+content)/gmi.test(file_text)) {
         return_val = {'is_valid': true, 'type': "html"};
