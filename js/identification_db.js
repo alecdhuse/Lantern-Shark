@@ -13,6 +13,12 @@ var threat_identification = {
       'author': "Dream",
       'creation_date': "2015-06-05T18:19:34.000Z",
       'identification': "Emotet Dropper"
+    },
+    {
+      'file_format': "xls",
+      'author': "Gydar",
+      'creation_date': "2015-06-05T18:19:34.000Z",
+      'identification': "Emotet Dropper"
     }
   ]
 };
