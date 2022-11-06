@@ -2745,6 +2745,13 @@ class Static_File_Analyzer {
       console.log("No BOF record found.");
     }
 
+    // Check all cells for IoCs
+    for (const [sheet_key, sheet_value] of Object.entries(document_obj.sheets)) {
+      for (const [data_key, data_value] of Object.entries(sheet_value.data)) {
+        file_info = this.search_for_iocs(data_value.value, file_info);
+      }
+    }
+
     // Format document object for user output
     delete  document_obj['byte_order'];
     delete  document_obj['current_cell'];
