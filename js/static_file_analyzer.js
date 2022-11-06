@@ -79,6 +79,9 @@ class Static_File_Analyzer {
       }
     }
 
+    // Attempt to identify threat actor and or malware.
+    file_info = this.identify_threat(file_info);
+
     return file_info;
   }
 
@@ -5596,6 +5599,64 @@ class Static_File_Analyzer {
     } else {
       throw "Zip decompression library not found. Please include zip-full.js from https://github.com/gildas-lormeau/zip.js";
     }
+  }
+
+  async identify_threat(file_info) {
+    let filled_file_info = await file_info;
+
+    // Check to see if the threat identification data struction is loaded.
+    if (threat_identification !== undefined && threat_identification !== null) {
+      if (filled_file_info.file_generic_type == "File Archive") {
+        if (filled_file_info.file_components.length > 0) {
+          for (var i=0; i<filled_file_info.file_components.length; i++) {
+            if (filled_file_info.file_components[i].directory == false) {
+              let subfile_info = await new Static_File_Analyzer(filled_file_info.file_components[i].file_bytes);
+            }
+          }
+        }
+      } else {
+        let file_format = await filled_file_info.file_format;
+        let file_format_threats = threat_identification[file_format];
+
+        if (file_format_threats !== undefined && file_format_threats !== null) {
+          for (let i=0; i<file_format_threats.length; i++) {
+            let is_match = true;
+
+            for (const [key, value] of Object.entries(file_format_threats[i])) {
+              if (key != "file_format" && key != "identification" && key != "probability") {
+                if (filled_file_info.metadata.hasOwnProperty(key)) {
+                  if (filled_file_info.metadata[key] != value) {
+                    is_match = false;
+                    break;
+                  }
+                } else {
+                  if (filled_file_info[key] != value) {
+                    is_match = false;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (is_match === true) {
+              let finding_str;
+
+              if (file_format_threats[i].probability == 100) {
+                finding_str = "MALICIOUS - " + file_format_threats[i].identification;
+              } else {
+                finding_str = "SUSPICIOUS - " + file_format_threats[i].identification;
+              }
+
+              filled_file_info.analytic_findings.push(finding_str);
+              break;
+            }
+          }
+        }
+      }
+
+    }
+
+    return filled_file_info;
   }
 
   /**
