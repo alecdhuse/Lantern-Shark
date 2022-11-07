@@ -5606,15 +5606,7 @@ class Static_File_Analyzer {
 
     // Check to see if the threat identification data struction is loaded.
     if (threat_identification !== undefined && threat_identification !== null) {
-      if (filled_file_info.file_generic_type == "File Archive") {
-        if (filled_file_info.file_components.length > 0) {
-          for (var i=0; i<filled_file_info.file_components.length; i++) {
-            if (filled_file_info.file_components[i].directory == false) {
-              let subfile_info = await new Static_File_Analyzer(filled_file_info.file_components[i].file_bytes);
-            }
-          }
-        }
-      } else {
+      if (filled_file_info.file_generic_type != "File Archive") {
         let file_format = await filled_file_info.file_format;
         let file_format_threats = threat_identification[file_format];
 
