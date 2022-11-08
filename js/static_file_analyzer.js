@@ -126,7 +126,7 @@ class Static_File_Analyzer {
       let file_text = "";
 
       if (file_bytes.length > 128) {
-        file_text = Static_File_Analyzer.get_ascii(file_bytes.split(0,128));
+        file_text = Static_File_Analyzer.get_ascii(file_bytes.slice(0,128));
       } else {
         file_text = Static_File_Analyzer.get_ascii(file_bytes);
       }
