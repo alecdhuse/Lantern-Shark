@@ -125,8 +125,8 @@ class Static_File_Analyzer {
       // Probably a text or mark up/down language
       let file_text = "";
 
-      if (file_bytes.length > 128) {
-        file_text = Static_File_Analyzer.get_ascii(file_bytes.slice(0,128));
+      if (file_bytes.length > 256) {
+        file_text = Static_File_Analyzer.get_ascii(file_bytes.slice(0,256));
       } else {
         file_text = Static_File_Analyzer.get_ascii(file_bytes);
       }
@@ -7600,30 +7600,82 @@ class HTML_Parser {
     var is_valid;
 
     for (let i=0; i<possible_b64_literals.length; i++) {
+      let base64_text = possible_b64_literals[i];
       decoded_base64 = HTML_Parser.decode_base64(possible_b64_literals[i]);
+
       if (decoded_base64 != possible_b64_literals[i]) {
         // This is a valid base64 encoded literal, might still be a false positive.
         let decoded_b64_bytes = HTML_Parser.decode_smuggled_file(possible_b64_literals[i]);
         is_valid = Static_File_Analyzer.is_valid_file(decoded_b64_bytes);
 
+        // Try to reverse encoded string
+        if (!is_valid.is_valid) {
+          base64_text = possible_b64_literals[i].split("").reverse().join("");
+          decoded_base64 = HTML_Parser.decode_base64(base64_text);
+
+          if (decoded_base64 != possible_b64_literals[i]) {
+            let decoded_b64_bytes = HTML_Parser.decode_smuggled_file(base64_text);
+            is_valid = Static_File_Analyzer.is_valid_file(decoded_b64_bytes);
+          }
+        }
+
         if (is_valid.is_valid) {
           // default name, try to find the real name.
           let file_name = "Smuggled." + is_valid.type;
-          let file_name_match = /file\_?name\s*\=\s*[\"\']([^\"\']+)/gmi.exec(file_text);
+          let file_name_match = /(?:file\_?name\s*\=\s*[\"\']([^\"\']+)|new\s+File\s*\([^,]+\,\s*[\"\']([^\"\']+)[\"\'])/gmi.exec(file_text);
 
-          if (file_name_match !== null) file_name = file_name_match[1];
+          if (file_name_match !== null) {
+            file_name = (file_name_match[1] !== undefined) ? file_name_match[1] : file_name_match[2];
+          } else {
+            file_name_match = /(?:file\_?name\s*\=\s*[\"\']([^\"\']+)|new\s+File\s*\([^,]+\,\s*[\"\']([^\"\']+)[\"\'])/gmi.exec(decoded_base64);
+            if (file_name_match !== null) file_name = (file_name_match[1] !== undefined) ? file_name_match[1] : file_name_match[2];
+          }
 
-          return_val.file_components.push({
-            'name': file_name,
-            'type': "html",
-            'directory': false,
-            'file_bytes': decoded_b64_bytes
-          });
+          file_name = (file_name !== undefined) ? file_name : "Smuggled." + is_valid.type;
+
+          if (is_valid.type == "html" && file_name.split(".").at(-1).toLowerCase() !== "html") {
+            // This could be multi layed smuggling.
+            let possible_b64_literals2 = HTML_Parser.find_base64_literals(decoded_base64);
+            for (let i2=0; i2<possible_b64_literals2.length; i2++) {
+              let decoded_base64_2 = HTML_Parser.decode_base64(possible_b64_literals2[i2]);
+
+              if (decoded_base64_2 != possible_b64_literals2[i2]) {
+                let decoded_b64_bytes2 = HTML_Parser.decode_smuggled_file(possible_b64_literals2[i2]);
+                let is_valid2 = Static_File_Analyzer.is_valid_file(decoded_b64_bytes2);
+
+                if (is_valid2.is_valid) {
+                  return_val.file_components.push({
+                    'name': file_name,
+                    'type': is_valid2.type,
+                    'directory': false,
+                    'file_bytes': decoded_b64_bytes2
+                  });
+                }
+              }
+            }
+          } else {
+            return_val.file_components.push({
+              'name': file_name,
+              'type': is_valid.type,
+              'directory': false,
+              'file_bytes': decoded_b64_bytes
+            });
+          }
 
           return_val.analytic_findings.push("SUSPICIOUS - Detected HTML Smuggling");
         }
 
       }
+    }
+
+    // Check to see if file contains a password.
+    let password_match = /password[\s\:\n\r]*(?:\<(?:span|div)\>\s*)?([a-zA-Z0-9\-\_]+)/gmi.exec(file_text);
+    if (password_match !== null) {
+      let password_text = (password_match[1] !== undefined) ? password_match[1] : "";
+      if (password_text.length > 1) {
+        return_val.analytic_findings.push("SUSPICIOUS - HTML Document Contains a Password: " + password_text);
+      }
+
     }
 
     return return_val;
