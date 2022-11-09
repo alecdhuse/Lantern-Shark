@@ -7596,11 +7596,12 @@ class HTML_Parser {
 
     // Try to detect HTML Smuggling
     let possible_b64_literals = HTML_Parser.find_base64_literals(file_text);
+    let base64_text;
     var decoded_base64;
     var is_valid;
 
     for (let i=0; i<possible_b64_literals.length; i++) {
-      let base64_text = possible_b64_literals[i];
+      base64_text = possible_b64_literals[i];
       decoded_base64 = HTML_Parser.decode_base64(possible_b64_literals[i]);
 
       if (decoded_base64 != possible_b64_literals[i]) {
@@ -7716,7 +7717,6 @@ class HTML_Parser {
   static decode_base64(str, encoding="utf-8") {
     try {
       let decoded = window.atob(str);
-
       return decoded;
     } catch(err) {
       return str;
@@ -7733,7 +7733,7 @@ class HTML_Parser {
    * @return {array}    An array of possible Base64 encoded string literals.
    */
   static find_base64_literals(str) {
-    let base64_regex = /[\"\']([a-z0-9\+\/\=]+)[\"\']/gmi;
+    let base64_regex = /[\"\']([a-z0-9\+\/\=]{16,})[\"\']/gmi;
     let base64_match = base64_regex.exec(str);
     let return_val = [];
 
