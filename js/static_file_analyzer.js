@@ -521,7 +521,7 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  analyze_gz(file_bytes) {
+  async analyze_gz(file_bytes) {
     var file_info = this.get_default_file_json();
 
     file_info.file_format = "gz";
@@ -2927,30 +2927,35 @@ class Static_File_Analyzer {
 
             xml_type_match = xml_type_regex.exec(xml_text);
           }
-        } else if (/embeddings\/oleObject[0-9]+\.bin/gmi.test(archive_files[i].file_name)) {
+        } else if (/embeddings\//gmi.test(archive_files[i].file_name)) {
           // embedded OLE objects
           var arc_file_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
-          var cmb_obj = this.parse_compound_file_binary(arc_file_bytes);
-          var root_guid = cmb_obj.entries[0].enrty_guid;
 
-          for (var ci=1; ci<cmb_obj.entries.length; ci++) {
-            if (root_guid == "0002CE02-0000-0000-C000-000000000046") {
-              // Microsoft Equation 3.0 object
-              // See https://malcat.fr/blog/exploit-steganography-and-delphi-unpacking-dbatloader/
-              if (cmb_obj.entries[ci].entry_bytes[11] == 8) {
-                // Font record, look for null terminator
-                var found_null = false;
-                for (var fr=14; fr<45; fr++) {
-                  // Check if there is a null terminator withing 40 characters of the font name.
-                  if (cmb_obj.entries[ci].entry_bytes[fr] == 0) {
-                    found_null = true;
-                    break;
+          if (Static_File_Analyzer.array_equals(arc_file_bytes.slice(0,4), [0xD0,0xCF,0x11,0xE0])) {
+            var cmb_obj = this.parse_compound_file_binary(arc_file_bytes);
+
+            var root_guid = cmb_obj.entries[0].enrty_guid;
+            if (root_guid === undefined) root_guid = cmb_obj.root_entry.guid;
+
+            for (var ci=0; ci<cmb_obj.entries.length; ci++) {
+              if (root_guid == "0002CE02-0000-0000-C000-000000000046") {
+                // Microsoft Equation 3.0 object
+                // See https://malcat.fr/blog/exploit-steganography-and-delphi-unpacking-dbatloader/
+                if (cmb_obj.entries[ci].entry_bytes[11] == 8) {
+                  // Font record, look for null terminator
+                  var found_null = false;
+                  for (var fr=14; fr<45; fr++) {
+                    // Check if there is a null terminator withing 40 characters of the font name.
+                    if (cmb_obj.entries[ci].entry_bytes[fr] == 0) {
+                      found_null = true;
+                      break;
+                    }
                   }
-                }
 
-                if (found_null == false) {
-                  // CVE-2017-11882 Exploit
-                  file_info.analytic_findings.push("MALICIOUS - CVE-2017-11882 Exploit Found");
+                  if (found_null == false) {
+                    // CVE-2017-11882 Exploit
+                    file_info.analytic_findings.push("MALICIOUS - CVE-2017-11882 Exploit Found");
+                  }
                 }
               }
             }
@@ -5700,7 +5705,10 @@ class Static_File_Analyzer {
         format_version_major: 0,
         format_version_minor: 0,
         sector_size: 512,
-        entries: []
+        entries: [],
+        root_entry: {
+          guid: "00000000-0000-0000-0000-000000000000"
+        }
       };
 
       var current_byte = 0;
@@ -5830,6 +5838,10 @@ class Static_File_Analyzer {
         if (directory_name == "SummaryInformation") {
           has_summary_information = true;
           stream_properties = this.parse_cfb_summary_information(stream_bytes, cmb_obj);
+        }
+
+        if (directory_name == "Root Entry") {
+          cmb_obj.root_entry.guid = guid;
         }
 
         if (stream_start < file_bytes.length && entry_type != 0 && directory_name != "") {
