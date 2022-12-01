@@ -7702,19 +7702,22 @@ class HTML_Parser {
    * @return {array}    The decoded file in byte array form.
    */
   static decode_smuggled_file(base64_string, slice_size=512) {
-    const byte_characters = atob(base64_string);
-    var byte_arrays = [];
+    let byte_arrays = [];
 
-    for (let offset = 0; offset < byte_characters.length; offset += slice_size) {
-      let slice = byte_characters.slice(offset, offset + slice_size);
-      let byte_codes = new Array(slice.length);
+    try {
+      const byte_characters = atob(base64_string);
 
-      for (let i = 0; i < slice.length; i++) {
-        byte_codes[i] = slice.charCodeAt(i);
+      for (let offset = 0; offset < byte_characters.length; offset += slice_size) {
+        let slice = byte_characters.slice(offset, offset + slice_size);
+        let byte_codes = new Array(slice.length);
+
+        for (let i = 0; i < slice.length; i++) {
+          byte_codes[i] = slice.charCodeAt(i);
+        }
+
+        byte_arrays = byte_arrays.concat(byte_codes);
       }
-
-      byte_arrays = byte_arrays.concat(byte_codes);
-    }
+    } catch(err) {}
 
     return byte_arrays;
   }
