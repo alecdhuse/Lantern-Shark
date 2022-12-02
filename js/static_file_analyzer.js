@@ -157,6 +157,45 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Adds a TTP to the given file_info JSON object.
+   * This is meant for MITRE ATT&CK® TTPs, but there is no validating.
+   *
+   * @param  {String}    ttp_id          The TTP ID.
+   * @param  {String}    ttp_tactic      Which tactic the TTPs refers to.
+   * @param  {String}    ttp_description Optional description of how this TTP is being used.
+   * @param  {object}    file_info       The file_info object to add the script to.
+   * @return {undefined}
+   */
+  static add_ttp(ttp_id, ttp_tactic, ttp_description="", file_info) {
+    let ttp_found = false;
+    let add_to_description = false;
+
+    for (let i=0; i<file_info.ttps.length; i++) {
+      if (file_info.ttps[i].ttp_id == ttp_id && file_info.ttps[i].ttp_tactic == ttp_tactic) {
+        if (file_info.ttps[i].ttp_description == ttp_description) {
+          ttp_found = true;
+          break;
+        } else {
+          ttp_found = true;
+          add_to_description = true;
+          file_info.ttps[i].ttp_description += " " + ttp_description;
+          break;
+        }
+      }
+    }
+
+    if (ttp_found == false) {
+      file_info.ttps.push({
+        'ttp_id':          ttp_id,
+        'ttp_tactic':      ttp_tactic,
+        'ttp_description': ttp_description
+      });
+    }
+
+    return file_info;
+  }
+
+  /**
    * Extracts meta data and other information from ACE archive files.
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
@@ -1385,6 +1424,7 @@ class Static_File_Analyzer {
           var href_unc_match = /href\s*\=\s*[\"\'](\\\\[^\'\"]+)[\"\']/gmi.exec(cve_match[0]);
           if (href_unc_match !== null) {
             file_info.analytic_findings.push("MALICIOUS - CVE-2019-7089 Exploit Found");
+            file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2019-7089 in Adobe Acrobat and Reader.", file_info);
             file_info.iocs.push(href_unc_match[1]);
           }
         }
@@ -1394,6 +1434,7 @@ class Static_File_Analyzer {
         var cve_match = /\/AA\s*\<\<\s*\/O\s*\<\<\s*\/F\s*\(\s*((?:\\{2,4}|https?\:\/\/)(?:[a-zA-Z0-9]+[\.\:]?)+\\*\s*)\s*\)\s*\/D\s*[^\n\r]+\s+\/S\s*\/GoToE/gmi.exec(objects_matches[1]);
         if (cve_match !== null) {
           file_info.analytic_findings.push("MALICIOUS - CVE-2018-4993 Exploit Found");
+          file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2018-4993 in Adobe Acrobat and Reader.", file_info);
           file_info.iocs.push(cve_match[1]);
         }
       }
@@ -1726,6 +1767,7 @@ class Static_File_Analyzer {
       var test_ascii = Static_File_Analyzer.get_ascii(hex_bytes.slice(0, (hex_bytes.length < 256) ? hex_bytes.length : 256));
       if (/equation[^\d]+3/gmi.test(test_ascii)) {
         file_info.analytic_findings.push("MALICIOUS - CVE-2017-11882 Exploit Found");
+        file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2017-11882 in Microsoft Office’s Equation Editor.", file_info);
       }
 
       hex_data_match = hex_data_regex.exec(file_text_ascii);
@@ -2955,6 +2997,7 @@ class Static_File_Analyzer {
                   if (found_null == false) {
                     // CVE-2017-11882 Exploit
                     file_info.analytic_findings.push("MALICIOUS - CVE-2017-11882 Exploit Found");
+                    file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2017-11882 in Microsoft Office’s Equation Editor.", file_info);
                   }
                 }
               }
@@ -4866,7 +4909,8 @@ class Static_File_Analyzer {
       },
       parsed: "Parsed File Not Available",
       analytic_findings: [],
-      iocs: []
+      iocs: [],
+      ttps: []
     };
   }
 
