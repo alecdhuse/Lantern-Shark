@@ -8220,31 +8220,62 @@ class PDF_Parser {
     let file_components = [];
 
     for (let i=0; i<object_array.length; i++) {
-      // Look for JPEG files
-      if (object_array[i].object_dictionary.hasOwnProperty("Filter")) {
-        if (object_array[i].object_dictionary['Filter'].toLowerCase() == "dctdecode") {
-          // Found JPEG file
+      // Look for image files
+      if (object_array[i].object_dictionary.hasOwnProperty("Subtype")) {
+        if (object_array[i].object_dictionary['Subtype'].toLowerCase() == "image") {
+          if (object_array[i].object_dictionary.hasOwnProperty("Filter")) {
+            if (object_array[i].object_dictionary['Filter'].toLowerCase() == "dctdecode") {
+              // Found JPEG file
 
-          // Set default name for JPEG file.
-          let obj_name = "JPEG_" + object_array[i].object_number + ".jpg";
+              // Set default name for JPEG file.
+              let obj_name = "Image_" + object_array[i].object_number + ".jpg";
 
-          // Search for name in object dictionary.
-          if (object_array[i].object_dictionary.hasOwnProperty("Name")) {
-            obj_name = object_array[i].object_dictionary["Name"];
+              // Search for name in object dictionary.
+              if (object_array[i].object_dictionary.hasOwnProperty("Name")) {
+                obj_name = object_array[i].object_dictionary["Name"];
+              }
+
+              file_components.push({
+                'name': obj_name,
+                'type': "jpeg",
+                'directory': false,
+                'file_bytes': object_array[i].stream_bytes
+              });
+            } else if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode") {
+              // Other image types, FlateDecode is a Zlib encoded data stream.
+              // See: https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-decoding-ccitt-data/
+
+              if (pako !== null && pako !== undefined) {
+                let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
+                let stream_bytesU8 = new Uint8Array(object_array[i].stream_bytes);
+                let deflate_bytes = pako.inflate(stream_bytesU8);
+
+                /*
+                file_components.push({
+                  'name': "Image_" + object_array[i].object_number + ".txt",
+                  'type': "txt",
+                  'directory': false,
+                  'file_bytes': deflate_bytes
+                });
+                */
+              } else {
+                // The Pako library is require to deflate this stream.
+                console.log("Pako library not found, component file will be added as a Zlib file.");
+                /*
+                file_components.push({
+                  'name': "Image_" + object_array[i].object_number + ".zlib",
+                  'type': "zlib",
+                  'directory': false,
+                  'file_bytes': object_array[i].stream_bytes
+                });
+                */
+              }
+
+            }
           }
-
-          file_components.push({
-            'name': obj_name,
-            'type': "jpeg",
-            'directory': false,
-            'file_bytes': object_array[i].stream_bytes
-          });
-        } else if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode") {
-          // Other image types, see: https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-decoding-ccitt-data/
-          let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
-
         }
       }
+
     }
 
     return file_components;
