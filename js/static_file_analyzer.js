@@ -8252,51 +8252,55 @@ class PDF_Parser {
       let object_bytes = file_bytes.slice(object_start_index, object_end_index);
 
       // Extract object's dictionary
-      let object_dict_regex = /(?:<<|\[)([^\n\r]+)(?:>>|\])[\r\n]/gm;
-      let object_dict_match = object_dict_regex.exec(object_text+"\n");
-      let dictionary_text = object_dict_match[1].trim();
-      let dictionary_pair_regex = /\/([^\s<]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
-      let match2;
+      try {
+        let object_dict_regex = /(?:<<|\[)([^\n\r]+)(?:>>|\])[\r\n]/gm;
+        let object_dict_match = object_dict_regex.exec(object_text+"\n");
+        let dictionary_text = object_dict_match[1].trim();
+        let dictionary_pair_regex = /\/([^\s<]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
+        let match2;
 
-      while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
-        if (match2[1].toLowerCase() == "filter" ||
-            match2[1].toLowerCase() == "name" ||
-            match2[1].toLowerCase() == "subtype" ||
-            match2[1].toLowerCase() == "type") {
+        while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
+          if (match2[1].toLowerCase() == "filter" ||
+              match2[1].toLowerCase() == "name" ||
+              match2[1].toLowerCase() == "subtype" ||
+              match2[1].toLowerCase() == "type") {
 
-          // Use next key as value
-          let dict_key = match2[1];
-          match2 = dictionary_pair_regex.exec(dictionary_text);
-          object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
-        } else {
-          if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
-            // Sub dictionary
-            let sub_dict_start = match2.index + match2[1].length + 1;
-            let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
-            let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
-
-            let sub_dictionary = {};
-            let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
-            let match3;
-
-            while (match3 = sub_dictionary_regex.exec(match2[2])) {
-              if (match3[2] !== null && match3[2] !== undefined) {
-                if (match3[2].trim().endsWith(">>")) {
-                  sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
-                } else {
-                  sub_dictionary[match3[1]] = match3[2].trim();
-                }
-              } else {
-                sub_dictionary[match3[1]] = "";
-              }
-            }
-
-            object_dictionary[match2[1]] = sub_dictionary;
+            // Use next key as value
+            let dict_key = match2[1];
+            match2 = dictionary_pair_regex.exec(dictionary_text);
+            object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
           } else {
-            // Single value
-            object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? match2[2].trim() : "";
+            if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
+              // Sub dictionary
+              let sub_dict_start = match2.index + match2[1].length + 1;
+              let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
+              let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
+
+              let sub_dictionary = {};
+              let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
+              let match3;
+
+              while (match3 = sub_dictionary_regex.exec(match2[2])) {
+                if (match3[2] !== null && match3[2] !== undefined) {
+                  if (match3[2].trim().endsWith(">>")) {
+                    sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
+                  } else {
+                    sub_dictionary[match3[1]] = match3[2].trim();
+                  }
+                } else {
+                  sub_dictionary[match3[1]] = "";
+                }
+              }
+
+              object_dictionary[match2[1]] = sub_dictionary;
+            } else {
+              // Single value
+              object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? match2[2].trim() : "";
+            }
           }
         }
+      } catch(err) {
+        console.log("Error extractin PDF object dictionary: " + object_number);
       }
 
       // Extract stream text, if it exists.
