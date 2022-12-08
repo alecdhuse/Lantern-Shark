@@ -70,6 +70,8 @@ class Static_File_Analyzer {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
       file_info = this.analyze_zip(file_bytes, file_password);
+    } else if (file_bytes[0] == 0x78 && [0x01,0x5e,0x9c,0xda,0x20,0x7d,0xbb,0xf9].includes(file_bytes[1])) {
+      file_info = this.analyze_zlib(file_bytes);
     } else {
       // Probably a text or mark up/down language
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
@@ -121,6 +123,8 @@ class Static_File_Analyzer {
       return_val = {'is_valid': true, 'type': "xml"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
       return_val = {'is_valid': true, 'type': "zip"};
+    } else if (file_bytes[0] == 0x78 && [0x01,0x5e,0x9c,0xda,0x20,0x7d,0xbb,0xf9].includes(file_bytes[1])) {
+      return_val = {'is_valid': true, 'type': "zlib"};
     } else {
       // Probably a text or mark up/down language
       let file_text = "";
@@ -3573,6 +3577,21 @@ class Static_File_Analyzer {
           file_info.iocs.push(analyzed_results.iocs[f]);
       }
     }
+
+    return file_info;
+  }
+
+  /**
+   * Analyze zlib format files.
+   *
+   * @param {Uint8Array}  file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info     A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  async analyze_zlib(file_bytes) {
+    var file_info = this.get_default_file_json();
+
+    file_info.file_format = "zlib";
+    file_info.file_generic_type = "File Archive";
 
     return file_info;
   }
@@ -8222,6 +8241,7 @@ class PDF_Parser {
           });
         } else if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode") {
           // Other image types, see: https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-decoding-ccitt-data/
+          let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
 
         }
       }
