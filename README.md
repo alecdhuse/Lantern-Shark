@@ -32,6 +32,7 @@ See the table below for a list of supported file types and types of data extract
 | XLSX           | X            | X               | X               | X        | X                             |
 | XML            | X            |                 |                 |          |                               |
 | ZIP            | X            | X               | X               |          |                               |
+| ZLIB           | X            |                 |                 |          |                               |
 
 # CVE Detection
 Lantern Shark should be able to detect the following CVEs:
