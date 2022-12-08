@@ -1360,6 +1360,12 @@ class Static_File_Analyzer {
       file_text = Static_File_Analyzer.get_ascii(file_bytes);
     }
 
+    // Get an array of the embedded objects
+    let embedded_objs = PDF_Parser.get_objects(file_bytes, file_text);
+
+    // Get any embedded files and components
+    file_info.file_components = PDF_Parser.get_file_components(embedded_objs);
+
     // Identify Objects and Streams
     var metadata_objs = ["/author", "/creationdate", "/creator", "/moddate", "/producer", "/title"];
     var metadata_obj_found = false;
@@ -8181,6 +8187,112 @@ class MS_Document_Parser {
 
     return document_relations;
   }
+}
+
+class PDF_Parser {
+
+  /**
+   * Retrieves embedded files and components within the PDF.
+   *
+   * @param {array}   object_array - An array containing the embedded objects of the PDF file.
+   * @return {array}  An array containing the embedded file components of the PDF file.
+   */
+  static get_file_components(object_array) {
+    let file_components = [];
+
+    for (let i=0; i<object_array.length; i++) {
+      // Look for JPEG files
+      if (object_array[i].object_dictionary.hasOwnProperty("Filter")) {
+        if (object_array[i].object_dictionary['Filter'].toLowerCase() == "dctdecode") {
+          // Found JPEG file
+
+          // Set default name for JPEG file.
+          let obj_name = "JPEG_" + object_array[i].object_number + ".jpg";
+
+          // Search for name in object dictionary.
+          if (object_array[i].object_dictionary.hasOwnProperty("Name")) {
+            obj_name = object_array[i].object_dictionary["Name"];
+          }
+
+          file_components.push({
+            'name': obj_name,
+            'type': "jpeg",
+            'directory': false,
+            'file_bytes': object_array[i].stream_bytes
+          });
+        }
+      }
+    }
+
+    return file_components;
+  }
+
+  /**
+   * Retrieves embedded object within the PDF.
+   *
+   * @param {String}  file_text - The unicode text of the PDF file.
+   * @param {array}   file_bytes - An array of the bytes of the PDF file.
+   * @return {array}  An array containing the embedded objects of the PDF file.
+   */
+  static get_objects(file_bytes, file_text) {
+    let embedded_objs = [];
+    let match;
+    let obj_start_regex = /(\d+)\s+(\d+)\s+obj[\r\n]/gmi;
+
+    while (match = obj_start_regex.exec(file_text)) {
+      let object_number = match[1];
+      let generation_number = match[2];
+      let object_dictionary = {};
+      let object_start_index = match.index + match[0].length;
+      let object_end_index = file_text.indexOf("endobj", match.index) - 1;
+      let object_text = file_text.substring(object_start_index, object_end_index);
+      let object_bytes = file_bytes.slice(object_start_index, object_end_index);
+
+      // Extract object's dictionary
+      let dictionary_start_index = object_text.indexOf("<<");
+      let dictionary_end_index = (dictionary_start_index >= 0) ? object_text.indexOf(">>") : -1;
+      let dictionary_text = (dictionary_end_index > 0) ? object_text.substring(dictionary_start_index+2, dictionary_end_index) : "";
+      let dictionary_pair_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
+
+      while (match = dictionary_pair_regex.exec(dictionary_text)) {
+        if (match[1].toLowerCase() == "filter" ||
+            match[1].toLowerCase() == "name" ||
+            match[1].toLowerCase() == "subtype" ||
+            match[1].toLowerCase() == "type") {
+
+          // Use next key as value
+          let dict_key = match[1];
+          match = dictionary_pair_regex.exec(dictionary_text);
+          object_dictionary[dict_key] = (match[1] !== null && match[1] !== undefined) ? match[1].trim() : "";
+        } else {
+          object_dictionary[match[1]] = (match[2] !== null && match[2] !== undefined) ? match[2].trim() : "";
+        }
+      }
+
+      // Extract stream text, if it exists.
+      let stream_start_index = object_text.indexOf("stream");
+      let stream_end_index = (stream_start_index > 0) ? object_text.indexOf("endstream") : -1;
+      let stream_text = (stream_end_index > 0) ? object_text.substring(stream_start_index+7, stream_end_index) : "";
+      let stream_bytes = [];
+
+      if (stream_text.length > 0) {
+        stream_bytes = object_bytes.slice(stream_start_index+7, stream_end_index)
+      }
+
+      embedded_objs.push({
+        'object_number':     object_number,
+        'generation_number': generation_number,
+        'object_dictionary': object_dictionary,
+        'object_text':       object_text,
+        'stream_text':       stream_text,
+        'stream_bytes':      stream_bytes
+      });
+    }
+
+
+    return embedded_objs;
+  }
+
 }
 
 class RAR_Parser {
