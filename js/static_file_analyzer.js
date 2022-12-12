@@ -8288,6 +8288,15 @@ class PDF_Parser {
                 /*
                 *
                 * A predictor value from 10 to 15 indicates that a PNG predictor is in use.
+                *
+                *  1 - No prediction (the default value)
+                *  2 - TIFF Predictor 2
+                * 10 - PNG prediction (on encoding, PNG None on all rows)
+                * 11 - PNG prediction (on encoding, PNG Sub on all rows)
+                * 12 - PNG prediction (on encoding, PNG Up on all rows)
+                * 13 - PNG prediction (on encoding, PNG Average on all rows)
+                * 14 - PNG prediction (on encoding, PNG Paeth on all rows)
+                * 15 - PNG prediction (on encoding, PNG optimum)
                 */
                 let predictor = 1;
 
