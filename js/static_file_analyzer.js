@@ -4905,6 +4905,22 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Converts an integer to an array with int values 0-255.
+   *
+   * @param {integer} int_val An integer to covert.
+   * @return {array}  An array with int values 0-255 representing the value of the given integer.
+   */
+  static get_bytes_from_int(int_val, endianness = "BIG_ENDIAN") {
+    let is_litte_endian = (endianness == "BIG_ENDIAN") ? false : true;
+    let return_arr = new ArrayBuffer(4); // Allocate 4 bytes
+    let data_view = new DataView(return_arr);
+
+    data_view.setUint32(0, int_val, is_litte_endian); // byteOffset = 0
+
+    return Array.from(new Uint8Array(return_arr));
+  }
+
+  /**
    * Created the default object structure for the output of this class.
    *
    * @return {object} The defaut object structure for the analyzed file.
@@ -8242,33 +8258,114 @@ class PDF_Parser {
                 'file_bytes': object_array[i].stream_bytes
               });
             } else if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode") {
-              // Other image types, FlateDecode is a Zlib encoded data stream.
-              // See: https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-decoding-ccitt-data/
+              /*
+              *  This logic branch is for other image types encoded in FlateDecode.
+              *  FlateDecode is a Zlib encoded data stream.
+              *  The easiest conversion is to TIFF file format, so we will do that here.
+              *
+              *  References:
+              *    - https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-decoding-ccitt-data/
+              *    - https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-converting-pdf-ccitt-data-into-a-tiff/
+              */
 
+              // We need to use the pako library to decode the ZLib stream.
+              // Check to see if the pako library is available.
               if (pako !== null && pako !== undefined) {
                 let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
                 let stream_bytesU8 = new Uint8Array(object_array[i].stream_bytes);
                 let deflate_bytes = pako.inflate(stream_bytesU8);
 
+                // Set default values for image file.
+                let k = 0;
+                let is_black = false;
+                let columns = 1728;
+                let rows = 0;
+                let img_height = 0;
+                let img_width = 0;
+                let img_byte_len = 0;
+                let bits_per_sample = 8;
+
+                /*
+                *
+                * A predictor value from 10 to 15 indicates that a PNG predictor is in use.
+                */
+                let predictor = 1;
+
+                // Get the actual values for tiff file.
+                if (object_array[i].object_dictionary.hasOwnProperty("DecodeParms")) {
+                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("K")) {
+                    k = parseInt(object_array[i].object_dictionary['DecodeParms']['K']);
+                  }
+
+                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Columns")) {
+                    columns = parseInt(object_array[i].object_dictionary['DecodeParms']['Columns']);
+                  }
+
+                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Rows")) {
+                    rows = parseInt(object_array[i].object_dictionary['DecodeParms']['Rows']);
+                  } else {
+                    rows = columns;
+                  }
+
+                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Predictor")) {
+                    predictor = parseInt(object_array[i].object_dictionary['DecodeParms']['Predictor']);
+                  }
+                }
+
+                if (object_array[i].object_dictionary.hasOwnProperty("Length")) {
+                  img_byte_len = parseInt(object_array[i].object_dictionary['Length']);
+                }
+
+                if (object_array[i].object_dictionary.hasOwnProperty("Height")) {
+                  img_height = parseInt(object_array[i].object_dictionary['Height']);
+                } else if (columns > 0) {
+                  img_height = columns;
+                }
+
+                if (object_array[i].object_dictionary.hasOwnProperty("Width")) {
+                  img_width = parseInt(object_array[i].object_dictionary['Width']);
+                } else if (rows > 0) {
+                  img_width = rows;
+                }
+
+                if (object_array[i].object_dictionary.hasOwnProperty("BitsPerComponent")) {
+                  bits_per_sample = parseInt(object_array[i].object_dictionary['BitsPerComponent']);
+                }
+
+                // Write the CCITT image data at the end of the array
+                //tiff_file_bytes = tiff_file_bytes.concat(Array.from(deflate_bytes));
+
+                let image_file_bytes = [];
+
                 /*
                 file_components.push({
-                  'name': "Image_" + object_array[i].object_number + ".txt",
+                  'name': "Image_" + object_array[i].object_number + ".tif",
                   'type': "txt",
                   'directory': false,
-                  'file_bytes': deflate_bytes
+                  'file_bytes': image_file_bytes
                 });
                 */
-              } else {
-                // The Pako library is require to deflate this stream.
-                console.log("Pako library not found, component file will be added as a Zlib file.");
-                /*
+
+                // Image decode is not worring at the moment, just return the file as a zlib file.
+
                 file_components.push({
                   'name': "Image_" + object_array[i].object_number + ".zlib",
                   'type': "zlib",
                   'directory': false,
                   'file_bytes': object_array[i].stream_bytes
                 });
-                */
+
+              } else {
+                // The Pako library is require to deflate this stream.
+                console.log("Pako library not found, component file will be added as a Zlib file.");
+
+                file_components.push({
+                  'name': "Image_" + object_array[i].object_number + ".zlib",
+                  'type': "zlib",
+                  'directory': false,
+                  'file_bytes': object_array[i].stream_bytes
+                });
+
               }
 
             }
@@ -8377,7 +8474,6 @@ class PDF_Parser {
 
     return embedded_objs;
   }
-
 }
 
 class RAR_Parser {
@@ -8461,6 +8557,105 @@ class RAR_Parser {
     byte_index[0] = current_byte;
 
     return int_result;
+  }
+}
+
+class Tiff_Tools {
+
+  /**
+   * Creates the header and tags for a TIFF file given the specific options.
+   *
+   * @param {array}  options - Options used to creat header.
+   * @return {array} An array with int values of 0 to 255, representing the bit values of the created TIFF header.
+   */
+  static create_tiff_header(options) {
+    // Read in options or assign default values.
+    let k = options.hasOwnProperty("k") ? options["k"] : 0;
+    let is_black = options.hasOwnProperty("is_black") ? options["is_black"] : false;
+    let columns = options.hasOwnProperty("columns") ? options["columns"] : 1728;
+    let rows = options.hasOwnProperty("rows") ? options["rows"] : 0;
+    let img_height = options.hasOwnProperty("height") ? options["height"] : 0;
+    let img_width = options.hasOwnProperty("width") ? options["width"] : 0;
+    let img_byte_len = options.hasOwnProperty("byte_len") ? options["byte_len"] : 0;
+    let bits_per_sample = options.hasOwnProperty("bits_per_sample") ? options["bits_per_sample"] : 8;
+
+    /*
+    *  Create the TIFF file structure to append the image data stream to.
+    *
+    *  The first two bytes indicate the files byte order.
+    *    - 0x4D 0x4D is big-endian byte order
+    *    - 0x49 0x49 is little-endian byte order
+    *
+    *  The reference I am using uses big-endian, so we will use that.
+    */
+    let tiff_file_bytes = [];
+    let tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x08];
+
+    // Indicate the number of Image File Directory (IFD) entries.
+    let ifd_entry_count = 8;
+    let strip_offset = 8 + 2 + (ifd_entry_count * 12); // Header + idf count field + idf count times 12 byte length.
+    tiff_file_bytes = tif_header.concat([0, ifd_entry_count]);
+
+    /*
+    *  IFD format is:
+    *  Bytes: 0 -  1 -> Tag ID
+    *  Bytes: 2 -  3 -> Field Type
+    *  Bytes: 4 -  7 -> Type count / The number of values (not bytes)
+    *  Bytes: 8 - 11 -> Offset value
+    *
+    *  Types:
+    *  1 - Byte     - 8-bit unsigned integer.
+    *  2 - ASCII    - 8-bit byte that contains a 7-bit ASCII code; the last byte must be NUL (binary zero).
+    *  3 - SHORT    - 16-bit (2-byte) unsigned integer.
+    *  4 - LONG     - 32-bit (4-byte) unsigned integer.
+    *  5 - RATIONAL - Two LONGs: the first represents the numerator of a fraction; the second, the denominator.
+    *
+    *  Note: The entries in an IFD must be sorted in ascending order by Tag.
+    *
+    *  Reference: https://docs.fileformat.com/image/tiff/
+    */
+
+    // ImageWidth - 256 - 0x0100
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x00, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(columns, "BIG_ENDIAN")));
+
+    // ImageLength - 257 - 0x0101
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x01, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
+
+    // BitsPerSample - 258 - 0x0102
+    //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample, "BIG_ENDIAN")));
+
+    // Compression - 259 0x0103
+    if (k==0) {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x03, 0,3, 0,0,0,1, 0,1,0,0]);
+    } else if (k<0) {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x03, 0,3, 0,0,0,1, 0,2,0,0]);
+    } else {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x03, 0,3, 0,0,0,1, 0,1,0,0]);
+    }
+
+    // PhotometricInterpretation - 262 0x0106 (0 = WhiteIsZero, 1 = BlackIsZero)
+    if (is_black) {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,1,0,0]);
+    } else {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,0,0,0]);
+    }
+
+    // StripOffsets - 273 0x0111
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x11, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(strip_offset, "BIG_ENDIAN")));
+
+    // SamplesPerPixel - 277 0x115
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x15, 0,3, 0,0,0,1, 0,3,0,0]);
+
+    // RowsPerStrip - 278 0x0116 (Use image height)
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x16, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
+
+    // StripByteCounts - 279 0x0117 (Use Image byte length, for a single strip)
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x17, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_byte_len, "BIG_ENDIAN")));
+
+    // Write next IOD offset zero as no other table
+    tiff_file_bytes = tiff_file_bytes.concat([0,0,0,0]);
+
+    return tiff_file_bytes;
   }
 }
 
