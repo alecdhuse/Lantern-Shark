@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2022 Alec Dhuse. All rights reserved.
+ Copyright (c) 2023 Alec Dhuse. All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -43,6 +43,8 @@ class Static_File_Analyzer {
 
     if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
       file_info = this.analyze_ace(file_bytes);
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
+      file_info = this.analyze_cbf(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
       file_info = this.analyze_exe(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [31,139])) {
@@ -64,8 +66,9 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_png(file_bytes, file_text);
-    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
-      file_info = this.analyze_cbf(file_bytes);
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x78,0x9f,0x3e,0x22])) {
+      // TNEF
+
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
@@ -119,6 +122,8 @@ class Static_File_Analyzer {
       return_val = {'is_valid': true, 'type': "png"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
       return_val = {'is_valid': true, 'type': "cbf"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x78,0x9f,0x3e,0x22])) {
+      return_val = {'is_valid': true, 'type': "tnef"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       return_val = {'is_valid': true, 'type': "xml"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
