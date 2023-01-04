@@ -1820,48 +1820,80 @@ class Static_File_Analyzer {
     };
 
     let att_msg_props = {
-      0x05900600: {'name': "PidAttachment", 'has_props': false, 'val_type': "int"},
-      0x02011d0c: {'name': "PidTagSenderEmailAddress", 'has_props': true, 'val_type': "str"},
-      0x02017100: {'name': "PidTagConversationIndex", 'has_props': true, 'val_type': "int"},
-      0x02900600: {'name': "PidAttachRendData", 'has_props': false, 'val_type': "int"},
+      0x00000600: {'name': "PidTagReceivedRepresenting", 'has_props': false, 'val_type': "int"},
+      0x00060700: {'name': "PidTagOriginalMessageClass", 'has_props': false, 'val_type': "int"},
+      0x00800000: {'name': "PidTagSender", 'has_props': false, 'val_type': "int"},
+      0x01000600: {'name': "PidTagSentRepresenting", 'has_props': false, 'val_type': "int"},
       0x01900600: {'name': "PidAttachTransportFilename", 'has_props': false, 'val_type': "int"},
       0x01900600: {'name': "PidTagAttachTransportName", 'has_props': false, 'val_type': "int"},
-      0x12800300: {'name': "PidTagCreationTime", 'has_props': false, 'val_type': "int"},
-      0x11800600: {'name': "PidTagAttachRendering", 'has_props': false, 'val_type': "int"},
-      0x10800100: {'name': "PidTagAttachFilename", 'has_props': false, 'val_type': "int"},
-      0x0F800600: {'name': "PidTagAttachDataBinary", 'has_props': false, 'val_type': "int"},
-      0x09000400: {'name': "PidTagResponseRequested", 'has_props': false, 'val_type': "int"},
-      0x08000500: {'name': "PidTagOwnerAppointmentId", 'has_props': false, 'val_type': "int"},
-      0x07000300: {'name': "PidTagEndDate", 'has_props': false, 'val_type': "int"},
-      0x06000300: {'name': "PidTagStartDate", 'has_props': false, 'val_type': "int"},
       0x02000600: {'name': "PidTagReceivedRepresentingEntryId", 'has_props': false, 'val_type': "int"},
-      0x01000600: {'name': "PidTagSentRepresenting", 'has_props': false, 'val_type': "int"},
-      0x00000600: {'name': "PidTagReceivedRepresenting", 'has_props': false, 'val_type': "int"},
-      0x1f007800: {'name': "PidTagReceivedRepresentingEmailAddress", 'has_props': false, 'val_type': "int"},
-      0x00060700: {'name': "PidTagOriginalMessageClass", 'has_props': false, 'val_type': "int"},
-      0x0b002300: {'name': "PidTagOriginatorDeliveryReportRequested", 'has_props': false, 'val_type': "int"},
-      0x0b002900: {'name': "PidTagReadReceiptRequested", 'has_props': false, 'val_type': "int"},
-      0x04900600: {'name': "PidTagMessageRecipients", 'has_props': false, 'val_type': "int"},
-      0x20800300: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "int"},
-      0x0D800400: {'name': "PidTagImportance", 'has_props': false, 'val_type': "int"},
-      0x0C800200: {'name': "PidTagBody", 'has_props': false, 'val_type': "int"},
-      0x09800100: {'name': "PidTagSearchKey", 'has_props': false, 'val_type': "int"},
-      0x07800600: {'name': "PidTagMessageFlags", 'has_props': false, 'val_type': "int"},
-      0x06800300: {'name': "PidTagMessageDeliveryTime", 'has_props': false, 'val_type': "int"},
-      0x04800100: {'name': "PidTagSubject", 'has_props': false, 'val_type': "int"},
-      0x00800000: {'name': "PidTagSender", 'has_props': false, 'val_type': "int"},
-      0x08800700: {'name': "PidTagMessageClass", 'has_props': false, 'val_type': "int"},
-      0x0b000200: {'name': "PidTagAlternateRecipientAllowed", 'has_props': false, 'val_type': "int"},
+      0x02010910: {'name': "PidTagRtfCompressed", 'has_props': true, 'val_type': "bytes"},
+      0x02011d0c: {'name': "PidTagSenderEmailAddress", 'has_props': true, 'val_type': "str"},
+      0x02013f00: {'name': "PidTagReceivedByEntryId", 'has_props': false, 'val_type': "int"},
+      0x02014300: {'name': "PidTagReceivedRepresentingEntryId", 'has_props': false, 'val_type': "int"},
+      0x02017f00: {'name': "PidTagTnefCorrelationKey", 'has_props': true, 'val_type': "bytes"},
+      0x0201f010: {'name': "PtypBinary", 'has_props': true, 'val_type': "bytes"},
+      0x0201f93f: {'name': "PidTagCreatorEntryId", 'has_props': true, 'val_type': "bytes"},
+      0x0201fb3f: {'name': "PidTagLastModifierEntryId", 'has_props': true, 'val_type': "bytes"},
+      0x02017100: {'name': "PidTagConversationIndex", 'has_props': true, 'val_type': "bytes"},
+      0x02900600: {'name': "PidAttachRendData", 'has_props': false, 'val_type': "int"},
+      0x03000959: {'name': "PidTagMessageEditorFormat", 'has_props': false, 'val_type': "bytes"},
+      0x03007640: {'name': "PidTagSentRepresentingFlags", 'has_props': false, 'val_type': "bytes"},
+      0x03001a40: {'name': "PidTagSentRepresentingFlags", 'has_props': false, 'val_type': "bytes"},
       0x03002600: {'name': "PidTagPriority", 'has_props': false, 'val_type': "int"},
       0x03003600: {'name': "PidTagSensitivity", 'has_props': false, 'val_type': "int"},
-      0x40003900: {'name': "PidTagClientSubmitTime", 'has_props': false, 'val_type': "int"},
+      0x03008010: {'name': "PidTagIconIndex", 'has_props': false, 'val_type': "bytes"},
+      0x0300de3f: {'name': "PidTagInternetCodepage", 'has_props': false, 'val_type': "int"},
+      0x0300f13f: {'name': "PidTagMessageLocaleId", 'has_props': false, 'val_type': "int"},
+      0x0300fd3f: {'name': "PidTagMessageCodepage", 'has_props': false, 'val_type': "int"},
+      0x04800100: {'name': "PidTagSubject", 'has_props': false, 'val_type': "int"},
+      0x04900600: {'name': "PidTagMessageRecipients", 'has_props': false, 'val_type': "int"},
+      0x05900600: {'name': "PidAttachment", 'has_props': false, 'val_type': "int"},
+      0x06000300: {'name': "PidTagStartDate", 'has_props': false, 'val_type': "int"},
+      0x06800300: {'name': "PidTagMessageDeliveryTime", 'has_props': false, 'val_type': "int"},
+      0x07000300: {'name': "PidTagEndDate", 'has_props': false, 'val_type': "int"},
+      0x07800600: {'name': "PidTagMessageFlags", 'has_props': false, 'val_type': "int"},
+      0x08000500: {'name': "PidTagOwnerAppointmentId", 'has_props': false, 'val_type': "int"},
+      0x09000400: {'name': "PidTagResponseRequested", 'has_props': false, 'val_type': "int"},
+      0x09800100: {'name': "PidTagSearchKey", 'has_props': false, 'val_type': "int"},
+      0x0b000200: {'name': "PidTagAlternateRecipientAllowed", 'has_props': false, 'val_type': "int"},
+      0x0b002300: {'name': "PidTagOriginatorDeliveryReportRequested", 'has_props': false, 'val_type': "bool"},
+      0x0b002900: {'name': "PidTagReadReceiptRequested", 'has_props': false, 'val_type': "bool"},
+      0x0b008781: {'name': "PidLidAgingDontAgeMe", 'has_props': true, 'val_type': "bytes"},
+      0x0b00f410: {'name': "PidTagAttributeHidden", 'has_props': false, 'val_type': "bool"},
+      0x0b00f510: {'name': "PtypBoolean", 'has_props': false, 'val_type': "bool"},
+      0x0b00f610: {'name': "PidTagAttributeReadOnly", 'has_props': false, 'val_type': "bool"},
+      0x0c800200: {'name': "PidTagBody", 'has_props': false, 'val_type': "int"},
+      0x0d800400: {'name': "PidTagImportance", 'has_props': false, 'val_type': "int"},
+      0x0f800600: {'name': "PidTagAttachDataBinary", 'has_props': false, 'val_type': "int"},
+      0x10800100: {'name': "PidTagAttachFilename", 'has_props': false, 'val_type': "int"},
+      0x11800600: {'name': "PidTagAttachRendering", 'has_props': false, 'val_type': "int"},
+      0x12800300: {'name': "PidTagCreationTime", 'has_props': false, 'val_type': "date"},
+      0x08800700: {'name': "PidTagMessageClass", 'has_props': false, 'val_type': "int"},
+      0x1e000810: {"name": "?Body?", 'has_props': true, 'val_type': "str"},
+      0x1e001a0c: {'name': "PidTagSenderName", 'has_props': true, 'val_type': "str"},
+      0x1e003040: {'name': "PtypString", 'has_props': true, 'val_type': "str"},
+      0x1e003140: {'name': "PtypString", 'has_props': true, 'val_type': "str"},
+      0x1e003440: {'name': "PtypString", 'has_props': true, 'val_type': "str"},
+      0x1e003540: {'name': "PtypString", 'has_props': true, 'val_type': "str"},
+      0x1e003840: {'name': "PtypString", 'has_props': true, 'val_type': "str"},
+      0x1e003940: {'name': "PtypString", 'has_props': true, 'val_type': "str"},
+      0x1e001d0e: {'name': "PidTagNormalizedSubject", 'has_props': true, 'val_type': "str"},
+      0x1e003510: {'name': "PidTagInternetMessageId", 'has_props': true, 'val_type': "str"},
       0x1e003d00: {'name': "PidTagSubjectPrefix", 'has_props': false, 'val_type': "int"},
       0x1e004000: {'name': "PidTagReceivedByName", 'has_props': false, 'val_type': "int"},
       0x1e004400: {'name': "PidTagReceivedRepresentingName", 'has_props': false, 'val_type': "int"},
       0x1e007000: {'name': "PidTagConversationTopic", 'has_props': true, 'val_type': "str"},
-      0x02013f00: {'name': "PidTagReceivedByEntryId", 'has_props': false, 'val_type': "int"},
-      0x02014300: {'name': "PidTagReceivedRepresentingEntryId", 'has_props': false, 'val_type': "int"},
-      0x1f000230: {'name': "PidTagReceivedByAddressType", 'has_props': false, 'val_type': "int"}
+      0x1e007600: {'name': "PidTagReceivedByEmailAddress", 'has_props': true, 'val_type': "str"},
+      0x1e007700: {'name': "PidTagReceivedRepresentingAddressType", 'has_props': true, 'val_type': "str"},
+      0x1e00f83f: {'name': "PidTagCreatorName", 'has_props': true, 'val_type': "str"},
+      0x1e00fa3f: {'name': "PidTagCreatorName", 'has_props': true, 'val_type': "str"},
+      0x1f000230: {'name': "PidTagReceivedByAddressType", 'has_props': false, 'val_type': "str"},
+      0x1f007800: {'name': "PidTagReceivedRepresentingEmailAddress", 'has_props': true, 'val_type': "str"},
+      0x20800300: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "int"},
+      0x40000730: {'name': "PidTagCreationTime", 'has_props': false, 'val_type': "date"},
+      0x40000830: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "date"},
+      0x40003900: {'name': "PidTagClientSubmitTime", 'has_props': false, 'val_type': "date"}
     };
 
     var other_codes = {
@@ -1887,7 +1919,7 @@ class Static_File_Analyzer {
     let msg_attribute_chk = 0;
     let msg_attribute_chk_calc = 0;
 
-    while (msg_attribute_chk == msg_attribute_chk_calc) {
+    while (current_byte < file_bytes.length) {
       let msg_attribute_bytes = file_bytes.slice(current_byte, current_byte+=5);
       let msg_attribute_id   = Static_File_Analyzer.get_int_from_bytes(msg_attribute_bytes, "BIG_ENDIAN");
       let msg_attribute_name = tnef_attributes.hasOwnProperty(msg_attribute_id) ? tnef_attributes[msg_attribute_id] : msg_attribute_bytes.join(",");
@@ -1924,7 +1956,17 @@ class Static_File_Analyzer {
               let sub_property_padding = 4 - (sub_property_size % 4);
               let padding_bytes = msg_attribute_val.slice(current_mp_byte, current_mp_byte+=sub_property_padding);
 
-              if (message_properties_obj.val_type == "int") {
+              if (message_properties_obj.val_type == "bool") {
+                if (Static_File_Analyzer.get_int_from_bytes(sub_property_bytes, "LITTLE_ENDIAN") == 0) {
+                  sub_property_val = false;
+                } else {
+                  sub_property_val = true;
+                }
+              } else if (message_properties_obj.val_type == "bytes") {
+                sub_property_val = sub_property_bytes;
+              } else if (message_properties_obj.val_type == "date") {
+                sub_property_val = this.get_eight_byte_date(sub_property_bytes, "LITTLE_ENDIAN"); // Date in nano seconds
+              } else if (message_properties_obj.val_type == "int") {
                 sub_property_val = Static_File_Analyzer.get_int_from_bytes(sub_property_bytes, "LITTLE_ENDIAN");
               } else if (message_properties_obj.val_type == "str") {
                 sub_property_val = Static_File_Analyzer.get_string_from_array(sub_property_bytes);
@@ -1941,6 +1983,8 @@ class Static_File_Analyzer {
         }
 
         console.log(message_properties);
+      } else {
+
       }
 
       console.log(msg_attribute_name + " -> " + msg_attribute_val);
