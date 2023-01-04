@@ -67,8 +67,7 @@ class Static_File_Analyzer {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_png(file_bytes, file_text);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x78,0x9f,0x3e,0x22])) {
-      // TNEF
-
+      file_info = this.analyze_tnef(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
@@ -1786,6 +1785,138 @@ class Static_File_Analyzer {
       }
 
       hex_data_match = hex_data_regex.exec(file_text_ascii);
+    }
+
+    return file_info;
+  }
+
+  /**
+   * Extracts meta data and other information from TNEF formatted files.
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  async analyze_tnef(file_bytes) {
+    var file_info = this.get_default_file_json();
+
+    file_info.file_format = "tnef";
+    file_info.file_generic_type = "Message";
+
+    // This format does not support encryption
+    file_info.file_encrypted = "false";
+    file_info.file_encryption_type = "none";
+
+    let tnef_attributes = {
+      0x0106900800: "attTnefVersion",
+      0x0107900600: "attOemCodepage",
+      0x0108800700: "attMessageClass",
+      0x010d800400: "attPriority",
+      0x0104800100: "attSubject",
+      0x0105800300: "attDateSent",
+      0x0120800300: "attDateModified",
+      0x0109800100: "attMessageID",
+      0x0103900600: "attMsgProps",
+      0x0104900600: "attMsgProps",
+    };
+
+    let att_msg_props = {
+      0x05900600: "PidAttachment",
+      0x02900600: "PidAttachRendData",
+      0x01900600: "PidAttachTransportFilename",
+      0x01900600: "PidTagAttachTransportName",
+      0x12800300: "PidTagCreationTime",
+      0x11800600: "PidTagAttachRendering",
+      0x10800100: "PidTagAttachFilename",
+      0x0F800600: "PidTagAttachDataBinary",
+      0x09000400: "PidTagResponseRequested",
+      0x08000500: "PidTagOwnerAppointmentId",
+      0x07000300: "PidTagEndDate",
+      0x06000300: "PidTagStartDate",
+      0x02000600: "PidTagReceivedRepresentingEntryId",
+      0x01000600: "PidTagSentRepresenting",
+      0x00000600: "PidTagReceivedRepresenting",
+      0x1f007800: "PidTagReceivedRepresentingEmailAddress",
+      0x00060700: "PidTagOriginalMessageClass",
+      0x0b002300: "PidTagOriginatorDeliveryReportRequested",
+      0x0b002900: "PidTagReadReceiptRequested",
+      0x04900600: "PidTagMessageRecipients",
+      0x20800300: "PidTagLastModificationTime",
+      0x0D800400: "PidTagImportance",
+      0x0C800200: "PidTagBody",
+      0x09800100: "PidTagSearchKey",
+      0x07800600: "PidTagMessageFlags",
+      0x06800300: "PidTagMessageDeliveryTime",
+      0x04800100: "PidTagSubject",
+      0x00800000: "PidTagSender",
+      0x08800700: "PidTagMessageClass",
+      0x0b000200: "PidTagAlternateRecipientAllowed",
+      0x03002600: "PidTagPriority",
+      0x03003600: "PidTagSensitivity",
+      0x40003900: "PidTagClientSubmitTime",
+      0x1e003d00: "PidTagSubjectPrefix",
+      0x1e004000: "PidTagReceivedByName",
+      0x1e004400: "PidTagReceivedRepresentingName",
+      0x1e007000: "PidTagConversationTopic",
+      0x02013f00: "PidTagReceivedByEntryId",
+      0x02014300: "PidTagReceivedRepresentingEntryId",      
+      0x1f000230: "PidTagReceivedByAddressType"
+    };
+
+    var other_codes = {
+      '1f00fe39': {'count': true, 'data_length': true, 'padding': false, 'val_type': "str", 'extra_data': 0, 'comment': ""},
+      '1f00e55f': {'count': true, 'data_length': true, 'padding': true, 'val_type': "str", 'extra_data': 0, 'comment': ""},
+      '0201240c': {'count': true, 'data_length': true, 'padding': false, 'val_type': "hex", 'extra_data': 0, 'comment': ""},
+      '0201250c': {'count': true, 'data_length': true, 'padding': false, 'val_type': "hex", 'extra_data': 0, 'comment': ""},
+      '1f00203a': {'count': true, 'data_length': true, 'padding': true, 'val_type': "str", 'extra_data': 0, 'comment': "unknown - friendly name?"},
+      '03000539': {'count': false, 'data_length': false, 'padding': false, 'val_type': "hex", 'extra_data': 12, 'comment': ""},
+      '0300fe0f': {'count': false, 'data_length': true, 'padding': true, 'val_type': "hex", 'extra_data': 0, 'comment': ""},
+      '0300fd5f': {'count': true, 'data_length': true, 'padding': false, 'val_type': "str", 'extra_data': 0, 'comment': "message body"},
+      '02017f00': {'count': true, 'data_length': true, 'padding': true, 'val_type': "str", 'extra_data': 1, 'comment': "message id maybe?"},
+      '0f000000': {'count': false, 'data_length': false, 'padding': false, 'val_type': "none", 'extra_data': 0, 'comment': ""},
+      '0300150c': {'count': true, 'data_length': false, 'padding': false, 'val_type': "none", 'extra_data': 0, 'comment': ""},
+      '1f000230': {'count': true, 'data_length': true, 'padding': false, 'val_type': "str", 'extra_data': 0, 'comment': "PidTagReceivedByAddressType maybe?"},
+      '02011310': {'count': true, 'data_length': true, 'padding': false, 'val_type': "str", 'extra_data': 0, 'comment': ""}
+    };
+
+    let attach_key = this.get_two_byte_int(file_bytes.slice(4,6), "LITTLE_ENDIAN");
+    let current_byte = 6;
+    let attribute_count = 0;
+
+    let msg_attribute_chk = 0;
+    let msg_attribute_chk_calc = 0;
+
+    while (msg_attribute_chk == msg_attribute_chk_calc) {
+      let msg_attribute_bytes = file_bytes.slice(current_byte, current_byte+=5);
+      let msg_attribute_id   = Static_File_Analyzer.get_int_from_bytes(msg_attribute_bytes, "BIG_ENDIAN");
+      let msg_attribute_name = tnef_attributes.hasOwnProperty(msg_attribute_id) ? tnef_attributes[msg_attribute_id] : msg_attribute_bytes.join(",");
+      let msg_attribute_len  = this.get_four_byte_int(file_bytes.slice(current_byte, current_byte+=4), "LITTLE_ENDIAN");
+      let msg_attribute_val  = file_bytes.slice(current_byte, current_byte+=msg_attribute_len);
+
+      msg_attribute_chk = this.get_two_byte_int(file_bytes.slice(current_byte, current_byte+=2), "LITTLE_ENDIAN");
+      msg_attribute_chk_calc = Static_File_Analyzer.calculate_checksum(msg_attribute_val);
+
+      if (msg_attribute_name == "attTnefVersion") {
+        msg_attribute_val = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val, "LITTLE_ENDIAN");
+      } else if (msg_attribute_name == "attMessageClass") {
+        msg_attribute_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val);
+      } else if (msg_attribute_name == "attMsgProps") {
+        let message_properties = [];
+        let current_mp_byte = 0;
+        let message_properties_count = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(current_mp_byte, current_mp_byte+=4), "LITTLE_ENDIAN");
+
+        for (let i=0; i<message_properties_count; i++) {
+          let message_properties_bytes = msg_attribute_val.slice(current_mp_byte, current_mp_byte +=4);
+          let message_properties_id    = Static_File_Analyzer.get_int_from_bytes(message_properties_bytes, "BIG_ENDIAN");
+          let message_properties_name  = att_msg_props.hasOwnProperty(message_properties_id) ? att_msg_props[message_properties_id] : message_properties_bytes.join(",");
+          let message_properties_val   = msg_attribute_val.slice(current_mp_byte, current_mp_byte +=4);
+
+          message_properties.push({'name': message_properties_name, 'val': message_properties_val.join(",")});
+        }
+
+        console.log(message_properties);
+      }
+
+      console.log(msg_attribute_name + " -> " + msg_attribute_val);
     }
 
     return file_info;
@@ -3644,6 +3775,23 @@ class Static_File_Analyzer {
 			nUint6 === 63 ? 47          :
 			                65);
 	}
+
+  /**
+   * Calculates the checksum of an aray of bytes.
+   *
+   * @param {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {integer}   The checksum value of the given bytes.
+   */
+  static calculate_checksum(bytes) {
+    let sum = 0;
+
+    for (var i=0; i<bytes.length; i++) {
+      sum += bytes[i];
+    }
+
+    sum = sum % 65535;
+    return sum;
+  }
 
   /**
    * Converts a base64 encoded string to a byte array.
