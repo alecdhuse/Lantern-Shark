@@ -1822,7 +1822,8 @@ class Static_File_Analyzer {
       0x0103900600: "attMsgProps",
       0x0104900600: "attMsgProps",
       0x020f800600: "attAttachData",
-      0x0210800100: "attAttachTitle"
+      0x0210800100: "attAttachTitle",
+      0x0205900600: "attAttachment"
     };
 
     let att_msg_props = {
@@ -1845,10 +1846,11 @@ class Static_File_Analyzer {
       0x02900600: {'name': "PidAttachRendData", 'has_props': false, 'val_type': "int"},
       0x03000959: {'name': "PidTagMessageEditorFormat", 'has_props': false, 'val_type': "bytes"},
       0x03007640: {'name': "PidTagSentRepresentingFlags", 'has_props': false, 'val_type': "bytes"},
-      0x03001580: {'name': "?", 'has_props': false, 'val_type': "x28"},
-      0x03001b80: {'name': "?", 'has_props': false, 'val_type': "x28"},
-      0x03002280: {'name': "?", 'has_props': false, 'val_type': "x28"},
+      0x03001580: {'name': "Unknown 0x03001580", 'has_props': false, 'val_type': "x28"},
+      0x03001b80: {'name': "Unknown 0x03001b80", 'has_props': false, 'val_type': "x28"},
+      0x03002280: {'name': "Unknown 0x03002280", 'has_props': false, 'val_type': "x28"},
       0x03001a40: {'name': "PidTagSentRepresentingFlags", 'has_props': false, 'val_type': "bytes"},
+      0x0300200e: {'name': "PidTagAttachSize", 'has_props': false, 'val_type': "int"},
       0x03002600: {'name': "PidTagPriority", 'has_props': false, 'val_type': "int"},
       0x03003600: {'name': "PidTagSensitivity", 'has_props': false, 'val_type': "int"},
       0x03008010: {'name': "PidTagIconIndex", 'has_props': false, 'val_type': "bytes"},
@@ -1867,8 +1869,8 @@ class Static_File_Analyzer {
       0x09000400: {'name': "PidTagResponseRequested", 'has_props': false, 'val_type': "int"},
       0x09800100: {'name': "PidTagSearchKey", 'has_props': false, 'val_type': "int"},
       0x0b000200: {'name': "PidTagAlternateRecipientAllowed", 'has_props': false, 'val_type': "int"},
-      0x0b001380: {'name': "?", 'has_props': false, 'val_type': "x28"},
-      0x0b001880: {'name': "?", 'has_props': false, 'val_type': "x28"},
+      0x0b001380: {'name': "Unknown 0x0b001380", 'has_props': false, 'val_type': "x28"},
+      0x0b001880: {'name': "Unknown 0x0b001880", 'has_props': false, 'val_type': "x28"},
       0x0b002300: {'name': "PidTagOriginatorDeliveryReportRequested", 'has_props': false, 'val_type': "bool"},
       0x0b002900: {'name': "PidTagReadReceiptRequested", 'has_props': false, 'val_type': "bool"},
       0x0b008781: {'name': "PidLidAgingDontAgeMe", 'has_props': true, 'val_type': "bytes"},
@@ -1878,9 +1880,11 @@ class Static_File_Analyzer {
       0x0c800200: {'name': "PidTagBody", 'has_props': false, 'val_type': "int"},
       0x0d800400: {'name': "PidTagImportance", 'has_props': false, 'val_type': "int"},
       0x0f800600: {'name': "PidTagAttachDataBinary", 'has_props': false, 'val_type': "int"},
-      0x10800100: {'name': "PidTagAttachFilename", 'has_props': false, 'val_type': "int"},
+      0x10800100: {'name': "PidTagAttachFilename", 'has_props': true, 'val_type': "str"}, // incorrect?
       0x11800600: {'name': "PidTagAttachRendering", 'has_props': false, 'val_type': "int"},
       0x12800300: {'name': "PidTagCreationTime", 'has_props': false, 'val_type': "date"},
+      0x1e000130: {"name": "PidTagAttachFilename", 'has_props': true, 'val_type': "str"},
+      0x1e000337: {"name": "PidTagAttachExtension", 'has_props': true, 'val_type': "str"},
       0x1e000810: {"name": "?Body?", 'has_props': true, 'val_type': "str"},
       0x1e001a0c: {'name': "PidTagSenderName", 'has_props': true, 'val_type': "str"},
       0x1e003040: {'name': "PtypString", 'has_props': true, 'val_type': "str"},
@@ -1894,7 +1898,7 @@ class Static_File_Analyzer {
       0x1e003d00: {'name': "PidTagSubjectPrefix", 'has_props': true, 'val_type': "int"},
       0x1e004000: {'name': "PidTagReceivedByName", 'has_props': false, 'val_type': "int"},
       0x1e004400: {'name': "PidTagReceivedRepresentingName", 'has_props': false, 'val_type': "int"},
-      0x1e004480: {'name': "?", 'has_props': false, 'val_type': "x28"},
+      0x1e004480: {'name': "Unknown 0x1e004480", 'has_props': false, 'val_type': "x28"},
       0x1e007000: {'name': "PidTagConversationTopic", 'has_props': true, 'val_type': "str"},
       0x1e007600: {'name': "PidTagReceivedByEmailAddress", 'has_props': true, 'val_type': "str"},
       0x1e007700: {'name': "PidTagReceivedRepresentingAddressType", 'has_props': true, 'val_type': "str"},
@@ -1902,6 +1906,7 @@ class Static_File_Analyzer {
       0x1e00fa3f: {'name': "PidTagCreatorName", 'has_props': true, 'val_type': "str"},
       0x1f000230: {'name': "PidTagReceivedByAddressType", 'has_props': false, 'val_type': "str"},
       0x1f007800: {'name': "PidTagReceivedRepresentingEmailAddress", 'has_props': true, 'val_type': "str"},
+      0x02010237: {'name': "attAttach-?-Date", 'has_props': false, 'val_type': "date"},
       0x20800300: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "int"},
       0x40000730: {'name': "PidTagCreationTime", 'has_props': false, 'val_type': "date"},
       0x40000830: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "date"},
@@ -1953,6 +1958,73 @@ class Static_File_Analyzer {
             'file_bytes': current_attachment.data
           });
         }
+      } else if (msg_attribute_name == "attAttachment") {
+        let attachment_properties = [];
+        let current_ap_byte = 0;
+        let attachment_properties_count = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(current_ap_byte, current_ap_byte+=4), "LITTLE_ENDIAN");
+
+        for (let i=0; i<attachment_properties_count; i++) {
+          let attachment_properties_bytes = msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4);
+          let attachment_properties_id    = Static_File_Analyzer.get_int_from_bytes(attachment_properties_bytes, "BIG_ENDIAN");
+          let attachment_properties_obj   = att_msg_props.hasOwnProperty(attachment_properties_id) ? att_msg_props[attachment_properties_id] : {'name': attachment_properties_bytes.join(","), 'has_props': false, 'val_type': "bytes"};
+          let attachment_properties_val   = 0;
+
+          if (attachment_properties_obj.has_props === true) {
+            attachment_properties_val = [];
+
+            let sub_properties_count = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(current_ap_byte, current_ap_byte+=4), "LITTLE_ENDIAN");
+            let sub_property_size = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(current_ap_byte, current_ap_byte+=4), "LITTLE_ENDIAN");
+
+            for (let i2=0; i2<sub_properties_count; i2++) {
+              let sub_property_val = 0;
+              let sub_property_bytes = msg_attribute_val.slice(current_ap_byte, current_ap_byte+=sub_property_size);
+              let sub_property_padding = 4 - (sub_property_size % 4);
+              let padding_bytes = msg_attribute_val.slice(current_ap_byte, current_ap_byte+=sub_property_padding);
+
+              if (attachment_properties_obj.val_type == "bool") {
+                if (Static_File_Analyzer.get_int_from_bytes(sub_property_bytes, "LITTLE_ENDIAN") == 0) {
+                  sub_property_val = false;
+                } else {
+                  sub_property_val = true;
+                }
+              } else if (attachment_properties_obj.val_type == "bytes") {
+                sub_property_val = sub_property_bytes;
+              } else if (attachment_properties_obj.val_type == "date") {
+                sub_property_val = this.get_eight_byte_date(sub_property_bytes, "LITTLE_ENDIAN"); // Date in nano seconds
+              } else if (attachment_properties_obj.val_type == "int") {
+                sub_property_val = Static_File_Analyzer.get_int_from_bytes(sub_property_bytes, "LITTLE_ENDIAN");
+              } else if (attachment_properties_obj.val_type == "str") {
+                sub_property_val = Static_File_Analyzer.get_string_from_array(sub_property_bytes.slice(0,-1));
+              }
+
+              attachment_properties_val.push(sub_property_val);
+            }
+          } else {
+            if (attachment_properties_obj.val_type == "bool") {
+              if (Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4), "LITTLE_ENDIAN") == 0) {
+                attachment_properties_val = false;
+              } else {
+                attachment_properties_val = true;
+              }
+            } else if (attachment_properties_obj.val_type == "bytes") {
+              attachment_properties_val = msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4);
+            } else if (attachment_properties_obj.val_type == "date") {
+              attachment_properties_val = this.get_eight_byte_date(msg_attribute_val.slice(current_ap_byte, current_ap_byte +=8), "LITTLE_ENDIAN"); // Date in nano seconds
+            } else if (attachment_properties_obj.val_type == "int") {
+              attachment_properties_val = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4), "LITTLE_ENDIAN");
+            } else if (attachment_properties_obj.val_type == "str") {
+              attachment_properties_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4));
+            } else if (attachment_properties_obj.val_type == "x28") {
+              attachment_properties_val = msg_attribute_val.slice(current_ap_byte, current_ap_byte +=28);
+            } else {
+              attachment_properties_val = msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4);
+            }
+          }
+
+          attachment_properties.push({'name': attachment_properties_obj.name, 'val': attachment_properties_val});
+        }
+
+        console.log(attachment_properties);
       } else if (msg_attribute_name == "attMsgProps") {
         let message_properties = [];
         let current_mp_byte = 0;
