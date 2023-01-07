@@ -1817,6 +1817,7 @@ class Static_File_Analyzer {
       0x010d800400: "attPriority",
       0x0104800100: "attSubject",
       0x0105800300: "attDateSent",
+      0x0106800300: "attDateRecd",
       0x0120800300: "attDateModified",
       0x0109800100: "attMessageID",
       0x0103900600: "attMsgProps",
@@ -1825,7 +1826,7 @@ class Static_File_Analyzer {
       0x0210800100: "attAttachTitle",
       0x0205900600: "attAttachment",
       0x0213800300: "attAttachModifyDate",
-      0x0106800300: "attDateRecd"
+      0x0202900600: "attAttachRenddata"
     };
 
     let att_msg_props = {
@@ -1946,6 +1947,25 @@ class Static_File_Analyzer {
         let code_page_prm = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(0,4), "LITTLE_ENDIAN");
         let code_page_sec = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(4,8), "LITTLE_ENDIAN");
         msg_attribute_val = [code_page_prm, code_page_sec];
+      } else if (msg_attribute_name == "attAttachRenddata") {
+        let attach_type = msg_attribute_val[0]; // 1 is file, 2 is OLe
+        let attach_pos = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(2,6), "LITTLE_ENDIAN");
+        let render_width = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(6,8), "LITTLE_ENDIAN");
+        let render_height = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(8,10), "LITTLE_ENDIAN");
+        let data_flags = msg_attribute_val[10];
+
+        attach_type = (attach_type == 1) ? "file" : "Ole";
+        data_flags = (data_flags == 0) ? "FileDataDefault" : "FileDataMacBinary";
+
+        msg_attribute_val = {
+          'AttachType': attach_type,
+          'AttachPosition': attach_pos,
+          'RenderWidth': render_width,
+          'RenderHeight': render_height,
+          'DataFlags': data_flags
+        };
+
+        console.log(msg_attribute_val);
       } else if (msg_attribute_name == "attAttachData") {
         current_attachment = {'filename': "unknown", 'data': msg_attribute_val};
       } else if (msg_attribute_name == "attAttachTitle") {
