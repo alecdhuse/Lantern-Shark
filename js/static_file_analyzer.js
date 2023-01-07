@@ -1823,7 +1823,9 @@ class Static_File_Analyzer {
       0x0104900600: "attMsgProps",
       0x020f800600: "attAttachData",
       0x0210800100: "attAttachTitle",
-      0x0205900600: "attAttachment"
+      0x0205900600: "attAttachment",
+      0x0213800300: "attAttachModifyDate",
+      0x0106800300: "attDateRecd"
     };
 
     let att_msg_props = {
@@ -1846,7 +1848,7 @@ class Static_File_Analyzer {
       0x02900600: {'name': "PidAttachRendData", 'has_props': false, 'val_type': "int"},
       0x03000537: {'name': "Unknown 0x03000537", 'has_props': false, 'val_type': "int"},
       0x03000959: {'name': "PidTagMessageEditorFormat", 'has_props': false, 'val_type': "bytes"},
-      0x03000b37: {'name': "Unknown 0x03000b37", 'has_props': false, 'val_type': "int"},
+      0x03000b37: {'name': "Unknown 0x03000b37", 'has_props': false, 'val_type': "date"}, //date?
       0x03007640: {'name': "PidTagSentRepresentingFlags", 'has_props': false, 'val_type': "bytes"},
       0x03001580: {'name': "Unknown 0x03001580", 'has_props': false, 'val_type': "x28"},
       0x03001b80: {'name': "Unknown 0x03001b80", 'has_props': false, 'val_type': "x28"},
@@ -1993,7 +1995,7 @@ class Static_File_Analyzer {
               } else if (attachment_properties_obj.val_type == "bytes") {
                 sub_property_val = sub_property_bytes;
               } else if (attachment_properties_obj.val_type == "date") {
-                sub_property_val = this.get_eight_byte_date(sub_property_bytes, "LITTLE_ENDIAN"); // Date in nano seconds
+                sub_property_val = TNEF_Parser.get_ptyp_time(sub_property_bytes); // Date in nano seconds
               } else if (attachment_properties_obj.val_type == "int") {
                 sub_property_val = Static_File_Analyzer.get_int_from_bytes(sub_property_bytes, "LITTLE_ENDIAN");
               } else if (attachment_properties_obj.val_type == "str") {
@@ -2012,7 +2014,7 @@ class Static_File_Analyzer {
             } else if (attachment_properties_obj.val_type == "bytes") {
               attachment_properties_val = msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4);
             } else if (attachment_properties_obj.val_type == "date") {
-              attachment_properties_val = this.get_eight_byte_date(msg_attribute_val.slice(current_ap_byte, current_ap_byte +=8), "LITTLE_ENDIAN"); // Date in nano seconds
+              attachment_properties_val = TNEF_Parser.get_ptyp_time(msg_attribute_val.slice(current_ap_byte, current_ap_byte +=14));
             } else if (attachment_properties_obj.val_type == "int") {
               attachment_properties_val = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(current_ap_byte, current_ap_byte +=4), "LITTLE_ENDIAN");
             } else if (attachment_properties_obj.val_type == "str") {
@@ -2097,7 +2099,9 @@ class Static_File_Analyzer {
 
         console.log(message_properties);
       } else {
-
+        if (msg_attribute_val.length == 14) {
+          msg_attribute_val = TNEF_Parser.get_ptyp_time(msg_attribute_val);
+        }
       }
 
       console.log(msg_attribute_name + " -> " + msg_attribute_val);
@@ -9002,6 +9006,34 @@ class Tiff_Tools {
     tiff_file_bytes = tiff_file_bytes.concat([0,0,0,0]);
 
     return tiff_file_bytes;
+  }
+}
+
+class TNEF_Parser {
+
+  /**
+   * Converts an array with int values 0-255 to a binary array.
+   *
+   * @param {array}   bytes Array with int values 0-255 representing byte values.
+   * @return {String} The date in string format.
+   */
+  static get_ptyp_time(bytes) {
+    let year = Static_File_Analyzer.get_int_from_bytes(bytes.slice(0,2), "LITTLE_ENDIAN");
+    let month = Static_File_Analyzer.get_int_from_bytes(bytes.slice(2,4), "LITTLE_ENDIAN");
+    let day = Static_File_Analyzer.get_int_from_bytes(bytes.slice(4,6), "LITTLE_ENDIAN");
+    let hour = Static_File_Analyzer.get_int_from_bytes(bytes.slice(6,8), "LITTLE_ENDIAN");
+    let minute = Static_File_Analyzer.get_int_from_bytes(bytes.slice(8,10), "LITTLE_ENDIAN");
+    let second = Static_File_Analyzer.get_int_from_bytes(bytes.slice(10,12), "LITTLE_ENDIAN");
+    let dayOfWeek = Static_File_Analyzer.get_int_from_bytes(bytes.slice(12,14), "LITTLE_ENDIAN");
+
+    year = year.toString();
+    month = (month < 10) ? "0"+month.toString() : month.toString();
+    day = (day < 10) ? "0"+day.toString() : day.toString();
+    hour = (hour < 10) ? "0"+hour.toString() : hour.toString();
+    minute = (minute < 10) ? "0"+minute.toString() : minute.toString();
+    second = (second < 10) ? "0"+second.toString() : second.toString();
+
+    return year+"-"+month+"-"+day+" "+hour+":"+minute+":"+second;
   }
 }
 
