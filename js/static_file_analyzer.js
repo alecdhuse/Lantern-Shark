@@ -1836,7 +1836,7 @@ class Static_File_Analyzer {
       0x01000600: {'name': "PidTagSentRepresenting", 'has_props': false, 'val_type': "int"},
       0x01900600: {'name': "PidTagAttachTransportName", 'has_props': true, 'val_type': "str"},
       0x02000600: {'name': "PidTagReceivedRepresentingEntryId", 'has_props': false, 'val_type': "int"},
-      0x02010237: {'name': "attAttach-?-Date", 'has_props': false, 'val_type': "date"},
+      0x02010237: {'name': "Unknown 02010237", 'has_props': true, 'val_type': "int"},
       0x02010910: {'name': "PidTagRtfCompressed", 'has_props': true, 'val_type': "bytes"},
       0x02011d0c: {'name': "PidTagSenderEmailAddress", 'has_props': true, 'val_type': "str"},
       0x02013f00: {'name': "PidTagReceivedByEntryId", 'has_props': true, 'val_type': "int"},
@@ -1849,7 +1849,7 @@ class Static_File_Analyzer {
       0x02900600: {'name': "PidAttachRendData", 'has_props': false, 'val_type': "int"},
       0x03000537: {'name': "Unknown 0x03000537", 'has_props': false, 'val_type': "int"},
       0x03000959: {'name': "PidTagMessageEditorFormat", 'has_props': false, 'val_type': "bytes"},
-      0x03000b37: {'name': "Unknown 0x03000b37", 'has_props': false, 'val_type': "date"}, //date?
+      0x03000b37: {'name': "PidTagRenderingPosition", 'has_props': false, 'val_type': "int"}, 
       0x03007640: {'name': "PidTagSentRepresentingFlags", 'has_props': false, 'val_type': "bytes"},
       0x03001580: {'name': "Unknown 0x03001580", 'has_props': false, 'val_type': "x28"},
       0x03001b80: {'name': "Unknown 0x03001b80", 'has_props': false, 'val_type': "x28"},
@@ -1913,9 +1913,9 @@ class Static_File_Analyzer {
       0x1e00fa3f: {'name': "PidTagCreatorName", 'has_props': true, 'val_type': "str"},
       0x1f000230: {'name': "PidTagReceivedByAddressType", 'has_props': false, 'val_type': "str"},
       0x1f007800: {'name': "PidTagReceivedRepresentingEmailAddress", 'has_props': true, 'val_type': "str"},
-      0x20800300: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "int"},
+      0x20800300: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "date"},
       0x40000730: {'name': "PidTagCreationTime", 'has_props': false, 'val_type': "date"},
-      0x40000830: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "date"},
+      0x40000830: {'name': "PidTagLastModificationTime", 'has_props': false, 'val_type': "date"}, // error?
       0x40003900: {'name': "PidTagClientSubmitTime", 'has_props': false, 'val_type': "date"}
     };
 
