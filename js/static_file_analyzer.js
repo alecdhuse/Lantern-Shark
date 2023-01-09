@@ -1833,7 +1833,7 @@ class Static_File_Analyzer {
     let current_byte = 6;
     let attribute_count = 0;
 
-    let parsed_attributes = {'attAttachment': [], 'attAttachData': []};
+    let parsed_attributes = {'attAttachment': [], 'attAttachData': [], 'attAttachModifyDate': []};
     let attachments = [];
     let current_attachment = {'filename': "unknown", 'data': ""};
 
@@ -1853,7 +1853,7 @@ class Static_File_Analyzer {
       if (msg_attribute_name == "attTnefVersion") {
         msg_attribute_val = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val, "LITTLE_ENDIAN");
       } else if (msg_attribute_name == "attMessageClass") {
-        msg_attribute_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val);
+        msg_attribute_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val.slice(0,-1));
       } else if (msg_attribute_name == "attOemCodepage") {
         let code_page_prm = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(0,4), "LITTLE_ENDIAN");
         let code_page_sec = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(4,8), "LITTLE_ENDIAN");
@@ -1902,7 +1902,7 @@ class Static_File_Analyzer {
         }
       }
 
-      if (msg_attribute_name == "attAttachment" || msg_attribute_name == "attAttachData") {
+      if (msg_attribute_name == "attAttachment" || msg_attribute_name == "attAttachData" || msg_attribute_name == "attAttachModifyDate") {
         parsed_attributes[msg_attribute_name].push(msg_attribute_val);
       } else {
         parsed_attributes[msg_attribute_name] = msg_attribute_val;
@@ -1910,6 +1910,7 @@ class Static_File_Analyzer {
 
     }
 
+    file_info.parsed = parsed_attributes;
     console.log(parsed_attributes);
 
     return file_info;
