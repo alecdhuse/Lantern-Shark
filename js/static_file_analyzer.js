@@ -1810,108 +1810,25 @@ class Static_File_Analyzer {
     file_info.file_encrypted = "false";
     file_info.file_encryption_type = "none";
 
-    let tnef_attributes = {
-      0x0106900800: "attTnefVersion",
-      0x0107900600: "attOemCodepage",
-      0x0108800700: "attMessageClass",
-      0x010d800400: "attPriority",
-      0x0104800100: "attSubject",
-      0x0105800300: "attDateSent",
-      0x0106800300: "attDateRecd",
-      0x0120800300: "attDateModified",
-      0x0109800100: "attMessageID",
-      0x0103900600: "attMsgProps",
-      0x0104900600: "attMsgProps",
-      0x020f800600: "attAttachData",
-      0x0210800100: "attAttachTitle",
-      0x0205900600: "attAttachment",
-      0x0213800300: "attAttachModifyDate",
-      0x0202900600: "attAttachRenddata"
-    };
+    let parse_result = TNEF_Parser.parse_tnef(file_bytes);
 
-    let attach_key = this.get_two_byte_int(file_bytes.slice(4,6), "LITTLE_ENDIAN");
-    let current_byte = 6;
-    let attribute_count = 0;
+    file_info.parsed = parse_result;
 
-    let parsed_attributes = {'attAttachment': [], 'attAttachData': [], 'attAttachModifyDate': []};
-    let attachments = [];
-    let current_attachment = {'filename': "unknown", 'data': ""};
+    for (let i=0; i<parse_result.attachments.length; i++) {
+      let is_valid = Static_File_Analyzer.is_valid_file(parse_result.attachments[i].data);
+      let file_type = (is_valid.is_valid) ? is_valid.type : "bin";
+      let filename = parse_result.attachments[i].filename;
 
-    let msg_attribute_chk = 0;
-    let msg_attribute_chk_calc = 0;
-
-    while (current_byte < file_bytes.length) {
-      let msg_attribute_bytes = file_bytes.slice(current_byte, current_byte+=5);
-      let msg_attribute_id   = Static_File_Analyzer.get_int_from_bytes(msg_attribute_bytes, "BIG_ENDIAN");
-      let msg_attribute_name = tnef_attributes.hasOwnProperty(msg_attribute_id) ? tnef_attributes[msg_attribute_id] : msg_attribute_bytes.join(",");
-      let msg_attribute_len  = this.get_four_byte_int(file_bytes.slice(current_byte, current_byte+=4), "LITTLE_ENDIAN");
-      let msg_attribute_val  = file_bytes.slice(current_byte, current_byte+=msg_attribute_len);
-
-      msg_attribute_chk = this.get_two_byte_int(file_bytes.slice(current_byte, current_byte+=2), "LITTLE_ENDIAN");
-      msg_attribute_chk_calc = Static_File_Analyzer.calculate_checksum(msg_attribute_val);
-
-      if (msg_attribute_name == "attTnefVersion") {
-        msg_attribute_val = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val, "LITTLE_ENDIAN");
-      } else if (msg_attribute_name == "attMessageClass") {
-        msg_attribute_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val.slice(0,-1));
-      } else if (msg_attribute_name == "attOemCodepage") {
-        let code_page_prm = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(0,4), "LITTLE_ENDIAN");
-        let code_page_sec = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(4,8), "LITTLE_ENDIAN");
-        msg_attribute_val = [code_page_prm, code_page_sec];
-      } else if (msg_attribute_name == "attAttachRenddata") {
-        let attach_type = msg_attribute_val[0]; // 1 is file, 2 is OLe
-        let attach_pos = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(2,6), "LITTLE_ENDIAN");
-        let render_width = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(6,8), "LITTLE_ENDIAN");
-        let render_height = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(8,10), "LITTLE_ENDIAN");
-        let data_flags = msg_attribute_val[10];
-
-        attach_type = (attach_type == 1) ? "file" : "Ole";
-        data_flags = (data_flags == 0) ? "FileDataDefault" : "FileDataMacBinary";
-
-        msg_attribute_val = {
-          'AttachType': attach_type,
-          'AttachPosition': attach_pos,
-          'RenderWidth': render_width,
-          'RenderHeight': render_height,
-          'DataFlags': data_flags
-        };
-      } else if (msg_attribute_name == "attAttachData") {
-        current_attachment = {'filename': "unknown", 'data': msg_attribute_val};
-      } else if (msg_attribute_name == "attAttachTitle") {
-        msg_attribute_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val.slice(0,-1));
-        current_attachment.filename = msg_attribute_val;
-        attachments.push(current_attachment);
-
-        let is_valid = Static_File_Analyzer.is_valid_file(current_attachment.data);
-
-        if (is_valid.is_valid) {
-          file_info.file_components.push({
-            'name': current_attachment.filename,
-            'type': is_valid.type,
-            'directory': false,
-            'file_bytes': current_attachment.data
-          });
-        }
-      } else if (msg_attribute_name == "attAttachment") {
-        msg_attribute_val = TNEF_Parser.parse_properties(msg_attribute_val);
-      } else if (msg_attribute_name == "attMsgProps") {
-        msg_attribute_val = TNEF_Parser.parse_properties(msg_attribute_val);
-      } else {
-        if (msg_attribute_val.length == 14) {
-          msg_attribute_val = TNEF_Parser.get_ptyp_time(msg_attribute_val);
-        }
-      }
-
-      if (msg_attribute_name == "attAttachment" || msg_attribute_name == "attAttachData" || msg_attribute_name == "attAttachModifyDate") {
-        parsed_attributes[msg_attribute_name].push(msg_attribute_val);
-      } else {
-        parsed_attributes[msg_attribute_name] = msg_attribute_val;
-      }
+      file_info.file_components.push({
+        'name': filename,
+        'type': file_type,
+        'directory': false,
+        'file_bytes': parse_result.attachments[i].data
+      });
 
     }
 
-    file_info.parsed = parsed_attributes;
-    console.log(parsed_attributes);
+    
 
     return file_info;
   }
@@ -9027,6 +8944,119 @@ class TNEF_Parser {
     }
 
     return properties;
+  }
+
+  /**
+   * Parses a TNEF byte stream and returns an object with the parsed results.
+   *
+   * @param {array}   bytes Array with int values 0-255 representing byte values.
+   * @return {object} An object with the parsed results.
+   */
+  static parse_tnef(bytes) {
+    let tnef_attributes = {
+      0x0106900800: "attTnefVersion",
+      0x0107900600: "attOemCodepage",
+      0x0108800700: "attMessageClass",
+      0x010d800400: "attPriority",
+      0x0104800100: "attSubject",
+      0x0105800300: "attDateSent",
+      0x0106800300: "attDateRecd",
+      0x0120800300: "attDateModified",
+      0x0109800100: "attMessageID",
+      0x0103900600: "attMsgProps",
+      0x0104900600: "attMsgProps",
+      0x020f800600: "attAttachData",
+      0x0210800100: "attAttachTitle",
+      0x0205900600: "attAttachment",
+      0x0213800300: "attAttachModifyDate",
+      0x0202900600: "attAttachRenddata"
+    };
+
+    let attach_key = Static_File_Analyzer.get_int_from_bytes(bytes.slice(4,6), "LITTLE_ENDIAN");
+    let current_byte = 6;
+    let attribute_count = 0;
+
+    let parsed_attributes = {
+      'attAttachment': [],
+      'attAttachData': [],
+      'attAttachModifyDate': [],
+      'attAttachRenddata': []
+    };
+
+    let attachments = [];
+    let current_attachment = {'filename': "unknown", 'data': ""};
+
+    let msg_attribute_chk = 0;
+    let msg_attribute_chk_calc = 0;
+
+    while (current_byte < bytes.length) {
+      let msg_attribute_bytes = bytes.slice(current_byte, current_byte+=5);
+      let msg_attribute_id   = Static_File_Analyzer.get_int_from_bytes(msg_attribute_bytes, "BIG_ENDIAN");
+      let msg_attribute_name = tnef_attributes.hasOwnProperty(msg_attribute_id) ? tnef_attributes[msg_attribute_id] : msg_attribute_bytes.join(",");
+      let msg_attribute_len  = Static_File_Analyzer.get_int_from_bytes(bytes.slice(current_byte, current_byte+=4), "LITTLE_ENDIAN");
+      let msg_attribute_val  = bytes.slice(current_byte, current_byte+=msg_attribute_len);
+
+      msg_attribute_chk = Static_File_Analyzer.get_int_from_bytes(bytes.slice(current_byte, current_byte+=2), "LITTLE_ENDIAN");
+      msg_attribute_chk_calc = Static_File_Analyzer.calculate_checksum(msg_attribute_val);
+
+      if (msg_attribute_name == "attTnefVersion") {
+        msg_attribute_val = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val, "LITTLE_ENDIAN");
+      } else if (msg_attribute_name == "attMessageClass") {
+        msg_attribute_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val.slice(0,-1));
+      } else if (msg_attribute_name == "attOemCodepage") {
+        let code_page_prm = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(0,4), "LITTLE_ENDIAN");
+        let code_page_sec = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(4,8), "LITTLE_ENDIAN");
+        msg_attribute_val = [code_page_prm, code_page_sec];
+      } else if (msg_attribute_name == "attAttachRenddata") {
+        let attach_type = msg_attribute_val[0]; // 1 is file, 2 is OLe
+        let attach_pos = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(2,6), "LITTLE_ENDIAN");
+        let render_width = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(6,8), "LITTLE_ENDIAN");
+        let render_height = Static_File_Analyzer.get_int_from_bytes(msg_attribute_val.slice(8,10), "LITTLE_ENDIAN");
+        let data_flags = msg_attribute_val[10];
+
+        attach_type = (attach_type == 1) ? "file" : "Ole";
+        data_flags = (data_flags == 0) ? "FileDataDefault" : "FileDataMacBinary";
+
+        msg_attribute_val = {
+          'AttachType': attach_type,
+          'AttachPosition': attach_pos,
+          'RenderWidth': render_width,
+          'RenderHeight': render_height,
+          'DataFlags': data_flags
+        };
+      } else if (msg_attribute_name == "attAttachData") {
+        current_attachment = {'filename': "unknown", 'data': msg_attribute_val};
+      } else if (msg_attribute_name == "attAttachTitle") {
+        msg_attribute_val = Static_File_Analyzer.get_string_from_array(msg_attribute_val.slice(0,-1));
+        current_attachment.filename = msg_attribute_val;
+        attachments.push(current_attachment);
+      } else if (msg_attribute_name == "attAttachment") {
+        msg_attribute_val = TNEF_Parser.parse_properties(msg_attribute_val);
+      } else if (msg_attribute_name == "attMsgProps") {
+        msg_attribute_val = TNEF_Parser.parse_properties(msg_attribute_val);
+      } else {
+        if (msg_attribute_val.length == 14) {
+          msg_attribute_val = TNEF_Parser.get_ptyp_time(msg_attribute_val);
+        }
+      }
+
+      if (msg_attribute_name == "attAttachment" ||
+          msg_attribute_name == "attAttachData" ||
+          msg_attribute_name == "attAttachModifyDate" ||
+          msg_attribute_name == "attAttachRenddata") {
+
+        parsed_attributes[msg_attribute_name].push(msg_attribute_val);
+      } else {
+        parsed_attributes[msg_attribute_name] = msg_attribute_val;
+      }
+
+    }
+
+    return {
+      'attach_key':  attach_key,
+      'attributes':  parsed_attributes,
+      'attachments': attachments
+    };
   }
 }
 
