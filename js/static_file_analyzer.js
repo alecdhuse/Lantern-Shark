@@ -377,11 +377,18 @@ class Static_File_Analyzer {
           file_info.file_generic_type = "Spreadsheet";
           document_obj.type = "spreadsheet";
         }
+      } else if (document_obj.compound_file_binary.root_entry.guid == "00020D0B-0000-0000-C000-000000000046") {
+        // MailMessage
+        file_info.file_format = "msg";
+        file_info.file_generic_type = "Mail Message";
+        document_obj.type = "mailmessage";
       }
     }
 
     if (file_info.file_format == "xls") {
       file_info = this.analyze_xls(file_bytes, file_info, document_obj);
+    } else if (file_info.file_format == "msg") {
+      file_info = this.analyze_msg(file_bytes, file_info, document_obj);
     }
 
     return file_info;
@@ -1353,6 +1360,36 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Extracts meta data and other information from Mail Message Binary File Format (.msg) files.
+   *
+   * @param  {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param  {object}      file_info    An object representing the extracted information from the parent Compound File Binary object.
+   * @param  {object}      document_obj A Compound File Binary object
+   * @return {Object}      file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_msg(file_bytes, file_info, document_obj) {
+    file_info.file_format = "msg";
+    file_info.file_generic_type = "Mail Message";
+
+    for (let i=1; i<document_obj.compound_file_binary.entries.length; i++) {
+      let entry = document_obj.compound_file_binary.entries[i];
+
+      if (entry.entry_name.startsWith("__substg1.0_")) {
+        let pid_str  = entry.entry_name.split("__substg1.0_")[1];
+        let pid_int  = parseInt('0x'+pid_str);
+        let pid_name = (TNEF_Parser.pid_tags.hasOwnProperty(pid_int)) ? TNEF_Parser.pid_tags[pid_int] : pid_str;
+
+        let test=123;
+      }
+
+      //TNEF_Parser.pid_tags
+    }
+
+
+    return file_info;
+  }
+
+  /**
    * Extracts meta data and other information from PDF files.
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
@@ -1804,7 +1841,7 @@ class Static_File_Analyzer {
     var file_info = this.get_default_file_json();
 
     file_info.file_format = "tnef";
-    file_info.file_generic_type = "Message";
+    file_info.file_generic_type = "Mail Message";
 
     // This format does not support encryption
     file_info.file_encrypted = "false";
@@ -1828,7 +1865,7 @@ class Static_File_Analyzer {
 
     }
 
-    
+    console.log(parse_result);
 
     return file_info;
   }
@@ -8733,6 +8770,79 @@ class Tiff_Tools {
 }
 
 class TNEF_Parser {
+  static pid_tags = {
+    0x0002000b: "PidTagAlternateRecipientAllowed",
+    0x0023000b: "PidTagOriginatorDeliveryReportRequested",
+    0x00260003: "PidTagPriority",
+    0x0029000b: "PidTagReadReceiptRequested",
+    0x00360003: "PidTagSensitivity",
+    0x00510102: "PidTagReceivedBySearchKey",
+    0x00520102: "PidTagReceivedRepresentingSearchKey",
+    0x0064001f: "PidTagSentRepresentingAddressType",
+    0x0065001f: "PidTagSentRepresentingEmailAddress",
+    0x0070001e: "PidTagConversationTopic",
+    0x0070001f: "PidTagConversationTopic",
+    0x00710102: "PidTagConversationIndex",
+    0x0075001f: "PidTagReceivedByAddressType",
+    0x0076001f: "PidTagReceivedByEmailAddress",
+    0x0077001f: "PidTagReceivedRepresentingAddressType",
+    0x0078001f: "PidTagReceivedRepresentingEmailAddress",
+    0x007d001f: "PidTagTransportMessageHeaders",
+    0x007f0102: "PidTagTnefCorrelationKey",
+    0x0e01000b: "PidTagDeleteAfterSubmit",
+    0x0e200003: "PidTagAttachSize",
+    0x0c190102: "PidTagSenderEntryId",
+    0x0c1a001f: "PidTagSenderName",
+    0x0c1d0102: "PidTagSenderEmailAddress",
+    0x0c1e001f: "PidTagSenderAddressType",
+    0x0c1f001f: "PidTagSenderEmailAddress",
+    0x0e04001f: "PidTagDisplayTo",
+    0x0e060040: "PidTagMessageDeliveryTime",
+    0x0e0a0102: "PidTagSentMailEntryId",
+    0x0e140003: "PidTagSubmitFlags",
+    0x0e1f000b: "PidTagRtfInSync",
+    0x10060003: "PidTagRtfSyncBodyCrc",
+    0x10070003: "PidTagRtfSyncBodyCount",
+    0x1008001e: "PidTagBody",
+    0x10090102: "PidTagRtfCompressed",
+    0x10100003: "PidTagRtfSyncPrefixCount",
+    0x10110003: "PidTagRtfSyncTrailingCount",
+    0x1015001f: "PidTagBodyContentId",
+    0x1035001f: "PidTagInternetMessageId",
+    0x3001001e: "PidTagDisplayName",
+    0x300b0102: "PidTagSearchKey",
+    0x30140102: "PidTagBody",
+    0x340d0003: "PidTagStoreSupportMask",
+    0x34140102: "PidTagStoreProvider",
+    0x3703001e: "PidTagAttachExtension",
+    0x37020102: "PidTagAttachEncoding",
+    0x37050003: "PidTagAttachMethod",
+    0x3707001e: "PidTagAttachLongFilename",
+    0x370b0003: "PidTagRenderingPosition",
+    0x37140003: "PidTagAttachFlags",
+    0x3fde0003: "PidTagInternetCodepage",
+    0x3ff8001f: "PidTagCreatorName",
+    0x3ffa001f: "PidTagLastModifierName",
+    0x59090003: "PidTagMessageEditorFormat",
+    0x5d01001f: "PidTagSenderSmtpAddress",
+    0x5d02001f: "PidTagSentRepresentingSmtpAddress",
+    0x5d07001f: "PidTagReceivedBySmtpAddress",
+    0x5d08001f: "PidTagReceivedRepresentingSmtpAddress",
+    0x7ffa0003: "PidTagAttachmentLinkId",
+    0x7ffb0040: "PidTagExceptionStartTime",
+    0x7ffc0040: "PidTagExceptionEndTime",
+    0x7ffd0003: "PidTagAttachmentFlags",
+    0x7ffe000b: "PidTagAttachmentHidden",
+    0x8000001f: "attFrom",
+    0x8006001f: "attDateRecd",
+    0x0e210003: "PidTagAttachNumber",
+    0x0ff80102: "PidTagMappingSignature",
+    0x0ffa0102: "PidTagStoreRecordKey",
+    0x0ffb0102: "PidTagStoreEntryId",
+    0x0ffe0003: "PidTagObjectType",
+    0x1000001f: "PidTagBody",
+    0x0e1d001f: "PidTagNormalizedSubject"
+  };
 
   /**
    * Converts an array with eight int values 0-255 to a date.
@@ -8808,51 +8918,6 @@ class TNEF_Parser {
       0x1e10: "str",
     }
 
-    let pid_tags = {
-      0x0002000b: "PidTagAlternateRecipientAllowed",
-      0x0023000b: "PidTagOriginatorDeliveryReportRequested",
-      0x00260003: "PidTagPriority",
-      0x0029000b: "PidTagReadReceiptRequested",
-      0x00360003: "PidTagSensitivity",
-      0x0070001e: "PidTagConversationTopic",
-      0x00710102: "PidTagConversationIndex",
-      0x007f0102: "PidTagTnefCorrelationKey",
-      0x0e01000b: "PidTagDeleteAfterSubmit",
-      0x0e200003: "PidTagAttachSize",
-      0x0c1d0102: "PidTagSenderEmailAddress",
-      0x0e060040: "PidTagMessageDeliveryTime",
-      0x0e0a0102: "PidTagSentMailEntryId",
-      0x0e140003: "PidTagSubmitFlags",
-      0x0e1f000b: "PidTagRtfInSync",
-      0x10060003: "PidTagRtfSyncBodyCrc",
-      0x10070003: "PidTagRtfSyncBodyCount",
-      0x1008001e: "PidTagBody",
-      0x10090102: "PidTagRtfCompressed",
-      0x10100003: "PidTagRtfSyncPrefixCount",
-      0x10110003: "PidTagRtfSyncTrailingCount",
-      0x3001001e: "PidTagDisplayName",
-      0x340d0003: "PidTagStoreSupportMask",
-      0x34140102: "PidTagStoreProvider",
-      0x3703001e: "PidTagAttachExtension",
-      0x37020102: "PidTagAttachEncoding",
-      0x37050003: "PidTagAttachMethod",
-      0x3707001e: "PidTagAttachLongFilename",
-      0x370b0003: "PidTagRenderingPosition",
-      0x37140003: "PidTagAttachFlags",
-      0x3fde0003: "PidTagInternetCodepage",
-      0x59090003: "PidTagMessageEditorFormat",
-      0x7ffa0003: "PidTagAttachmentLinkId",
-      0x7ffb0040: "PidTagExceptionStartTime",
-      0x7ffc0040: "PidTagExceptionEndTime",
-      0x7ffd0003: "PidTagAttachmentFlags",
-      0x7ffe000b: "PidTagAttachmentHidden",
-      0x0e210003: "PidTagAttachNumber",
-      0x0ff80102: "PidTagMappingSignature",
-      0x0ffa0102: "PidTagStoreRecordKey",
-      0x0ffb0102: "PidTagStoreEntryId",
-      0x0ffe0003: "PidTagObjectType"
-    };
-
     let properties = [];
     let current_byte = 0;
     let properties_count = Static_File_Analyzer.get_int_from_bytes(bytes.slice(current_byte, current_byte+=4), "LITTLE_ENDIAN");
@@ -8873,7 +8938,7 @@ class TNEF_Parser {
       let property_data_type = (props_data_types.hasOwnProperty(property_type_int)) ? props_data_types[property_type_int] : "unknown";
 
       let property_id = Static_File_Analyzer.get_int_from_bytes(properties_bytes, "LITTLE_ENDIAN");
-      let property_name = (pid_tags.hasOwnProperty(property_id)) ? pid_tags[property_id] : properties_hex;
+      let property_name = (TNEF_Parser.pid_tags.hasOwnProperty(property_id)) ? TNEF_Parser.pid_tags[property_id] : properties_hex;
       let property_val = 0;
 
       if (property_data_type == "bytes" || property_data_type == "str") {
