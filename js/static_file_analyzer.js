@@ -6014,6 +6014,16 @@ class Static_File_Analyzer {
         // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
         var entry_type = file_bytes[next_directory_entry+66];
 
+        let color_flag_int = file_bytes[next_directory_entry+67];
+        let color_flag_str = color_flag_int == 0 ? "red" : "black";
+
+        // < 0xFFFFFFF9 = Regular stream ID
+        // 0xFFFFFFFA = MAXREGSID - Maximum regular stream ID.
+        // 0xFFFFFFFF = NOSTREAM - No value
+        let left_sibling_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+68, next_directory_entry+72), cmb_obj.byte_order);
+        let right_sibling_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+68, next_directory_entry+72), cmb_obj.byte_order);
+        let child_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+72, next_directory_entry+76), cmb_obj.byte_order);
+
         // First four bytes of unique id are flipped?
         var unique_id1 = file_bytes.slice(next_directory_entry+80, next_directory_entry+84).reverse();
         var unique_id2 = file_bytes.slice(next_directory_entry+84, next_directory_entry+96);
@@ -6113,6 +6123,15 @@ class Static_File_Analyzer {
       //number_of_short_sectors
       // sector length 64 bytes
 
+      //Short-Stream
+      let short_sec_len = 64;
+
+      /*
+      for (let si=1; si<number_of_short_sectors+1; si++) {
+        let short_sec_pos = ((short_sec_id_1*si - 1) * short_sec_len) + sec_1_pos;
+        let short_sec_bytes = file_bytes.slice(short_sec_pos, 64);
+      }
+      */
     } else {
       throw "File Magic Number is not a CFB file.";
     }
