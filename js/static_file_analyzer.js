@@ -1371,20 +1371,50 @@ class Static_File_Analyzer {
     file_info.file_format = "msg";
     file_info.file_generic_type = "Mail Message";
 
-    for (let i=1; i<document_obj.compound_file_binary.entries.length; i++) {
+    let properties = [];
+    //let start_byte = 1536;
+
+    for (let i=0; i<document_obj.compound_file_binary.entries.length; i++) {
       let entry = document_obj.compound_file_binary.entries[i];
+      //let entry_start = start_byte + ((entry.entry_sec_id + 1) * 128);
 
       if (entry.entry_name.startsWith("__substg1.0_")) {
-        let pid_str  = entry.entry_name.split("__substg1.0_")[1];
-        let pid_int  = parseInt('0x'+pid_str);
+        let pid_str = entry.entry_name.split("__substg1.0_")[1];
+
+        //let entry_bytes = file_bytes.slice(entry_start, entry.stream_size);
+
+        let data_type_int = parseInt('0x' + pid_str.slice(-2) + pid_str.substr(4, 2));
+        let data_type = (TNEF_Parser.props_data_types.hasOwnProperty(data_type_int)) ? TNEF_Parser.props_data_types[data_type_int] : "unknown";
+
+        let pid_int = parseInt('0x'+pid_str);
         let pid_name = (TNEF_Parser.pid_tags.hasOwnProperty(pid_int)) ? TNEF_Parser.pid_tags[pid_int] : pid_str;
 
-        let test=123;
+        let prop_value = 0;
+
+        if (data_type == "bytes") {
+          prop_value = entry.entry_bytes;
+        } else if (data_type == "int") {
+          prop_value = Static_File_Analyzer.get_int_from_bytes(entry.entry_bytes, "LITTLE_ENDIAN");
+        } else if (data_type == "bool") {
+          prop_value = Static_File_Analyzer.get_int_from_bytes(entry.entry_bytes, "LITTLE_ENDIAN");
+          prop_value = (prop_value == 0) ? false : true;
+        } else if (data_type == "date_8") {
+
+        } else if (data_type == "str") {
+          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
+        } else if (data_type == "unicode") {
+          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
+        } else {
+          prop_value = entry.entry_bytes;
+        }
+
+        properties.push({'name': pid_name, 'type': data_type, 'val': prop_value});
       }
 
-      //TNEF_Parser.pid_tags
     }
 
+    console.log(document_obj);
+    console.log(properties);
 
     return file_info;
   }
@@ -6037,7 +6067,9 @@ class Static_File_Analyzer {
             entry_guid:  guid,
             entry_start: stream_start,
             entry_bytes: stream_bytes,
-            entry_properties: stream_properties
+            entry_properties: stream_properties,
+            stream_size: stream_size,
+            entry_sec_id: entry_sec_id
           });
         }
 
@@ -8770,12 +8802,26 @@ class Tiff_Tools {
 }
 
 class TNEF_Parser {
+  static props_data_types = {
+    0x0201: "bytes",
+    0x0211: "bytes",
+    0x0300: "int",
+    0x0310: "int",
+    0x0b00: "bool",
+    0x4000: "date_8",
+    0x4010: "date_8",
+    0x1e00: "str",
+    0x1e10: "str",
+    0x1f00: "unicode",
+  };
+
   static pid_tags = {
     0x0002000b: "PidTagAlternateRecipientAllowed",
     0x0023000b: "PidTagOriginatorDeliveryReportRequested",
     0x00260003: "PidTagPriority",
     0x0029000b: "PidTagReadReceiptRequested",
     0x00360003: "PidTagSensitivity",
+    0x0050001f: "PidTagReplyRecipientNames",
     0x00510102: "PidTagReceivedBySearchKey",
     0x00520102: "PidTagReceivedRepresentingSearchKey",
     0x0064001f: "PidTagSentRepresentingAddressType",
@@ -8906,18 +8952,6 @@ class TNEF_Parser {
    * @return {array} The array with the parsed results
    */
   static parse_properties(bytes) {
-    let props_data_types = {
-      0x0201: "bytes",
-      0x0211: "bytes",
-      0x0300: "int",
-      0x0310: "int",
-      0x0b00: "bool",
-      0x4000: "date_8",
-      0x4010: "date_8",
-      0x1e00: "str",
-      0x1e10: "str",
-    }
-
     let properties = [];
     let current_byte = 0;
     let properties_count = Static_File_Analyzer.get_int_from_bytes(bytes.slice(current_byte, current_byte+=4), "LITTLE_ENDIAN");
@@ -8935,7 +8969,7 @@ class TNEF_Parser {
       } catch (err) {};
 
       let property_type_int = Static_File_Analyzer.get_int_from_bytes(properties_bytes.slice(0,2), "BIG_ENDIAN");
-      let property_data_type = (props_data_types.hasOwnProperty(property_type_int)) ? props_data_types[property_type_int] : "unknown";
+      let property_data_type = (TNEF_Parser.props_data_types.hasOwnProperty(property_type_int)) ? TNEF_Parser.props_data_types[property_type_int] : "unknown";
 
       let property_id = Static_File_Analyzer.get_int_from_bytes(properties_bytes, "LITTLE_ENDIAN");
       let property_name = (TNEF_Parser.pid_tags.hasOwnProperty(property_id)) ? TNEF_Parser.pid_tags[property_id] : properties_hex;
