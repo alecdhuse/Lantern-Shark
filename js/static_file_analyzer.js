@@ -5915,228 +5915,18 @@ class Static_File_Analyzer {
    * @return {Object} An object representing the parsed compound file binary.
    */
   parse_compound_file_binary(file_bytes) {
-    if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0xD0,0xCF,0x11,0xE0])) {
-      var cmb_obj = {
-        byte_order: "LITTLE_ENDIAN",
-        format_version_major: 0,
-        format_version_minor: 0,
-        sector_size: 512,
-        entries: [],
-        root_entry: {
-          guid: "00000000-0000-0000-0000-000000000000"
-        }
-      };
+    var cmb_obj2 = CFB_Parser.parse(file_bytes);
 
-      var current_byte = 0;
-      var compound_file_binary_minor_ver_bytes = file_bytes.slice(24,26);
-      var compound_file_binary_major_ver_bytes = file_bytes.slice(26,28);
-
-      if (Static_File_Analyzer.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
-        cmb_obj.format_version_major = "3";
-      } else if (Static_File_Analyzer.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
-        cmb_obj.format_version_major = "4";
-      }
-
-      if (compound_file_binary_minor_ver_bytes[0] == 62) {
-        cmb_obj.format_version_minor = "3E";
-      }
-
-      // Byte order LITTLE_ENDIAN or BIG_ENDIAN
-      var byte_order_bytes = file_bytes.slice(28,30);
-      cmb_obj.byte_order = (byte_order_bytes[1] == 255) ? this.LITTLE_ENDIAN : this.BIG_ENDIAN;
-
-      var sector_size_bytes = file_bytes.slice(30,32);
-      cmb_obj.sector_size = 512; // Size in bytes
-
-      //Sector size will indicate where the beginning of file record starts.
-      if (Static_File_Analyzer.array_equals(sector_size_bytes, [9,0])) {
-        cmb_obj.sector_size = 512;
-      } else if (Static_File_Analyzer.array_equals(sector_size_bytes, [12,0])) {
-        cmb_obj.sector_size = 4096;
-      }
-
-      var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), cmb_obj.byte_order);
-      var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), cmb_obj.byte_order);
-      var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), cmb_obj.byte_order);
-      var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), cmb_obj.byte_order);
-      var short_sec_id_1 = this.get_four_byte_int(file_bytes.slice(60,64), cmb_obj.byte_order);
-      var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), cmb_obj.byte_order);
-      var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), cmb_obj.byte_order);
-      var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), cmb_obj.byte_order);
-      var difat_bytes = file_bytes.slice(76,512);
-      var difat_index = Array();
-      var difat_loc = Array();
-
-      // Index file byte locations of objects
-      for (var di=0; di<difat_bytes.length; di+=4) {
-        var di_index = this.get_four_byte_int(difat_bytes.slice(di,di+4), cmb_obj.byte_order);
-        if (di_index != 4294967295) {
-          difat_index.push(di_index);
-
-          var di_location = (di_index + 1) * cmb_obj.sector_size;
-          difat_loc.push(di_location);
-        }
-      }
-
-      // Proccess DIFAT Array?
-      for (var di=0; di<difat_loc.length; di++) {
-        var next_sector = file_bytes.slice(difat_loc[di], difat_loc[di]+4);
-
-        if (Static_File_Analyzer.array_equals(next_sector, [0xFA,0xFF,0xFF,0xFF])) {
-          // MAXREGSECT
-        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFB,0xFF,0xFF,0xFF])) {
-          // Reserved for future use
-        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFC,0xFF,0xFF,0xFF])) {
-          // DIFSECT
-        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFD,0xFF,0xFF,0xFF])) {
-          // FATSECT
-        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFE,0xFF,0xFF,0xFF])) {
-          // ENDOFCHAIN
-        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFF,0xFF,0xFF,0xFF])) {
-          // FREESECT
-        }
-      }
-
-      // Section flags
-      var has_summary_information = false;
-
-      // Directory Entry Structure
-      var sec_1_pos = 512 + (sec_id_1 * cmb_obj.sector_size); // Should be Root Entry
-      var next_directory_entry = sec_1_pos;
-
-      while (!Static_File_Analyzer.array_equals(file_bytes.slice(next_directory_entry,next_directory_entry+4), [0,0,0,0])) {
-        var directory_name_bytes = file_bytes.slice(next_directory_entry, next_directory_entry+64);
-        var directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 5));
-        directory_name = (directory_name !== null) ? directory_name.trim() : "";
-
-        var directory_name_buf_size = this.get_four_byte_int(file_bytes.slice(next_directory_entry+64, next_directory_entry+66), cmb_obj.byte_order);
-
-        // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
-        var entry_type = file_bytes[next_directory_entry+66];
-
-        let color_flag_int = file_bytes[next_directory_entry+67];
-        let color_flag_str = color_flag_int == 0 ? "red" : "black";
-
-        // < 0xFFFFFFF9 = Regular stream ID
-        // 0xFFFFFFFA = MAXREGSID - Maximum regular stream ID.
-        // 0xFFFFFFFF = NOSTREAM - No value
-        let left_sibling_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+68, next_directory_entry+72), cmb_obj.byte_order);
-        let right_sibling_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+68, next_directory_entry+72), cmb_obj.byte_order);
-        let child_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+72, next_directory_entry+76), cmb_obj.byte_order);
-
-        // First four bytes of unique id are flipped?
-        var unique_id1 = file_bytes.slice(next_directory_entry+80, next_directory_entry+84).reverse();
-        var unique_id2 = file_bytes.slice(next_directory_entry+84, next_directory_entry+96);
-
-        var prop_count = this.get_four_byte_int(file_bytes.slice(next_directory_entry+96, next_directory_entry+100), cmb_obj.byte_order);
-        var creation_time_bytes = file_bytes.slice(next_directory_entry+100, next_directory_entry+108);
-        var modification_time_bytes = file_bytes.slice(next_directory_entry+108, next_directory_entry+116);
-
-        var creation_time = this.get_eight_byte_date(creation_time_bytes, cmb_obj.byte_order);
-        var modification_time = this.get_eight_byte_date(modification_time_bytes, cmb_obj.byte_order);
-
-        var entry_sec_id = this.get_four_byte_int(file_bytes.slice(next_directory_entry+116, next_directory_entry+120), cmb_obj.byte_order);
-        var stream_size = this.get_four_byte_int(file_bytes.slice(next_directory_entry+120, next_directory_entry+124), cmb_obj.byte_order);
-        var stream_start = 512 + (entry_sec_id * cmb_obj.sector_size);
-        var stream_bytes = file_bytes.slice(stream_start, stream_start+stream_size);
-        var stream_properties = {};
-
-        stream_properties['creation_time'] = creation_time;
-        stream_properties['modification_time'] = modification_time;
-
-        var guid = "";
-        for (var k=0; k<unique_id1.length; k++) {
-          var hex_code = unique_id1[k].toString(16).toUpperCase();
-          guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
-        }
-
-        guid += "-";
-
-        for (var k=0; k<unique_id2.length; k++) {
-          var hex_code = unique_id2[k].toString(16).toUpperCase();
-          guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
-          if (guid.length==8 || guid.length==13 || guid.length==18 || guid.length==23) {
-            guid += "-";
-          }
-        }
-
+    // Temp solution to parse summary information
+    for (let i=0; i<cmb_obj2.entries.length; i++) {
+      if (cmb_obj2.entries[i].entry_name == "SummaryInformation") {
         // http://sedna-soft.de/articles/summary-information-stream/
-        if (directory_name == "SummaryInformation") {
-          has_summary_information = true;
-          stream_properties = this.parse_cfb_summary_information(stream_bytes, cmb_obj);
-        }
-
-        if (directory_name == "Root Entry") {
-          cmb_obj.root_entry.guid = guid;
-        }
-
-        if (stream_start < file_bytes.length && entry_type != 0 && directory_name != "") {
-          cmb_obj.entries.push({
-            entry_name:  directory_name,
-            entry_type:  entry_type,
-            entry_guid:  guid,
-            entry_start: stream_start,
-            entry_bytes: stream_bytes,
-            entry_properties: stream_properties,
-            stream_size: stream_size,
-            entry_sec_id: entry_sec_id
-          });
-        }
-
-        next_directory_entry += 128;
-        if (next_directory_entry > file_bytes.length) break;
+        cmb_obj2.entries[i].entry_properties = this.parse_cfb_summary_information(cmb_obj2.entries[i].entry_bytes, cmb_obj2);
+        break;
       }
-
-      // Temp fix for too long sections
-      if (has_summary_information == false) {
-        var summary_information_start = -1;
-        var summary_information_end = -1;
-
-        for (var fbi=0; fbi<file_bytes.length; fbi++) {
-          if (Static_File_Analyzer.array_equals(file_bytes.slice(fbi,fbi+25), [0x00,0x00,0x05,0x00,0x53,0x00,0x75,0x00,0x6D,0x00,0x6D,0x00,0x61,0x00,0x72,0x00,0x79,0x00,0x49,0x00,0x6E,0x00,0x66,0x00,0x6F])) {
-            has_summary_information = true;
-            continue;
-          } else if (summary_information_start > 0 && Static_File_Analyzer.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
-            summary_information_end = fbi;
-            var summary_stream = file_bytes.slice(summary_information_start, summary_information_end);
-            stream_properties = this.parse_cfb_summary_information(summary_stream, cmb_obj);
-
-            cmb_obj.entries.push({
-              entry_name:  "SummaryInformation",
-              entry_type:  2,
-              entry_guid:  "",
-              entry_start: summary_information_start,
-              entry_bytes: summary_stream ,
-              entry_properties: stream_properties
-            });
-
-            break;
-          } else if (has_summary_information && Static_File_Analyzer.array_equals(file_bytes.slice(fbi,fbi+4), [0xFE,0xFF,0x00,0x00])) {
-            summary_information_start = fbi;
-            continue;
-          }
-        }
-      }
-
-      // TODO implement Short-Stream
-      //short_sec_id_1
-      //number_of_short_sectors
-      // sector length 64 bytes
-
-      //Short-Stream
-      let short_sec_len = 64;
-
-      /*
-      for (let si=1; si<number_of_short_sectors+1; si++) {
-        let short_sec_pos = ((short_sec_id_1*si - 1) * short_sec_len) + sec_1_pos;
-        let short_sec_bytes = file_bytes.slice(short_sec_pos, 64);
-      }
-      */
-    } else {
-      throw "File Magic Number is not a CFB file.";
     }
 
-    return cmb_obj;
+    return cmb_obj2;
   }
 
   /**
@@ -7825,6 +7615,256 @@ class Static_File_Analyzer {
       'findings': findings
     }
   }
+}
+
+// Compound File Binary a.k.a. Old Office Document format.
+class CFB_Parser {
+
+  /**
+   * Parses a Compound File Binary CFB file.
+   *
+   * @param  {String} bytes An array of integers representing bytes.
+   * @return {Object} The parsed CDB as a JSON object.
+   */
+  static parse(file_bytes) {
+    let cmb_obj = {
+      byte_order: "LITTLE_ENDIAN",
+      format_version_major: 0,
+      format_version_minor: 0,
+      sector_size: 512,
+      entries: [],
+      root_entry: {
+        guid: "00000000-0000-0000-0000-000000000000"
+      }
+    };
+
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0xD0,0xCF,0x11,0xE0])) {
+      var current_byte = 0;
+      var compound_file_binary_minor_ver_bytes = file_bytes.slice(24,26);
+      var compound_file_binary_major_ver_bytes = file_bytes.slice(26,28);
+
+      if (Static_File_Analyzer.array_equals(compound_file_binary_major_ver_bytes, [3,0])) {
+        cmb_obj.format_version_major = "3";
+      } else if (Static_File_Analyzer.array_equals(compound_file_binary_major_ver_bytes, [4,0])) {
+        cmb_obj.format_version_major = "4";
+      }
+
+      if (compound_file_binary_minor_ver_bytes[0] == 62) cmb_obj.format_version_minor = "3E";
+
+      // Byte order LITTLE_ENDIAN or BIG_ENDIAN
+      var byte_order_bytes = file_bytes.slice(28,30);
+      cmb_obj.byte_order = (byte_order_bytes[1] == 255) ? "LITTLE_ENDIAN" : "BIG_ENDIAN";
+
+      //Sector size will indicate where the beginning of file record starts.
+      var sector_size_bytes = file_bytes.slice(30,32);
+      if (Static_File_Analyzer.array_equals(sector_size_bytes, [9,0])) {
+        cmb_obj.sector_size = 512;
+      } else if (Static_File_Analyzer.array_equals(sector_size_bytes, [12,0])) {
+        cmb_obj.sector_size = 4096;
+      } else {
+        cmb_obj.sector_size = 512;
+      }
+
+      var number_of_directory_sectors = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(40,44), cmb_obj.byte_order);
+      var number_of_sectors = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(44,48), cmb_obj.byte_order);
+      var sec_id_1 = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(48,52), cmb_obj.byte_order);
+      var min_stream_size = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(56,60), cmb_obj.byte_order);
+      var short_sec_id_1 = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(60,64), cmb_obj.byte_order);
+      var number_of_short_sectors = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(64,68), cmb_obj.byte_order);
+      var master_sector_id_1 = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(68,72), cmb_obj.byte_order);
+      var number_of_master_sectors = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(72,76), cmb_obj.byte_order);
+      var difat_bytes = file_bytes.slice(76,512);
+      var difat_index = Array();
+      var difat_loc = Array();
+
+      // Index file byte locations of objects
+      for (var di=0; di<difat_bytes.length; di+=4) {
+        var di_index = Static_File_Analyzer.get_int_from_bytes(difat_bytes.slice(di,di+4), cmb_obj.byte_order);
+        if (di_index != 4294967295) {
+          difat_index.push(di_index);
+
+          var di_location = (di_index + 1) * cmb_obj.sector_size;
+          difat_loc.push(di_location);
+        }
+      }
+
+      // Proccess DIFAT Array?
+      for (var di=0; di<difat_loc.length; di++) {
+        var next_sector = file_bytes.slice(difat_loc[di], difat_loc[di]+4);
+
+        if (Static_File_Analyzer.array_equals(next_sector, [0xFA,0xFF,0xFF,0xFF])) {
+          // MAXREGSECT
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFB,0xFF,0xFF,0xFF])) {
+          // Reserved for future use
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFC,0xFF,0xFF,0xFF])) {
+          // DIFSECT
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFD,0xFF,0xFF,0xFF])) {
+          // FATSECT
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFE,0xFF,0xFF,0xFF])) {
+          // ENDOFCHAIN
+        } else if (Static_File_Analyzer.array_equals(next_sector, [0xFF,0xFF,0xFF,0xFF])) {
+          // FREESECT
+        }
+      }
+
+      // Sector #1 - The Directory Sector, four entries.
+      var sec_1_pos = 512 + (sec_id_1 * cmb_obj.sector_size); // Should be Root Entry
+      var next_directory_entry = sec_1_pos;
+
+      for (let i=0; i<4; i++) {
+        let enrty_obj = CFB_Parser.parse_stream_entry(file_bytes.slice(next_directory_entry, next_directory_entry+128), cmb_obj.byte_order);
+        enrty_obj.sector_type = "Directory Sector";
+
+        if (enrty_obj !== null) cmb_obj.entries.push(enrty_obj);
+
+        if (enrty_obj.entry_name == "Root Entry") {
+          cmb_obj.root_entry.guid = enrty_obj.entry_guid;
+        }
+
+        next_directory_entry += 128;
+      }
+
+      // Sector #2 - The MiniFAT Sector
+      let current_sec_byte = next_directory_entry;
+      let sectors = [];
+      for (let i=0; i<128; i++) {
+        let sector_block = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(current_sec_byte,  current_sec_byte+=4), cmb_obj.byte_order);
+        sectors.push(sector_block);
+      }
+
+      let mini_stream_Start = current_sec_byte;
+      next_directory_entry = current_sec_byte;
+
+      // Sector #3 - The Mini Stream Sector
+      while (Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(next_directory_entry,next_directory_entry+4)) <  0xfaffffff) {
+        let enrty_obj = CFB_Parser.parse_stream_entry(file_bytes.slice(next_directory_entry, next_directory_entry+128), cmb_obj.byte_order);
+
+        if (enrty_obj !== null) {
+          enrty_obj.sector_type = "Mini Stream";
+          cmb_obj.entries.push(enrty_obj);
+        }
+
+        next_directory_entry += 128;
+      }
+
+      let data_start = next_directory_entry;
+
+      // Read entry bytes
+      for (let i=0; i<cmb_obj.entries.length; i++) {
+        if (cmb_obj.entries[i].start_block < 0xfaffffff) {
+          if (cmb_obj.entries[i].sector_type == "Directory Sector") {
+            cmb_obj.entries[i].entry_start = 512 + (cmb_obj.entries[i].start_block * cmb_obj.sector_size);
+          } else if (cmb_obj.entries[i].sector_type == "Mini Stream") {
+            cmb_obj.entries[i].entry_start = data_start + 512 + (cmb_obj.entries[i].start_block * 64);
+          }
+
+          cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
+        }
+      }
+    } else {
+      throw "File Magic Number is not a CFB file.";
+    }
+
+    return cmb_obj;
+  }
+
+  /**
+   * Parses a stream entry header.
+   *
+   * @param  {String} bytes An array of integers representing bytes.
+   * @param {String}  endianness Value indicating how to interperate the bit order of the binary array. Default is LITTLE_ENDIAN.
+   * @return {Object} The parsed stream entry header as a JSON object.
+   */
+  static parse_stream_entry(bytes, endianness = "LITTLE_ENDIAN") {
+    let directory_name_bytes = bytes.slice(0, 64);
+    let directory_name_buf_size = Static_File_Analyzer.get_int_from_bytes(bytes.slice(64,66), endianness);
+
+    if (directory_name_buf_size == 0xFFFF) return null;
+
+    //trim bytes to name length
+    directory_name_bytes = directory_name_bytes.slice(0,directory_name_buf_size);
+    let directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 5));
+
+    if (directory_name === null) {
+      return null;
+    } else {
+      directory_name = directory_name.trim();
+    }    
+
+    // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
+    let entry_type = bytes[66];
+
+    let color_flag_int = bytes[67];
+    let color_flag_str = color_flag_int == 0 ? "red" : "black";
+
+    // < 0xFFFFFFF9 = Regular stream ID
+    // 0xFFFFFFFA = MAXREGSID - Maximum regular stream ID.
+    // 0xFFFFFFFF = NOSTREAM - No value
+    let left_sibling_id = Static_File_Analyzer.get_int_from_bytes(bytes.slice(68, 72), endianness);
+    let right_sibling_id = Static_File_Analyzer.get_int_from_bytes(bytes.slice(72, 76), endianness);
+
+    let child_id = Static_File_Analyzer.get_int_from_bytes(bytes.slice(76, 80), endianness);
+    if (child_id == 0xFFFFFFFF) child_id = -1;
+
+    // First four bytes of unique id are flipped?
+    let guid = CFB_Parser.parse_guid(bytes.slice(80, 96), endianness);
+    let state_bits = bytes.slice(96, 100);
+    var creation_time = TNEF_Parser.get_eight_byte_date(bytes.slice(100, 108), endianness);
+    var modification_time = TNEF_Parser.get_eight_byte_date(bytes.slice(108, 116), endianness);
+
+    let starting_sector_location = Static_File_Analyzer.get_int_from_bytes(bytes.slice(116, 120), endianness);
+    let stream_size = Static_File_Analyzer.get_int_from_bytes(bytes.slice(120, 124), endianness);
+
+    return {
+      entry_name: directory_name,
+      entry_type: entry_type,
+      color_flag: color_flag_str,
+      left_sibling: left_sibling_id,
+      right_sibling: right_sibling_id,
+      entry_guid: guid,
+      state_bits: state_bits,
+      start_block: starting_sector_location,
+      entry_bytes: [],
+      stream_size: stream_size,
+      entry_properties: {
+        creation_time: creation_time,
+        modification_time: modification_time
+      }
+    };
+
+  }
+
+  /**
+   * Parse a GUID from bytes.
+   *
+   * @param  {String} bytes An array of integers representing bytes.
+   * @param {String}  endianness Value indicating how to interperate the bit order of the binary array. Default is LITTLE_ENDIAN.
+   * @return {Sring}  The parsed GUID as a string.
+   */
+  static parse_guid(bytes, endianness = "LITTLE_ENDIAN") {
+    // First four bytes of GUID id are flipped?
+    let unique_id1 = bytes.slice(0, 4).reverse();
+    let unique_id2 = bytes.slice(4, 16);
+
+    let guid = "";
+    for (var k=0; k<unique_id1.length; k++) {
+      let hex_code = unique_id1[k].toString(16).toUpperCase();
+      guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
+    }
+
+    guid += "-";
+
+    for (var k=0; k<unique_id2.length; k++) {
+      let hex_code = unique_id2[k].toString(16).toUpperCase();
+      guid += (hex_code.length == 1) ? "0" + hex_code : hex_code;
+      if (guid.length==8 || guid.length==13 || guid.length==18 || guid.length==23) {
+        guid += "-";
+      }
+    }
+
+    return guid;
+  }
+
 }
 
 class HTML_Parser {
