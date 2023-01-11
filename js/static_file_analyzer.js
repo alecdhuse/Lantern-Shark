@@ -1403,7 +1403,7 @@ class Static_File_Analyzer {
         } else if (data_type == "str") {
           prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
         } else if (data_type == "unicode") {
-          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
+          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes.filter(i => i > 6));
         } else {
           prop_value = entry.entry_bytes;
         }
@@ -5920,7 +5920,7 @@ class Static_File_Analyzer {
     // Temp solution to parse summary information
     for (let i=0; i<cmb_obj2.entries.length; i++) {
       if (cmb_obj2.entries[i].entry_name == "SummaryInformation") {
-        // http://sedna-soft.de/articles/summary-information-stream/
+        // See: http://sedna-soft.de/articles/summary-information-stream/
         cmb_obj2.entries[i].entry_properties = this.parse_cfb_summary_information(cmb_obj2.entries[i].entry_bytes, cmb_obj2);
         break;
       }
@@ -7783,13 +7783,13 @@ class CFB_Parser {
 
     //trim bytes to name length
     directory_name_bytes = directory_name_bytes.slice(0,directory_name_buf_size);
-    let directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 5));
+    let directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 6));
 
     if (directory_name === null) {
       return null;
     } else {
       directory_name = directory_name.trim();
-    }    
+    }
 
     // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
     let entry_type = bytes[66];
@@ -8884,6 +8884,7 @@ class TNEF_Parser {
     0x00360003: "PidTagSensitivity",
     0x0037001f: "PidTagSubject",
     0x003b0102: "PidTagSentRepresentingSearchKey",
+    0x003d001f: "PidTagSubjectPrefix",
     0x003f0102: "PidTagReceivedByEntryId",
     0x0040001f: "PidTagReceivedByName",
     0x00410102: "PidTagSentRepresentingEntryId",
@@ -8918,7 +8919,15 @@ class TNEF_Parser {
     0x0e060040: "PidTagMessageDeliveryTime",
     0x0e0a0102: "PidTagSentMailEntryId",
     0x0e140003: "PidTagSubmitFlags",
+    0x0e1d001f: "PidTagNormalizedSubject",
     0x0e1f000b: "PidTagRtfInSync",
+    0x0e210003: "PidTagAttachNumber",
+    0x0ff80102: "PidTagMappingSignature",
+    0x0ffa0102: "PidTagStoreRecordKey",
+    0x0ffb0102: "PidTagStoreEntryId",
+    0x0ffe0003: "PidTagObjectType",
+    0x0fff0102: "PidTagEntryId",
+    0x1000001f: "PidTagBody",
     0x10060003: "PidTagRtfSyncBodyCrc",
     0x10070003: "PidTagRtfSyncBodyCount",
     0x1008001e: "PidTagBody",
@@ -8952,14 +8961,7 @@ class TNEF_Parser {
     0x7ffd0003: "PidTagAttachmentFlags",
     0x7ffe000b: "PidTagAttachmentHidden",
     0x8000001f: "attFrom",
-    0x8006001f: "attDateRecd",
-    0x0e210003: "PidTagAttachNumber",
-    0x0ff80102: "PidTagMappingSignature",
-    0x0ffa0102: "PidTagStoreRecordKey",
-    0x0ffb0102: "PidTagStoreEntryId",
-    0x0ffe0003: "PidTagObjectType",
-    0x1000001f: "PidTagBody",
-    0x0e1d001f: "PidTagNormalizedSubject"
+    0x8006001f: "attDateRecd"
   };
 
   /**
