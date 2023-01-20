@@ -7634,7 +7634,8 @@ class CFB_Parser {
       sector_size: 512,
       entries: [],
       root_entry: {
-        guid: "00000000-0000-0000-0000-000000000000"
+        guid: "00000000-0000-0000-0000-000000000000",
+        start_block: 0
       }
     };
 
@@ -7688,6 +7689,30 @@ class CFB_Parser {
         }
       }
 
+      // Read short sectors chain.
+      let last_offset_int = 0;
+      let short_sectors = [];
+      let offset_ints = [];
+      let start_index = short_sec_id_1;
+      let short_sec_length = (cmb_obj.sector_size / 4);
+
+      for (let i2=0; i2<number_of_short_sectors; i2++) {
+        short_sectors.push(start_index);
+
+        let current_block = Math.floor(start_index / short_sec_length);
+        let current_block_index = start_index % short_sec_length;
+        let start_block_offset = difat_index[current_block];
+
+        let start_offset = (start_block_offset + 1) * cmb_obj.sector_size;
+
+        // Read 32-bit integers
+        for (let o=start_offset; o<(start_offset+short_sec_length); o+=4) {
+          offset_ints.push(Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(o,o+4), cmb_obj.byte_order));
+        }
+
+        start_index = offset_ints[start_index];
+      }
+
       // Proccess DIFAT Array?
       for (var di=0; di<difat_loc.length; di++) {
         var next_sector = file_bytes.slice(difat_loc[di], difat_loc[di]+4);
@@ -7713,16 +7738,47 @@ class CFB_Parser {
 
       for (let i=0; i<4; i++) {
         let enrty_obj = CFB_Parser.parse_stream_entry(file_bytes.slice(next_directory_entry, next_directory_entry+128), cmb_obj.byte_order);
-        enrty_obj.sector_type = "Directory Sector";
 
-        if (enrty_obj !== null) cmb_obj.entries.push(enrty_obj);
+        switch (enrty_obj.entry_type) {
+          case 0:
+            enrty_obj.sector_type = "Empty Sector";
+            break;
+          case 1:
+            enrty_obj.sector_type = "Directory Sector";
+            break;
+          case 2:
+            enrty_obj.sector_type = "User Stream Sector";
+            break;
+          case 3:
+            enrty_obj.sector_type = "Locked Sector";
+            break;
+          case 4:
+            enrty_obj.sector_type = "Property Sector";
+            break;
+          case 4:
+            enrty_obj.sector_type = "Root Sector";
+            break;
+        }
 
         if (enrty_obj.entry_name == "Root Entry") {
           cmb_obj.root_entry.guid = enrty_obj.entry_guid;
+          cmb_obj.root_entry.start_block = enrty_obj.start_block;
+          cmb_obj.root_entry.obj = enrty_obj;
         }
+
+        if (offset_ints[last_offset_int] < 0xFFFFFFA0) {
+          last_offset_int = offset_ints[last_offset_int];
+        } else {
+          last_offset_int++;
+        }
+
+        if (enrty_obj !== null) cmb_obj.entries.push(enrty_obj);
 
         next_directory_entry += 128;
       }
+
+      last_offset_int = 4; // Four entries already read.
+      console.log(offset_ints);
 
       // Sector #2 - The MiniFAT Sector
       let current_sec_byte = next_directory_entry;
@@ -7732,11 +7788,12 @@ class CFB_Parser {
         sectors.push(sector_block);
       }
 
+      let next_offset = 2048 + (last_offset_int * 128);
       let mini_stream_Start = current_sec_byte;
       next_directory_entry = current_sec_byte;
 
       // Sector #3 - The Mini Stream Sector
-      while (Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(next_directory_entry,next_directory_entry+4)) <  0xfaffffff) {
+      while (Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(next_directory_entry, next_directory_entry+4)) <  0xfaffffff && next_directory_entry < file_bytes.length) {
         let enrty_obj = CFB_Parser.parse_stream_entry(file_bytes.slice(next_directory_entry, next_directory_entry+128), cmb_obj.byte_order);
 
         if (enrty_obj !== null) {
@@ -7745,9 +7802,63 @@ class CFB_Parser {
         }
 
         next_directory_entry += 128;
+
+        if (Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(next_directory_entry, next_directory_entry+4)) >= 0xfaffffff) {
+          next_directory_entry += 128;
+
+          while (Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(next_directory_entry, next_directory_entry+4)) != 0x5f005f00 && next_directory_entry < file_bytes.length) {
+            next_directory_entry += 128;
+          }
+        }
       }
 
+      // Create Property Hierarchy
+      CFB_Parser.create_property_hierarchy(cmb_obj.entries, cmb_obj.root_entry.obj);
+
+      for (let i=0; i<cmb_obj.entries.length; i++) {
+        let entry_byte_start = 0;
+        if (cmb_obj.entries[i].stream_size < 4096) {
+          let root_start_byte = (cmb_obj.root_entry.start_block + 1) * cmb_obj.sector_size;
+          entry_byte_start = ((cmb_obj.entries[i].start_block) * 64) + root_start_byte;
+        } else {
+          entry_byte_start = (cmb_obj.entries[i].start_block + 1) * cmb_obj.sector_size;
+        }
+        cmb_obj.entries[i].entry_start = entry_byte_start;
+        cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
+      }
+
+      console.log(cmb_obj);
+
+      /*
       let data_start = next_directory_entry;
+
+      //Sort by start_block
+      let sorted_entries = cmb_obj.entries.sort((a, b) => a.start_block - b.start_block);
+      let block_start_locs = [];
+      let next_byte_start = 0;
+
+      for (let i=0; i<sorted_entries.length; i++) {
+        let byte_start = 0;
+        let padding = 64 - (sorted_entries[i].stream_size % 64);
+
+        if (sorted_entries[i].entry_name == "Root Entry") {
+          cmb_obj.entries[i].entry_start = 512 + (cmb_obj.entries[i].start_block * cmb_obj.sector_size);
+        } else {
+          if (next_byte_start == 0) {
+            byte_start = data_start + 512 + (sorted_entries[i].start_block * 64);
+          } else {
+            byte_start = next_byte_start;
+          }
+
+          block_start_locs.push(byte_start);
+
+          if (sorted_entries[i].stream_size > 0) {
+            next_byte_start = byte_start + sorted_entries[i].stream_size + padding;
+          }
+        }
+      }
+
+      console.log(block_start_locs);
 
       // Read entry bytes
       for (let i=0; i<cmb_obj.entries.length; i++) {
@@ -7755,17 +7866,60 @@ class CFB_Parser {
           if (cmb_obj.entries[i].sector_type == "Directory Sector") {
             cmb_obj.entries[i].entry_start = 512 + (cmb_obj.entries[i].start_block * cmb_obj.sector_size);
           } else if (cmb_obj.entries[i].sector_type == "Mini Stream") {
-            cmb_obj.entries[i].entry_start = data_start + 512 + (cmb_obj.entries[i].start_block * 64);
+            if (i == 29) {
+              let test123=123;
+            }
+            //cmb_obj.entries[i].entry_start = data_start + 512 + (cmb_obj.entries[i].start_block * 64);
+
+            cmb_obj.entries[i].entry_start = block_start_locs[cmb_obj.entries[i].start_block];
           }
 
           cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
         }
       }
+      */
+
     } else {
       throw "File Magic Number is not a CFB file.";
     }
 
     return cmb_obj;
+  }
+
+  /**
+   * Returns a flat array of all children for and incliding a given child_id
+   *
+   * @param {array}   entries The list of entries for the CFB object.
+   * @param {integer} child_id The child_id to start building the hierarchy from.
+   * @return {array}  The array of children starting at the given child_id
+   */
+  static create_property_hierarchy(entries, prop_obj) {
+    if (prop_obj === undefined || prop_obj === null) return;
+    if (prop_obj.child_id >= 0xFFFFFFA0) return;
+
+    prop_obj.children = [];
+    let children = [prop_obj.child_id];
+
+    while (children.length != 0) {
+      let current_index = children.shift();
+      let current = entries[current_index];
+
+      if (current == null) continue;
+
+      prop_obj.children.push(current_index);
+
+      if (current.entry_type == 1) {
+        CFB_Parser.create_property_hierarchy(entries, current);
+      }
+
+      if (current.left_sibling < 0xFFFFFFA0) {
+        children.push(current.left_sibling);
+      }
+
+      if (current.right_sibling < 0xFFFFFFA0) {
+        children.push(current.right_sibling);
+      }
+    }
   }
 
   /**
@@ -7794,6 +7948,8 @@ class CFB_Parser {
     // 0 - Empty, 1 - User storage, 2 - User Stream, 3 - LockBytes, 4 - Property, 5 - Root storage
     let entry_type = bytes[66];
 
+    if (entry_type > 5) return null;
+
     let color_flag_int = bytes[67];
     let color_flag_str = color_flag_int == 0 ? "red" : "black";
 
@@ -7802,13 +7958,19 @@ class CFB_Parser {
     // 0xFFFFFFFF = NOSTREAM - No value
     let left_sibling_id = Static_File_Analyzer.get_int_from_bytes(bytes.slice(68, 72), endianness);
     let right_sibling_id = Static_File_Analyzer.get_int_from_bytes(bytes.slice(72, 76), endianness);
-
     let child_id = Static_File_Analyzer.get_int_from_bytes(bytes.slice(76, 80), endianness);
     if (child_id == 0xFFFFFFFF) child_id = -1;
+
+    if (left_sibling_id == right_sibling_id && right_sibling_id == child_id) return null;
 
     // First four bytes of unique id are flipped?
     let guid = CFB_Parser.parse_guid(bytes.slice(80, 96), endianness);
     let state_bits = bytes.slice(96, 100);
+
+    if (entry_type != 5 && Static_File_Analyzer.get_int_from_bytes(state_bits) != 0) {
+      return null;
+    }
+
     var creation_time = TNEF_Parser.get_eight_byte_date(bytes.slice(100, 108), endianness);
     var modification_time = TNEF_Parser.get_eight_byte_date(bytes.slice(108, 116), endianness);
 
@@ -7821,6 +7983,7 @@ class CFB_Parser {
       color_flag: color_flag_str,
       left_sibling: left_sibling_id,
       right_sibling: right_sibling_id,
+      child_id: child_id,
       entry_guid: guid,
       state_bits: state_bits,
       start_block: starting_sector_location,
@@ -8876,6 +9039,9 @@ class TNEF_Parser {
 
   static pid_tags = {
     0x0002000b: "PidTagAlternateRecipientAllowed",
+    0x00020102: "PidTagAlternateRecipientAllowed",
+    0x00030102: "PidTagAuthorizingUsers",
+    0x00040102: "PidTagScriptData",
     0x001a001f: "PidTagMessageClass",
     0x0023000b: "PidTagOriginatorDeliveryReportRequested",
     0x00260003: "PidTagPriority",
@@ -8922,6 +9088,7 @@ class TNEF_Parser {
     0x0e1d001f: "PidTagNormalizedSubject",
     0x0e1f000b: "PidTagRtfInSync",
     0x0e210003: "PidTagAttachNumber",
+    0x0ff60102: "PidTagInstanceKey",
     0x0ff80102: "PidTagMappingSignature",
     0x0ffa0102: "PidTagStoreRecordKey",
     0x0ffb0102: "PidTagStoreEntryId",
@@ -8934,9 +9101,14 @@ class TNEF_Parser {
     0x10090102: "PidTagRtfCompressed",
     0x10100003: "PidTagRtfSyncPrefixCount",
     0x10110003: "PidTagRtfSyncTrailingCount",
+    0x10120102: "PidTagOriginallyIntendedRecipEntryId",
     0x1015001f: "PidTagBodyContentId",
+    0x10170102: "AnnotationToken",
     0x1035001f: "PidTagInternetMessageId",
     0x3001001e: "PidTagDisplayName",
+    0x3001001f: "PidTagDisplayName",
+    0x3002001f: "PidTagAddressType",
+    0x3003001f: "PidTagEmailAddress",
     0x300b0102: "PidTagSearchKey",
     0x30140102: "PidTagBody",
     0x340d0003: "PidTagStoreSupportMask",
@@ -8947,6 +9119,9 @@ class TNEF_Parser {
     0x3707001e: "PidTagAttachLongFilename",
     0x370b0003: "PidTagRenderingPosition",
     0x37140003: "PidTagAttachFlags",
+    0x39fe001f: "PidTagSmtpAddress",
+    0x3a20001f: "PidTagTransmittableDisplayName",
+    0x3d010102: "PidTagAbProviders",
     0x3fde0003: "PidTagInternetCodepage",
     0x3ff8001f: "PidTagCreatorName",
     0x3ffa001f: "PidTagLastModifierName",
@@ -8955,6 +9130,8 @@ class TNEF_Parser {
     0x5d02001f: "PidTagSentRepresentingSmtpAddress",
     0x5d07001f: "PidTagReceivedBySmtpAddress",
     0x5d08001f: "PidTagReceivedRepresentingSmtpAddress",
+    0x5fe5001f: "RecipientSipUri",
+    0x5ff70102: "PidTagRecipientEntryId",
     0x7ffa0003: "PidTagAttachmentLinkId",
     0x7ffb0040: "PidTagExceptionStartTime",
     0x7ffc0040: "PidTagExceptionEndTime",
