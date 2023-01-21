@@ -7823,6 +7823,7 @@ class CFB_Parser {
         } else {
           entry_byte_start = (cmb_obj.entries[i].start_block + 1) * cmb_obj.sector_size;
         }
+        
         cmb_obj.entries[i].entry_start = entry_byte_start;
         cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
       }
@@ -7920,6 +7921,57 @@ class CFB_Parser {
         children.push(current.right_sibling);
       }
     }
+  }
+
+  /**
+   * Returns the byte start within the file for a given byte offset.
+   *
+   * @param  {array} entries
+   * @param  {array} block_offset_arr
+   * @param  {integer} start_block
+   * @param  {integer} block_size
+   * @param  {String} byte_order
+   * @return {integer} The byte offset
+   */
+  static get_block_byte_start(entries, block_offset_arr, start_block, block_size=512, byte_order="LITTLE_ENDIAN") {
+    let small_block_size = block_size / 8;
+    let byte_offset = start_block * small_block_size;
+    let big_block_number = Math.floor(byte_offset / block_size);
+    let big_block_offset = byte_offset % block_size;
+    let root_prop = entries[0];
+    let next_block = root_prop.start_block;
+
+    for (var i = 0; i < big_block_number; i++) {
+      next_block = get_next_inner_block(next_block, block_offset_arr, block_size, byte_order);
+    }
+
+    return (next_block + 1) * block_size;;
+  }
+
+  /**
+   * Returns the next inner block offset
+   *
+   * @param  {integer} offset
+   * @param  {integer} block_offset_arr
+   * @param  {integer} block_size
+   * @param  {String} byte_order
+   * @return {integer} The next block offset.
+   */
+  static get_next_inner_block(offset, block_offset_arr, block_size=512, byte_order="LITTLE_ENDIAN") {
+    let block_len = block_size / 4;
+    let current_block = Math.floor(offset / block_len);
+    let current_block_index = offset % block_len;
+    let start_block_offset = block_offset_arr[current_block];
+
+    let block_offset_byte = (start_block_offset + 1) * block_size;
+
+    // Read 32-bit integers
+    let offset_ints = [];
+    for (let o=block_offset_byte; o<(block_offset_byte+block_len); o+=4) {
+      offset_ints.push(Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(o,o+4), byte_order));
+    }
+
+    return offset_ints[current_block_index];
   }
 
   /**
