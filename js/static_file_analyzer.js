@@ -7818,12 +7818,27 @@ class CFB_Parser {
       for (let i=0; i<cmb_obj.entries.length; i++) {
         let entry_byte_start = 0;
         if (cmb_obj.entries[i].stream_size < 4096) {
-          let root_start_byte = (cmb_obj.root_entry.start_block + 1) * cmb_obj.sector_size;
-          entry_byte_start = ((cmb_obj.entries[i].start_block) * 64) + root_start_byte;
+          let chain = CFB_Parser.get_chain_by_block(file_bytes, cmb_obj.entries[i].start_block, difat_index, cmb_obj.sector_size, cmb_obj.byte_order);
+
+          if (chain.length == 1) {
+            entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, cmb_obj.entries[i].start_block, cmb_obj.sector_size, cmb_obj.byte_order);
+          } else {
+            let result_data = new Int8Array(cmb_obj.entries[i].stream_size);
+
+            for (let i2 = 0, idx = 0; i2 < chain.length; i2++) {
+              entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, chain[i], cmb_obj.sector_size, cmb_obj.byte_order);
+              //for (let j = 0; j < data.length; j++) {
+
+              //}
+            }
+          }
+
+          //let root_start_byte = (cmb_obj.root_entry.start_block + 1) * cmb_obj.sector_size;
+          //entry_byte_start = ((cmb_obj.entries[i].start_block) * 64) + root_start_byte;
         } else {
           entry_byte_start = (cmb_obj.entries[i].start_block + 1) * cmb_obj.sector_size;
         }
-        
+
         cmb_obj.entries[i].entry_start = entry_byte_start;
         cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
       }
@@ -7933,7 +7948,7 @@ class CFB_Parser {
    * @param  {String} byte_order
    * @return {integer} The byte offset
    */
-  static get_block_byte_start(entries, block_offset_arr, start_block, block_size=512, byte_order="LITTLE_ENDIAN") {
+  static get_block_byte_start(file_bytes, entries, block_offset_arr, start_block, block_size=512, byte_order="LITTLE_ENDIAN") {
     let small_block_size = block_size / 8;
     let byte_offset = start_block * small_block_size;
     let big_block_number = Math.floor(byte_offset / block_size);
@@ -7942,10 +7957,32 @@ class CFB_Parser {
     let next_block = root_prop.start_block;
 
     for (var i = 0; i < big_block_number; i++) {
-      next_block = get_next_inner_block(next_block, block_offset_arr, block_size, byte_order);
+      next_block = CFB_Parser.get_next_inner_block(file_bytes, next_block, block_offset_arr, block_size, byte_order);
     }
 
     return (next_block + 1) * block_size;;
+  }
+
+  /**
+   * Chreates a chain of small blocks used to find the real byte offset.
+   *
+   * @param  {integer} start_block
+   * @param  {array}   block_offset_arr
+   * @param  {integer} start_block
+   * @param  {integer} block_size
+   * @param  {String}  byte_order
+   * @return {array}   The chain of block offsets.
+   */
+  static get_chain_by_block(file_bytes, start_block, block_offset_arr, block_size=512, byte_order="LITTLE_ENDIAN") {
+    var block_chain = [];
+    var next_small_block = start_block;
+
+    while (next_small_block < 0xFFFFFFA0) {
+      block_chain.push(next_small_block);
+      next_small_block = CFB_Parser.get_next_inner_block(file_bytes, next_small_block, block_offset_arr, block_size, byte_order);
+    }
+
+    return block_chain;
   }
 
   /**
@@ -7957,7 +7994,7 @@ class CFB_Parser {
    * @param  {String} byte_order
    * @return {integer} The next block offset.
    */
-  static get_next_inner_block(offset, block_offset_arr, block_size=512, byte_order="LITTLE_ENDIAN") {
+  static get_next_inner_block(file_bytes, offset, block_offset_arr, block_size=512, byte_order="LITTLE_ENDIAN") {
     let block_len = block_size / 4;
     let current_block = Math.floor(offset / block_len);
     let current_block_index = offset % block_len;
