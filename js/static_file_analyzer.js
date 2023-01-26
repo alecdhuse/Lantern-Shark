@@ -1372,15 +1372,14 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "Mail Message";
 
     let properties = [];
-    //let start_byte = 1536;
+    let sender_display_name = "";
+    let sender_email = "";
 
     for (let i=0; i<document_obj.compound_file_binary.entries.length; i++) {
       let entry = document_obj.compound_file_binary.entries[i];
 
       if (entry.entry_name.startsWith("__substg1.0_")) {
         let pid_str = entry.entry_name.split("__substg1.0_")[1];
-
-        //let entry_bytes = file_bytes.slice(entry_start, entry.stream_size);
 
         let data_type_int = parseInt('0x' + pid_str.slice(-2) + pid_str.substr(4, 2));
         let data_type = (TNEF_Parser.props_data_types.hasOwnProperty(data_type_int)) ? TNEF_Parser.props_data_types[data_type_int] : "unknown";
@@ -1398,7 +1397,7 @@ class Static_File_Analyzer {
           prop_value = Static_File_Analyzer.get_int_from_bytes(entry.entry_bytes, "LITTLE_ENDIAN");
           prop_value = (prop_value == 0) ? false : true;
         } else if (data_type == "date_8") {
-
+          let debug4343=43;
         } else if (data_type == "str") {
           prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
         } else if (data_type == "unicode") {
@@ -1406,6 +1405,42 @@ class Static_File_Analyzer {
         } else {
           prop_value = entry.entry_bytes;
         }
+
+        // Extract meta data
+        if (pid_name == "PidTagBody") {
+          if (data_type == "unicode" || data_type == "str") {
+            file_info.metadata.description = prop_value;
+          }
+        } else if (pid_name == "PidTagSenderEmailAddress") {
+          if (data_type == "unicode" || data_type == "str") {
+            if (sender_email == "") {
+              sender_email = prop_value;
+            }
+          }
+        } else if (pid_name == "PidTagSenderName") {
+          if (data_type == "unicode" || data_type == "str") {
+            if (sender_display_name == "") {
+              sender_display_name = prop_value;
+            }
+          }
+        } else if (pid_name == "PidTagSentRepresentingName") {
+          if (data_type == "unicode" || data_type == "str") {
+            if (sender_display_name == "") {
+              sender_display_name = prop_value;
+            }
+          }
+        } else if (pid_name == "PidTagSenderSmtpAddress") {
+          if (data_type == "unicode" || data_type == "str") {
+            if (sender_email == "") {
+              sender_email = prop_value;
+            }
+          }
+        } else if (pid_name == "PidTagSubject") {
+          file_info.metadata.title = prop_value;
+        }
+
+        sender_display_name = (sender_display_name.length > 0) ? sender_display_name + " " : "";
+        file_info.metadata.author = sender_display_name + "<" + sender_email + ">";
 
         properties.push({'sb': entry.start_block, 'name': pid_name, 'type': data_type, 'val': prop_value});
       }
@@ -7827,7 +7862,7 @@ class CFB_Parser {
               let result_data = new Int8Array(cmb_obj.entries[i].stream_size);
 
               for (let i2 = 0, idx = 0; i2 < chain.length; i2++) {
-                entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, chain[i], cmb_obj.sector_size, cmb_obj.byte_order);
+                entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, chain[i2], cmb_obj.sector_size, cmb_obj.byte_order);
                 let data = file_bytes.slice(entry_byte_start, entry_byte_start+64);
 
                 for (let j = 0; j < data.length; j++) {
@@ -7835,7 +7870,7 @@ class CFB_Parser {
                 }
               }
 
-              cmb_obj.entries[i].entry_bytes = result_data;
+              cmb_obj.entries[i].entry_bytes = Array.from(result_data).slice(0,cmb_obj.entries[i].stream_size);
             } else {
               cmb_obj.entries[i].entry_bytes = [];
             }
