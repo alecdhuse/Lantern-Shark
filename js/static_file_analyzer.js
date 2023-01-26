@@ -1376,7 +1376,6 @@ class Static_File_Analyzer {
 
     for (let i=0; i<document_obj.compound_file_binary.entries.length; i++) {
       let entry = document_obj.compound_file_binary.entries[i];
-      //let entry_start = start_byte + ((entry.entry_sec_id + 1) * 128);
 
       if (entry.entry_name.startsWith("__substg1.0_")) {
         let pid_str = entry.entry_name.split("__substg1.0_")[1];
@@ -1408,7 +1407,7 @@ class Static_File_Analyzer {
           prop_value = entry.entry_bytes;
         }
 
-        properties.push({'name': pid_name, 'type': data_type, 'val': prop_value});
+        properties.push({'sb': entry.start_block, 'name': pid_name, 'type': data_type, 'val': prop_value});
       }
 
     }
@@ -7706,7 +7705,7 @@ class CFB_Parser {
         let start_offset = (start_block_offset + 1) * cmb_obj.sector_size;
 
         // Read 32-bit integers
-        for (let o=start_offset; o<(start_offset+short_sec_length); o+=4) {
+        for (let o=start_offset; o<(start_offset+(short_sec_length*4)); o+=4) {
           offset_ints.push(Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(o,o+4), cmb_obj.byte_order));
         }
 
@@ -7778,7 +7777,6 @@ class CFB_Parser {
       }
 
       last_offset_int = 4; // Four entries already read.
-      console.log(offset_ints);
 
       // Sector #2 - The MiniFAT Sector
       let current_sec_byte = next_directory_entry;
@@ -7822,78 +7820,34 @@ class CFB_Parser {
 
           if (chain.length == 1) {
             entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, cmb_obj.entries[i].start_block, cmb_obj.sector_size, cmb_obj.byte_order);
+            cmb_obj.entries[i].entry_start = entry_byte_start;
+            cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
           } else {
-            let result_data = new Int8Array(cmb_obj.entries[i].stream_size);
+            if (cmb_obj.entries[i].stream_size > 0) {
+              let result_data = new Int8Array(cmb_obj.entries[i].stream_size);
 
-            for (let i2 = 0, idx = 0; i2 < chain.length; i2++) {
-              entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, chain[i], cmb_obj.sector_size, cmb_obj.byte_order);
-              //for (let j = 0; j < data.length; j++) {
+              for (let i2 = 0, idx = 0; i2 < chain.length; i2++) {
+                entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, chain[i], cmb_obj.sector_size, cmb_obj.byte_order);
+                let data = file_bytes.slice(entry_byte_start, entry_byte_start+64);
 
-              //}
+                for (let j = 0; j < data.length; j++) {
+                  result_data[idx++] = data[j];
+                }
+              }
+
+              cmb_obj.entries[i].entry_bytes = result_data;
+            } else {
+              cmb_obj.entries[i].entry_bytes = [];
             }
-          }
 
-          //let root_start_byte = (cmb_obj.root_entry.start_block + 1) * cmb_obj.sector_size;
-          //entry_byte_start = ((cmb_obj.entries[i].start_block) * 64) + root_start_byte;
+
+          }
         } else {
           entry_byte_start = (cmb_obj.entries[i].start_block + 1) * cmb_obj.sector_size;
-        }
-
-        cmb_obj.entries[i].entry_start = entry_byte_start;
-        cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
-      }
-
-      console.log(cmb_obj);
-
-      /*
-      let data_start = next_directory_entry;
-
-      //Sort by start_block
-      let sorted_entries = cmb_obj.entries.sort((a, b) => a.start_block - b.start_block);
-      let block_start_locs = [];
-      let next_byte_start = 0;
-
-      for (let i=0; i<sorted_entries.length; i++) {
-        let byte_start = 0;
-        let padding = 64 - (sorted_entries[i].stream_size % 64);
-
-        if (sorted_entries[i].entry_name == "Root Entry") {
-          cmb_obj.entries[i].entry_start = 512 + (cmb_obj.entries[i].start_block * cmb_obj.sector_size);
-        } else {
-          if (next_byte_start == 0) {
-            byte_start = data_start + 512 + (sorted_entries[i].start_block * 64);
-          } else {
-            byte_start = next_byte_start;
-          }
-
-          block_start_locs.push(byte_start);
-
-          if (sorted_entries[i].stream_size > 0) {
-            next_byte_start = byte_start + sorted_entries[i].stream_size + padding;
-          }
-        }
-      }
-
-      console.log(block_start_locs);
-
-      // Read entry bytes
-      for (let i=0; i<cmb_obj.entries.length; i++) {
-        if (cmb_obj.entries[i].start_block < 0xfaffffff) {
-          if (cmb_obj.entries[i].sector_type == "Directory Sector") {
-            cmb_obj.entries[i].entry_start = 512 + (cmb_obj.entries[i].start_block * cmb_obj.sector_size);
-          } else if (cmb_obj.entries[i].sector_type == "Mini Stream") {
-            if (i == 29) {
-              let test123=123;
-            }
-            //cmb_obj.entries[i].entry_start = data_start + 512 + (cmb_obj.entries[i].start_block * 64);
-
-            cmb_obj.entries[i].entry_start = block_start_locs[cmb_obj.entries[i].start_block];
-          }
-
+          cmb_obj.entries[i].entry_start = entry_byte_start;
           cmb_obj.entries[i].entry_bytes = file_bytes.slice(cmb_obj.entries[i].entry_start, cmb_obj.entries[i].entry_start + cmb_obj.entries[i].stream_size);
         }
       }
-      */
 
     } else {
       throw "File Magic Number is not a CFB file.";
@@ -7957,10 +7911,14 @@ class CFB_Parser {
     let next_block = root_prop.start_block;
 
     for (var i = 0; i < big_block_number; i++) {
-      next_block = CFB_Parser.get_next_inner_block(file_bytes, next_block, block_offset_arr, block_size, byte_order);
+      let next_block_val = CFB_Parser.get_next_inner_block(file_bytes, next_block, block_offset_arr, false, block_size, byte_order);
+      next_block = next_block_val;
     }
 
-    return (next_block + 1) * block_size;;
+    let block_start = (next_block + 1) * block_size;
+    let entry_start = block_start + big_block_offset;
+
+    return entry_start;
   }
 
   /**
@@ -7979,7 +7937,7 @@ class CFB_Parser {
 
     while (next_small_block < 0xFFFFFFA0) {
       block_chain.push(next_small_block);
-      next_small_block = CFB_Parser.get_next_inner_block(file_bytes, next_small_block, block_offset_arr, block_size, byte_order);
+      next_small_block = CFB_Parser.get_next_inner_block(file_bytes, next_small_block, block_offset_arr, true, block_size, byte_order);
     }
 
     return block_chain;
@@ -7990,11 +7948,12 @@ class CFB_Parser {
    *
    * @param  {integer} offset
    * @param  {integer} block_offset_arr
+   * @param  {boolean} build_chain Flag to indicate if this being called to build a chain.
    * @param  {integer} block_size
    * @param  {String} byte_order
    * @return {integer} The next block offset.
    */
-  static get_next_inner_block(file_bytes, offset, block_offset_arr, block_size=512, byte_order="LITTLE_ENDIAN") {
+  static get_next_inner_block(file_bytes, offset, block_offset_arr, build_chain=false, block_size=512, byte_order="LITTLE_ENDIAN") {
     let block_len = block_size / 4;
     let current_block = Math.floor(offset / block_len);
     let current_block_index = offset % block_len;
@@ -8004,7 +7963,7 @@ class CFB_Parser {
 
     // Read 32-bit integers
     let offset_ints = [];
-    for (let o=block_offset_byte; o<(block_offset_byte+block_len); o+=4) {
+    for (let o=block_offset_byte; o<(block_offset_byte+(block_len*4)); o+=4) {
       offset_ints.push(Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(o,o+4), byte_order));
     }
 
