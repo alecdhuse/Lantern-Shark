@@ -1446,6 +1446,7 @@ class Static_File_Analyzer {
       }
 
     }
+    file_info.parsed = properties;
 
     console.log(document_obj);
     console.log(properties);
@@ -9171,6 +9172,9 @@ class TNEF_Parser {
     0x0e1d001f: "PidTagNormalizedSubject",
     0x0e1f000b: "PidTagRtfInSync",
     0x0e210003: "PidTagAttachNumber",
+    0x0e4b0102: "CreatorGUID",
+    0x0e580102: "CreatorSID",
+    0x0f030102: "PidTagConversationThreadId",
     0x0ff60102: "PidTagInstanceKey",
     0x0ff80102: "PidTagMappingSignature",
     0x0ffa0102: "PidTagStoreRecordKey",
@@ -9207,12 +9211,25 @@ class TNEF_Parser {
     0x3d010102: "PidTagAbProviders",
     0x3fde0003: "PidTagInternetCodepage",
     0x3ff8001f: "PidTagCreatorName",
+    0x3ff90102: "PidTagCreatorEntryId",
     0x3ffa001f: "PidTagLastModifierName",
+    0x4022001f:	"CreatorAddressType",
+    0x4023001f:	"CreatorEmailAddress",
+    0x4024001f:	"LastModifierAddressType",
+    0x4025001f:	"LastModifierEmailAddress",
+    0x4030001f: "SenderSimpleDisplayName",
+    0x4031001f:	"SentRepresentingSimpleDisplayName",
+    0x4034001f:	"ReceivedBySimpleDisplayName",
+    0x4035001f:	"ReceivedRepresentingSimpleDisplayName",
+    0x4038001f:	"CreatorSimpleDisplayName",
+    0x4039001f:	"LastModifierSimpleDisplayName",
     0x59090003: "PidTagMessageEditorFormat",
     0x5d01001f: "PidTagSenderSmtpAddress",
     0x5d02001f: "PidTagSentRepresentingSmtpAddress",
     0x5d07001f: "PidTagReceivedBySmtpAddress",
     0x5d08001f: "PidTagReceivedRepresentingSmtpAddress",
+    0x5d0a001f:	"CreatorSMTPAddress",
+    0x5d0b001f:	"LastModifierSMTPAddress",
     0x5fe5001f: "RecipientSipUri",
     0x5ff70102: "PidTagRecipientEntryId",
     0x7ffa0003: "PidTagAttachmentLinkId",
