@@ -1446,7 +1446,8 @@ class Static_File_Analyzer {
       }
 
     }
-    file_info.parsed = properties;
+
+    file_info.parsed = JSON.stringify(properties, null, 2);
 
     console.log(document_obj);
     console.log(properties);
