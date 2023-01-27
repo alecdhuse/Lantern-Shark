@@ -1492,6 +1492,9 @@ class Static_File_Analyzer {
         'directory': false,
         'file_bytes': utf8_encode.encode(message_body)
       });
+
+      // Check message body for IoCs
+      file_info = this.search_for_iocs(message_body, file_info);
     }
 
     file_info.file_components = file_info.file_components.concat(message_attachments);
