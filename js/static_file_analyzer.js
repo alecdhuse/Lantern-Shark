@@ -507,7 +507,7 @@ class Static_File_Analyzer {
       cmd_match = cms_regex.exec(macro_string);
     }
 
-    file_info = this.search_for_iocs(macro_string, file_info);
+    file_info = Static_File_Analyzer.search_for_iocs(macro_string, file_info);
 
     return file_info;
   }
@@ -1347,7 +1347,7 @@ class Static_File_Analyzer {
       return str_part1 + " && " + str_part2;
     });
 
-    file_info = this.search_for_iocs(cmd_shell, file_info);
+    file_info = Static_File_Analyzer.search_for_iocs(cmd_shell, file_info);
 
     // Extract more meta data from what we have already collected.
     if (/[a-zA-Z]\:\\/gm.test(file_info.metadata.last_saved_location)) {
@@ -1494,7 +1494,7 @@ class Static_File_Analyzer {
       });
 
       // Check message body for IoCs
-      file_info = this.search_for_iocs(message_body, file_info);
+      file_info = Static_File_Analyzer.search_for_iocs(message_body, file_info);
     }
 
     file_info.file_components = file_info.file_components.concat(message_attachments);
@@ -1523,7 +1523,7 @@ class Static_File_Analyzer {
     }
 
     // Get an array of the embedded objects
-    let embedded_objs = PDF_Parser.get_objects(file_bytes, file_text);
+    let embedded_objs = PDF_Parser.get_objects(file_info, file_bytes, file_text);
 
     // Get any embedded files and components
     file_info.file_components = PDF_Parser.get_file_components(embedded_objs);
@@ -2616,7 +2616,7 @@ class Static_File_Analyzer {
                 if (current_unique_offset > rgb_bytes.length) break;
 
                 if (rgb !== null && rgb.length > 0) {
-                  file_info = this.search_for_iocs(rgb, file_info);
+                  file_info = Static_File_Analyzer.search_for_iocs(rgb, file_info);
                   string_constants.push(rgb);
                 }
 
@@ -3000,7 +3000,7 @@ class Static_File_Analyzer {
     // Check all cells for IoCs
     for (const [sheet_key, sheet_value] of Object.entries(document_obj.sheets)) {
       for (const [data_key, data_value] of Object.entries(sheet_value.data)) {
-        file_info = this.search_for_iocs(data_value.value, file_info);
+        file_info = Static_File_Analyzer.search_for_iocs(data_value.value, file_info);
       }
     }
 
@@ -3142,7 +3142,7 @@ class Static_File_Analyzer {
 
           while (xml_target_match !== null) {
             file_info.analytic_findings.push("SUSPICIOUS - Unusual XML Schema Target: " + xml_target_match[1]);
-            file_info = this.search_for_iocs(xml_target_match[1], file_info);
+            file_info = Static_File_Analyzer.search_for_iocs(xml_target_match[1], file_info);
             xml_target_match = xml_target_regex.exec(xml_text);
           }
 
@@ -3160,7 +3160,7 @@ class Static_File_Analyzer {
               file_info.analytic_findings.push("SUSPICIOUS - External XML Schema Target: " + xml_target_match2[1]);
             }
 
-            file_info = this.search_for_iocs(xml_target_match2[1], file_info);
+            file_info = Static_File_Analyzer.search_for_iocs(xml_target_match2[1], file_info);
             xml_target_match2 = xml_target_regex2.exec(xml_text);
           }
 
@@ -3310,7 +3310,7 @@ class Static_File_Analyzer {
                 current_byte2 = current_byte2 + 4 + string_size;
 
                 string_constants.push(string_text);
-                file_info = this.search_for_iocs(string_text, file_info);
+                file_info = Static_File_Analyzer.search_for_iocs(string_text, file_info);
               } else if (current_record_info.record_number == 159) {
                 // BrtBeginSst
               } else if (current_record_info.record_number == 160) {
@@ -6694,7 +6694,7 @@ class Static_File_Analyzer {
                 }
 
                 // Check for IoCs
-                file_info = this.search_for_iocs(stack_result, file_info);
+                file_info = Static_File_Analyzer.search_for_iocs(stack_result, file_info);
               }
             }
           }
@@ -7633,8 +7633,8 @@ class Static_File_Analyzer {
    * @param  {object} file_json The class outbut object, see get_default_file_json for format.
    * @return {Object} The updated file_json object.
    */
-  search_for_iocs(search_text, file_json) {
-    var found_urls = this.search_for_url(search_text);
+  static search_for_iocs(search_text, file_json) {
+    var found_urls = Static_File_Analyzer.search_for_url(search_text);
 
     for (var i=0; i<found_urls.urls.length; i++) {
       if (!file_json.iocs.includes(found_urls.urls[i])) {
@@ -7657,7 +7657,7 @@ class Static_File_Analyzer {
    * @param  {String} search_text The text to search.
    * @return {Object} An array of any found URLs.
    */
-  search_for_url(search_text) {
+  static search_for_url(search_text) {
     var found_urls = [];
     var findings = [];
 
@@ -8877,11 +8877,12 @@ class PDF_Parser {
   /**
    * Retrieves embedded object within the PDF.
    *
+   * @param {Object}  file_info - The file_info object used file file parsing results.
    * @param {String}  file_text - The unicode text of the PDF file.
    * @param {array}   file_bytes - An array of the bytes of the PDF file.
    * @return {array}  An array containing the embedded objects of the PDF file.
    */
-  static get_objects(file_bytes, file_text) {
+  static get_objects(file_info, file_bytes, file_text) {
     let embedded_objs = [];
     let match;
     let obj_start_regex = /(\d+)\s+(\d+)\s+obj[\r\n]/gmi;
@@ -8899,47 +8900,56 @@ class PDF_Parser {
       try {
         let object_dict_regex = /(?:<<|\[)([^\n\r]+)(?:>>|\])[\r\n]/gm;
         let object_dict_match = object_dict_regex.exec(object_text+"\n");
-        let dictionary_text = object_dict_match[1].trim();
-        let dictionary_pair_regex = /\/([^\s<]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
-        let match2;
 
-        while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
-          if (match2[1].toLowerCase() == "filter" ||
-              match2[1].toLowerCase() == "name" ||
-              match2[1].toLowerCase() == "subtype" ||
-              match2[1].toLowerCase() == "type") {
+        // Check to see if a dictionaly actualy exists.
+        if (object_dict_match !== null && object_dict_match !== undefined) {
+          let dictionary_text = object_dict_match[1].trim();
+          let dictionary_pair_regex = /\/([^\s<]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
+          let match2;
 
-            // Use next key as value
-            let dict_key = match2[1];
-            match2 = dictionary_pair_regex.exec(dictionary_text);
-            object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
-          } else {
-            if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
-              // Sub dictionary
-              let sub_dict_start = match2.index + match2[1].length + 1;
-              let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
-              let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
+          while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
+            if (match2[1].toLowerCase() == "filter" ||
+                match2[1].toLowerCase() == "name" ||
+                match2[1].toLowerCase() == "subtype" ||
+                match2[1].toLowerCase() == "type") {
 
-              let sub_dictionary = {};
-              let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
-              let match3;
-
-              while (match3 = sub_dictionary_regex.exec(match2[2])) {
-                if (match3[2] !== null && match3[2] !== undefined) {
-                  if (match3[2].trim().endsWith(">>")) {
-                    sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
-                  } else {
-                    sub_dictionary[match3[1]] = match3[2].trim();
-                  }
-                } else {
-                  sub_dictionary[match3[1]] = "";
-                }
-              }
-
-              object_dictionary[match2[1]] = sub_dictionary;
+              // Use next key as value
+              let dict_key = match2[1];
+              match2 = dictionary_pair_regex.exec(dictionary_text);
+              object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
             } else {
-              // Single value
-              object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? match2[2].trim() : "";
+              if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
+                // Sub dictionary
+                let sub_dict_start = match2.index + match2[1].length + 1;
+                let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
+                let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
+
+                let sub_dictionary = {};
+                let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
+                let match3;
+
+                while (match3 = sub_dictionary_regex.exec(match2[2])) {
+                  if (match3[2] !== null && match3[2] !== undefined) {
+                    if (match3[2].trim().endsWith(">>")) {
+                      sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
+                    } else {
+                      sub_dictionary[match3[1]] = match3[2].trim();
+                    }
+                  } else {
+                    sub_dictionary[match3[1]] = "";
+                  }
+
+                  // Check for embedded URIs
+                  if (/\/URI/gmi.test(match3[1])) {
+                    file_info = Static_File_Analyzer.search_for_iocs(match3[1], file_info);
+                  }
+                }
+
+                object_dictionary[match2[1]] = sub_dictionary;
+              } else {
+                // Single value
+                object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? match2[2].trim() : "";
+              }
             }
           }
         }
