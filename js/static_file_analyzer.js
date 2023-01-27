@@ -8006,13 +8006,12 @@ class CFB_Parser {
   }
 
   /**
-   * Chreates a chain of small blocks used to find the real byte offset.
+   * Chreates a chain of small blocks used to construct the full stream binary.
    *
-   * @param  {integer} start_block
-   * @param  {array}   block_offset_arr
-   * @param  {integer} start_block
-   * @param  {integer} block_size
-   * @param  {String}  byte_order
+   * @param  {integer} start_block      The starting block for the stream.
+   * @param  {array}   block_offset_arr The array of block offsets parsed from the header.
+   * @param  {integer} block_size       The block size of the CFB, default is 512.
+   * @param  {String}  byte_order       The byte order for the CFB file, defaut is LITTLE_ENDIAN.
    * @return {array}   The chain of block offsets.
    */
   static get_chain_by_block(file_bytes, start_block, block_offset_arr, block_size=512, byte_order="LITTLE_ENDIAN") {
@@ -8030,11 +8029,11 @@ class CFB_Parser {
   /**
    * Returns the next inner block offset
    *
-   * @param  {integer} offset
-   * @param  {integer} block_offset_arr
-   * @param  {boolean} build_chain Flag to indicate if this being called to build a chain.
-   * @param  {integer} block_size
-   * @param  {String} byte_order
+   * @param  {integer} offset           Offset withing the block.
+   * @param  {integer} block_offset_arr The array of block offsets parsed from the header.
+   * @param  {boolean} build_chain      Flag to indicate if this being called to build a chain.
+   * @param  {integer} block_size       The block size of the CFB, default is 512.
+   * @param  {String}  byte_order       The byte order for the CFB file, defaut is LITTLE_ENDIAN.
    * @return {integer} The next block offset.
    */
   static get_next_inner_block(file_bytes, offset, block_offset_arr, build_chain=false, block_size=512, byte_order="LITTLE_ENDIAN") {
