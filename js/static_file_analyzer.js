@@ -1372,6 +1372,10 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "Mail Message";
 
     let properties = [];
+    let message_attachment_index = -1;
+    let message_attachments = [];
+    let message_body = "";
+    let message_headers = "";
     let sender_display_name = "";
     let sender_email = "";
 
@@ -1407,9 +1411,24 @@ class Static_File_Analyzer {
         }
 
         // Extract meta data
-        if (pid_name == "PidTagBody") {
+        if (pid_name == "PidTagAttachDataBinary") {
+          // New attachment binary found
+          message_attachments.push({'file_bytes': prop_value, 'directory': false});
+          message_attachment_index++;
+        } else if (pid_name == "PidTagAttachExtension") {
+          message_attachments[message_attachment_index].type = prop_value.substring(1);
+        } else if (pid_name == "PidTagAttachFilename") {
+          if (!message_attachments[message_attachment_index].hasOwnProperty("name")) {
+            // Only add this field if it doesn't exist as the long file name is prefered.
+            message_attachments[message_attachment_index].name = prop_value;
+          }
+        } else if (pid_name == "PidTagAttachLongFilename") {
+          message_attachments[message_attachment_index].name = prop_value;
+        } else if (pid_name == "PidTagAttachMimeTag") {
+          message_attachments[message_attachment_index].mime_type = prop_value;
+        } else if (pid_name == "PidTagBody") {
           if (data_type == "unicode" || data_type == "str") {
-            file_info.metadata.description = prop_value;
+            message_body = prop_value;
           }
         } else if (pid_name == "PidTagSenderEmailAddress") {
           if (data_type == "unicode" || data_type == "str") {
@@ -1437,6 +1456,8 @@ class Static_File_Analyzer {
           }
         } else if (pid_name == "PidTagSubject") {
           file_info.metadata.title = prop_value;
+        } else if (pid_name == "PidTagTransportMessageHeaders") {
+          message_headers = prop_value;
         }
 
         sender_display_name = (sender_display_name.length > 0) ? sender_display_name + " " : "";
@@ -1449,8 +1470,31 @@ class Static_File_Analyzer {
 
     file_info.parsed = JSON.stringify(properties, null, 2);
 
-    console.log(document_obj);
-    console.log(properties);
+    // Clear out file components from CFB parser and replace with MSG specific file components.
+    file_info.file_components = [];
+
+    // Init text encoder
+    let utf8_encode = new TextEncoder();
+
+    if (message_headers.length > 0) {
+      file_info.file_components.push({
+        'name': "Headers.txt",
+        'type': "txt",
+        'directory': false,
+        'file_bytes': utf8_encode.encode(message_headers)
+      });
+    }
+
+    if (message_body.length > 0) {
+      file_info.file_components.push({
+        'name': "Message_Body.txt",
+        'type': "txt",
+        'directory': false,
+        'file_bytes': utf8_encode.encode(message_body)
+      });
+    }
+
+    file_info.file_components = file_info.file_components.concat(message_attachments);
 
     return file_info;
   }
@@ -8897,7 +8941,7 @@ class PDF_Parser {
           }
         }
       } catch(err) {
-        console.log("Error extractin PDF object dictionary: " + object_number);
+        console.log("Error extracting PDF object dictionary: " + object_number);
       }
 
       // Extract stream text, if it exists.
@@ -9178,6 +9222,7 @@ class TNEF_Parser {
     0x0f030102: "PidTagConversationThreadId",
     0x0ff60102: "PidTagInstanceKey",
     0x0ff80102: "PidTagMappingSignature",
+    0x0ff90102:	"PidTagRecordKey",
     0x0ffa0102: "PidTagStoreRecordKey",
     0x0ffb0102: "PidTagStoreEntryId",
     0x0ffe0003: "PidTagObjectType",
@@ -9193,6 +9238,7 @@ class TNEF_Parser {
     0x1015001f: "PidTagBodyContentId",
     0x10170102: "AnnotationToken",
     0x1035001f: "PidTagInternetMessageId",
+    0x1039001f: "PidTagInternetReferences",
     0x3001001e: "PidTagDisplayName",
     0x3001001f: "PidTagDisplayName",
     0x3002001f: "PidTagAddressType",
@@ -9201,6 +9247,12 @@ class TNEF_Parser {
     0x30140102: "PidTagBody",
     0x340d0003: "PidTagStoreSupportMask",
     0x34140102: "PidTagStoreProvider",
+    0x37010102: "PidTagAttachDataBinary",
+    0x3703001f:	"PidTagAttachExtension",
+    0x3704001f: "PidTagAttachFilename",
+    0x3707001f: "PidTagAttachLongFilename",
+    0x370e001f: "PidTagAttachMimeTag",
+    0x3712001f: "PidTagAttachContentId",
     0x3703001e: "PidTagAttachExtension",
     0x37020102: "PidTagAttachEncoding",
     0x37050003: "PidTagAttachMethod",
