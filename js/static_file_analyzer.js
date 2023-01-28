@@ -388,7 +388,7 @@ class Static_File_Analyzer {
     if (file_info.file_format == "xls") {
       file_info = this.analyze_xls(file_bytes, file_info, document_obj);
     } else if (file_info.file_format == "msg") {
-      file_info = this.analyze_msg(file_bytes, file_info, document_obj);
+      file_info = this.analyze_msg(file_bytes, file_info, document_obj.compound_file_binary);
     }
 
     return file_info;
@@ -1364,111 +1364,61 @@ class Static_File_Analyzer {
    *
    * @param  {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @param  {object}      file_info    An object representing the extracted information from the parent Compound File Binary object.
-   * @param  {object}      document_obj A Compound File Binary object
+   * @param  {object}      cfb_obj      A parsed Compound File Binary object
    * @return {Object}      file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  analyze_msg(file_bytes, file_info, document_obj) {
+  analyze_msg(file_bytes, file_info, cfb_obj) {
     file_info.file_format = "msg";
     file_info.file_generic_type = "Mail Message";
 
-    let properties = [];
-    let message_attachment_index = -1;
-    let message_attachments = [];
-    let message_body = "";
-    let message_headers = "";
+    let msg_properties = MSG_Tools.parse_msg_properties(cfb_obj);
+
     let sender_display_name = "";
     let sender_email = "";
 
-    for (let i=0; i<document_obj.compound_file_binary.entries.length; i++) {
-      let entry = document_obj.compound_file_binary.entries[i];
-
-      if (entry.entry_name.startsWith("__substg1.0_")) {
-        let pid_str = entry.entry_name.split("__substg1.0_")[1];
-
-        let data_type_int = parseInt('0x' + pid_str.slice(-2) + pid_str.substr(4, 2));
-        let data_type = (TNEF_Parser.props_data_types.hasOwnProperty(data_type_int)) ? TNEF_Parser.props_data_types[data_type_int] : "unknown";
-
-        let pid_int = parseInt('0x'+pid_str);
-        let pid_name = (TNEF_Parser.pid_tags.hasOwnProperty(pid_int)) ? TNEF_Parser.pid_tags[pid_int] : pid_str;
-
-        let prop_value = 0;
-
-        if (data_type == "bytes") {
-          prop_value = entry.entry_bytes;
-        } else if (data_type == "int") {
-          prop_value = Static_File_Analyzer.get_int_from_bytes(entry.entry_bytes, "LITTLE_ENDIAN");
-        } else if (data_type == "bool") {
-          prop_value = Static_File_Analyzer.get_int_from_bytes(entry.entry_bytes, "LITTLE_ENDIAN");
-          prop_value = (prop_value == 0) ? false : true;
-        } else if (data_type == "date_8") {
-          let debug4343=43;
-        } else if (data_type == "str") {
-          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
-        } else if (data_type == "unicode") {
-          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes.filter(i => i > 6));
-        } else {
-          prop_value = entry.entry_bytes;
+    if (msg_properties.properties.hasOwnProperty("PidTagSenderEmailAddress")) {
+      let data_type = msg_properties.properties['PidTagSenderEmailAddress'].data_type;
+      if (data_type == "unicode" || data_type == "str") {
+        if (sender_email == "") {
+          sender_email = msg_properties.properties['PidTagSenderEmailAddress'].val;
         }
-
-        // Extract meta data
-        if (pid_name == "PidTagAttachDataBinary") {
-          // New attachment binary found
-          message_attachments.push({'file_bytes': prop_value, 'directory': false});
-          message_attachment_index++;
-        } else if (pid_name == "PidTagAttachExtension") {
-          message_attachments[message_attachment_index].type = prop_value.substring(1);
-        } else if (pid_name == "PidTagAttachFilename") {
-          if (!message_attachments[message_attachment_index].hasOwnProperty("name")) {
-            // Only add this field if it doesn't exist as the long file name is prefered.
-            message_attachments[message_attachment_index].name = prop_value;
-          }
-        } else if (pid_name == "PidTagAttachLongFilename") {
-          message_attachments[message_attachment_index].name = prop_value;
-        } else if (pid_name == "PidTagAttachMimeTag") {
-          message_attachments[message_attachment_index].mime_type = prop_value;
-        } else if (pid_name == "PidTagBody") {
-          if (data_type == "unicode" || data_type == "str") {
-            message_body = prop_value;
-          }
-        } else if (pid_name == "PidTagSenderEmailAddress") {
-          if (data_type == "unicode" || data_type == "str") {
-            if (sender_email == "") {
-              sender_email = prop_value;
-            }
-          }
-        } else if (pid_name == "PidTagSenderName") {
-          if (data_type == "unicode" || data_type == "str") {
-            if (sender_display_name == "") {
-              sender_display_name = prop_value;
-            }
-          }
-        } else if (pid_name == "PidTagSentRepresentingName") {
-          if (data_type == "unicode" || data_type == "str") {
-            if (sender_display_name == "") {
-              sender_display_name = prop_value;
-            }
-          }
-        } else if (pid_name == "PidTagSenderSmtpAddress") {
-          if (data_type == "unicode" || data_type == "str") {
-            if (sender_email == "") {
-              sender_email = prop_value;
-            }
-          }
-        } else if (pid_name == "PidTagSubject") {
-          file_info.metadata.title = prop_value;
-        } else if (pid_name == "PidTagTransportMessageHeaders") {
-          message_headers = prop_value;
-        }
-
-        sender_display_name = (sender_display_name.length > 0) ? sender_display_name + " " : "";
-        file_info.metadata.author = sender_display_name + "<" + sender_email + ">";
-
-        properties.push({'sb': entry.start_block, 'name': pid_name, 'type': data_type, 'val': prop_value});
       }
-
     }
 
-    file_info.parsed = JSON.stringify(properties, null, 2);
+    if (msg_properties.properties.hasOwnProperty("PidTagSenderName")) {
+      let data_type = msg_properties.properties['PidTagSenderName'].data_type;
+      if (data_type == "unicode" || data_type == "str") {
+        if (sender_display_name == "") {
+          sender_display_name = msg_properties.properties['PidTagSenderName'].val;
+        }
+      }
+    }
+
+    if (msg_properties.properties.hasOwnProperty("PidTagSentRepresentingName")) {
+      let data_type = msg_properties.properties['PidTagSentRepresentingName'].data_type;
+      if (data_type == "unicode" || data_type == "str") {
+        if (sender_display_name == "") {
+          sender_display_name = msg_properties.properties['PidTagSentRepresentingName'].val;
+        }
+      }
+    }
+
+    if (msg_properties.properties.hasOwnProperty("PidTagSenderSmtpAddress")) {
+      let data_type = msg_properties.properties['PidTagSenderSmtpAddress'].data_type;
+      if (data_type == "unicode" || data_type == "str") {
+        if (sender_email == "") {
+          sender_email = msg_properties.properties['PidTagSenderSmtpAddress'].val;
+        }
+      }
+    }
+
+    if (msg_properties.properties.hasOwnProperty("PidTagSubject")) {
+      file_info.metadata.title = msg_properties.properties['PidTagSubject'].val;
+    }
+
+    sender_display_name = (sender_display_name.length > 0) ? sender_display_name + " " : "";
+    file_info.metadata.author = sender_display_name + "<" + sender_email + ">";
+    file_info.parsed = JSON.stringify(msg_properties.properties, null, 2);
 
     // Clear out file components from CFB parser and replace with MSG specific file components.
     file_info.file_components = [];
@@ -1476,28 +1426,28 @@ class Static_File_Analyzer {
     // Init text encoder
     let utf8_encode = new TextEncoder();
 
-    if (message_headers.length > 0) {
+    if (msg_properties.properties.hasOwnProperty("PidTagTransportMessageHeaders")) {
       file_info.file_components.push({
         'name': "Headers.txt",
         'type': "txt",
         'directory': false,
-        'file_bytes': utf8_encode.encode(message_headers)
+        'file_bytes': utf8_encode.encode(msg_properties.properties['PidTagTransportMessageHeaders'].val)
       });
     }
 
-    if (message_body.length > 0) {
+    if (msg_properties.properties.hasOwnProperty("PidTagBody")) {
       file_info.file_components.push({
         'name': "Message_Body.txt",
         'type': "txt",
         'directory': false,
-        'file_bytes': utf8_encode.encode(message_body)
+        'file_bytes': utf8_encode.encode(msg_properties.properties['PidTagBody'].val)
       });
 
       // Check message body for IoCs
-      file_info = Static_File_Analyzer.search_for_iocs(message_body, file_info);
+      file_info = Static_File_Analyzer.search_for_iocs(msg_properties.properties['PidTagBody'].val, file_info);
     }
 
-    file_info.file_components = file_info.file_components.concat(message_attachments);
+    file_info.file_components = file_info.file_components.concat(msg_properties.message_attachments);
 
     return file_info;
   }
@@ -6000,7 +5950,7 @@ class Static_File_Analyzer {
   parse_compound_file_binary(file_bytes) {
     var cmb_obj2 = CFB_Parser.parse(file_bytes);
 
-    // Temp solution to parse summary information
+    // Temp solution to parse summary information. TODO: move this to CFB_Parse class.
     for (let i=0; i<cmb_obj2.entries.length; i++) {
       if (cmb_obj2.entries[i].entry_name == "SummaryInformation") {
         // See: http://sedna-soft.de/articles/summary-information-stream/
@@ -8707,6 +8657,117 @@ class MS_Document_Parser {
     }
 
     return document_relations;
+  }
+}
+
+// Tools for MSG Files, Microsoft's Outlook Email Format
+class MSG_Tools {
+
+  /**
+   * Converts an MSG file in CFB version 3 to a MIME formated email.
+   *
+   * @param  {Object}  cfb_obj The parsed compound file binary.
+   * @return {String}  The converted email in MIME format as a string.
+   */
+  static convert_to_mime(cfb_obj) {
+
+  }
+
+  /**
+   * Parses the various entries in a parsed compound file binary and converts
+   * them into MSG properties.
+   *
+   * @param  {Object} cfb_obj The parsed compound file binary.
+   * @return {Object} An object of the parsed properties.
+   */
+  static parse_msg_properties(cfb_obj) {
+    let properties = {};
+    let message_attachment_index = -1;
+    let message_attachments = [];
+    let message_body = "";
+    let message_headers = "";
+    let sender_display_name = "";
+    let sender_email = "";
+
+    for (let i=0; i<cfb_obj.entries.length; i++) {
+      let entry = cfb_obj.entries[i];
+
+      if (entry.entry_name.startsWith("__substg1.0_")) {
+        let pid_str = entry.entry_name.split("__substg1.0_")[1];
+
+        let data_type_int = parseInt('0x' + pid_str.slice(-2) + pid_str.substr(4, 2));
+        let data_type = (TNEF_Parser.props_data_types.hasOwnProperty(data_type_int)) ? TNEF_Parser.props_data_types[data_type_int] : "unknown";
+
+        let pid_int = parseInt('0x'+pid_str);
+        let pid_name = (TNEF_Parser.pid_tags.hasOwnProperty(pid_int)) ? TNEF_Parser.pid_tags[pid_int] : pid_str;
+
+        let prop_value = 0;
+
+        if (data_type == "bytes") {
+          prop_value = entry.entry_bytes;
+        } else if (data_type == "int") {
+          prop_value = Static_File_Analyzer.get_int_from_bytes(entry.entry_bytes, "LITTLE_ENDIAN");
+        } else if (data_type == "bool") {
+          prop_value = Static_File_Analyzer.get_int_from_bytes(entry.entry_bytes, "LITTLE_ENDIAN");
+          prop_value = (prop_value == 0) ? false : true;
+        } else if (data_type == "date_8") {
+          let debug4343=43;
+        } else if (data_type == "str") {
+          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
+        } else if (data_type == "unicode") {
+          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes.filter(i => i > 6));
+        } else {
+          prop_value = entry.entry_bytes;
+        }
+
+        // Extract meta data
+        if (pid_name == "PidTagAttachDataBinary") {
+          // New attachment binary found
+          message_attachments.push({'file_bytes': prop_value, 'directory': false});
+          message_attachment_index++;
+        } else if (pid_name == "PidTagAttachExtension") {
+          message_attachments[message_attachment_index].type = prop_value.substring(1);
+        } else if (pid_name == "PidTagAttachFilename") {
+          if (!message_attachments[message_attachment_index].hasOwnProperty("name")) {
+            // Only add this field if it doesn't exist as the long file name is prefered.
+            message_attachments[message_attachment_index].name = prop_value;
+          }
+        } else if (pid_name == "PidTagAttachLongFilename") {
+          message_attachments[message_attachment_index].name = prop_value;
+        } else if (pid_name == "PidTagAttachMimeTag") {
+          message_attachments[message_attachment_index].mime_type = prop_value;
+        } else if (pid_name == "PidTagBody") {
+          if (data_type == "unicode" || data_type == "str") {
+            message_body = prop_value;
+          }
+        } else if (pid_name == "PidTagTransportMessageHeaders") {
+          message_headers = prop_value;
+        }
+
+        if (!properties.hasOwnProperty(pid_name)) {
+          properties[pid_name] = {
+            'name': pid_name,
+            'data_type': data_type,
+            'val': prop_value
+          };
+        } else {
+          let dup_name = pid_name + "_2";
+          properties[dup_name] = {
+            'name': pid_name,
+            'data_type': data_type,
+            'val': prop_value
+          };
+        }
+      }
+    }
+
+    return {
+      'properties': properties,
+      'message_body': message_body,
+      'message_headers': message_headers,
+      'message_attachments': message_attachments
+    }
+
   }
 }
 
