@@ -22,7 +22,8 @@ See the table below for a list of supported file types and types of data extract
 |[ISO - UDF](https://github.com/alecdhuse/Lantern-Shark/wiki/Universal-Disk-Format)| X | X | X | X |           |
 | JPEG           | X            | X               |                 |          |                               |
 | LNK            | X            | X               |                 | X        | X                             |
-| PDF            | X            | X               |                 | X        | X                             |
+| MSG            | X            | X               | X               | X        |                               |
+| PDF            | X            | X               | Partial         | X        | X                             |
 | RAR            | X            | X               |                 |          |                               |
 | RTF            | X            | X               |                 | X        |                               |
 | PNG            | X            | X               |                 | X        |                               |
