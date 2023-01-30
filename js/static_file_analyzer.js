@@ -8067,7 +8067,9 @@ class CFB_Parser {
     let file_type = "cfb";
     let sector_names = CFB_Parser.parse_directory_sector_names(file_bytes);
 
-    if (sector_names[1].toLowerCase() == "__properties_version1.0") {
+    if (sector_names[1].toLowerCase() == "__nameid_version1.0") {
+      file_type = "msg";
+    } else if (sector_names[1].toLowerCase() == "__properties_version1.0") {
       file_type = "msg";
     } else if (sector_names[1].toLowerCase() == "1table") {
       file_type = "doc";
