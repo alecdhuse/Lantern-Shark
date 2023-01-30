@@ -1449,6 +1449,9 @@ class Static_File_Analyzer {
 
     file_info.file_components = file_info.file_components.concat(msg_properties.message_attachments);
 
+    // DEBUG convert to mime
+    console.log(MSG_Tools.convert_to_mime(cfb_obj));
+
     return file_info;
   }
 
@@ -8108,7 +8111,65 @@ class CFB_Parser {
 
     return guid;
   }
+}
 
+class Encoding_Tools {
+
+
+  /**
+   * Encodes a byte array into a Base64 string.
+   *
+   * This code is based off Mozilla Base64 tools.
+   * See: https://developer.mozilla.org/en-US/docs/Glossary/Base64
+   *
+   * @param  {String}   byte_array An array containing only ints 0-255.
+   * @param  {boolean}  teletype_line_len Limit the line length to 76 + 2 chars.
+   * @return {String}   The encoded Base64 string.
+   */
+  static base64_encode_array(byte_array, teletype_line_len=true) {
+    let mod3 = 2;
+    let base64 = "";
+
+    for (let unit24 = 0, index = 0; index < byte_array.length; index++) {
+      mod3 = index % 3;
+
+      if (teletype_line_len === true) {
+        if (index > 0 && (index * 4 / 3) % 76 === 0) base64 += "\r\n";
+      }
+
+      unit24 |= byte_array[index] << (16 >>> mod3 & 24);
+
+      if (mod3 === 2 || byte_array.length - index === 1) {
+        base64 += String.fromCharCode(Encoding_Tools.uint6_to_b64(unit24 >>> 18 & 63), Encoding_Tools.uint6_to_b64(unit24 >>> 12 & 63), Encoding_Tools.uint6_to_b64(unit24 >>> 6 & 63), Encoding_Tools.uint6_to_b64(unit24 & 63));
+        unit24 = 0;
+      }
+    }
+
+    return base64.substr(0, base64.length - 2 + mod3) + (mod3 === 2 ? '' : mod3 === 1 ? '=' : '==');
+  }
+
+  /**
+   * Support function for Base64 encoding.
+   *
+   * This code is based off Mozilla Base64 tools.
+   * See: https://developer.mozilla.org/en-US/docs/Glossary/Base64
+   *
+   * @param  {integer}   uint6
+   * @return {integer}
+   */
+  static uint6_to_b64(uint6) {
+    return uint6 < 26
+      ? uint6 + 65
+      : uint6 < 52
+      ? uint6 + 71
+      : uint6 < 62
+      ? uint6 - 4
+      : uint6 === 62
+      ? 43
+      : uint6 === 63
+      ? 47
+      : 65;
+  }
 }
 
 class HTML_Parser {
@@ -8670,7 +8731,89 @@ class MSG_Tools {
    * @return {String}  The converted email in MIME format as a string.
    */
   static convert_to_mime(cfb_obj) {
+    let msg_properties = MSG_Tools.parse_msg_properties(cfb_obj);
 
+    let body_boundry_name = "";
+    let mime_msg = "";
+    let msg_body = "";
+    let msg_headers = "";
+
+    // Get message headers
+    if (msg_properties.properties.hasOwnProperty("PidTagTransportMessageHeaders")) {
+      // TODO limit line lenth to 76 chars
+      msg_headers = msg_properties.properties['PidTagTransportMessageHeaders'].val + "\n\n";
+      mime_msg = msg_headers;
+    }
+
+    // Check to see if there is a content boundry in the headers.
+    // If one is found use it for the body content ID.
+    var boundry_regex = /boundary\s*\=\s*[\"\']?([^\"\'\n\r]+)/gmi;
+    let match = boundry_regex.exec(msg_headers)
+
+    if (match !== undefined && match !== null) {
+      body_boundry_name = match[1];
+    } else {
+      // No content boundary in headers.
+      // Get Body content id and use a version of it for the body content id.
+      if (msg_properties.properties.hasOwnProperty("PidTagBodyContentId")) {
+        body_boundry_name = msg_properties.properties['PidTagBodyContentId'].val.split('@')[0];
+        body_boundry_name = body_boundry_name.split('').filter(char => /[a-fA-F0-9\-]/.test(char)).join("");
+      } else {
+        // TODO: generate a body content id if PidTagBodyContentId does not exist.
+      }
+    }
+
+    let body_boundry_start = "--_" + body_boundry_name + "_\n";
+    let body_boundry_end = "--_" + body_boundry_name + "_--\n\n";
+
+    let body_content_header = "Content-Transfer-Encoding: 8bit\n";
+    body_content_header += "Content-Type: text/plain; charset=UTF-8;\n"
+    body_content_header += " format=flowed\n\n"
+
+    if (msg_properties.properties.hasOwnProperty("PidTagBody")) {
+      mime_msg += body_boundry_start;
+      mime_msg += body_content_header;
+
+      // TODO limit line lenth to 76 chars
+      mime_msg += msg_properties.properties['PidTagBody'].val + "\n\n";
+
+      mime_msg += body_boundry_end
+    }
+
+    // Proccess any attachments.
+    for (let i=0; i<msg_properties.message_attachments.length; i++) {
+      let current_attachment = msg_properties.message_attachments[i];
+      let boundry_name = "";
+
+      // Create attachment boundry name/id
+      if (current_attachment.hasOwnProperty('content_id')) {
+        // Use a version of the content id for the boundry name.
+        boundry_name = current_attachment.content_id.split('@')[0];
+        boundry_name = boundry_name.split('').filter(char => /[a-fA-F0-9\-]/.test(char)).join("");
+      } else {
+        // Generate a new boundry name.
+        // TODO write code to generate Boundy name.
+      }
+
+      let boundry_start = "--_" + boundry_name + "_\n";
+      let boundry_end = "--_" + boundry_name + "_--\n\n";
+
+      // Create content header for attachment
+      let content_header = "Content-Transfer-Encoding: base64\n";
+      content_header += "Content-Type: " + current_attachment.mime_type + ";\n";
+      content_header += "  name=" + current_attachment.name + "\n";
+      content_header += "Content-Disposition: attachment; filename=" + current_attachment.name + "; size=" + current_attachment.file_bytes.length + "\n\n";
+
+      // Encode to Base64
+      let attach_b64 = Encoding_Tools.base64_encode_array(current_attachment.file_bytes, true);
+
+      mime_msg += boundry_start;
+      mime_msg += content_header;
+      mime_msg += attach_b64 + "\n\n";
+      mime_msg += boundry_end;
+    }
+
+    return mime_msg;
   }
 
   /**
@@ -8721,7 +8864,9 @@ class MSG_Tools {
         }
 
         // Extract meta data
-        if (pid_name == "PidTagAttachDataBinary") {
+        if (pid_name == "PidTagAttachContentId") {
+          message_attachments[message_attachment_index].content_id = prop_value;
+        } else if (pid_name == "PidTagAttachDataBinary") {
           // New attachment binary found
           message_attachments.push({'file_bytes': prop_value, 'directory': false});
           message_attachment_index++;
