@@ -312,9 +312,7 @@ function read_file(e) {
       var array_buffer = e.target.result,
           array = new Uint8Array(array_buffer);
 
-      for (var i = 0; i < array.length; i++) {
-          file_byte_array.push(array[i]);
-      }
+      let file_byte_array = Array.from(array);
 
       analyzer_results = await new Static_File_Analyzer(file_byte_array);
       await display_sub_components(analyzer_results, "top_level_file");
