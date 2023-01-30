@@ -122,7 +122,8 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
       return_val = {'is_valid': true, 'type': "png"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
-      return_val = {'is_valid': true, 'type': "cbf"};
+      let file_type = CFB_Parser.identify_file_type(file_bytes);
+      return_val = {'is_valid': true, 'type': file_type};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x78,0x9f,0x3e,0x22])) {
       return_val = {'is_valid': true, 'type': "tnef"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
@@ -1448,9 +1449,6 @@ class Static_File_Analyzer {
     }
 
     file_info.file_components = file_info.file_components.concat(msg_properties.message_attachments);
-
-    // DEBUG convert to mime
-    console.log(MSG_Tools.convert_to_mime(cfb_obj));
 
     return file_info;
   }
@@ -7894,6 +7892,59 @@ class CFB_Parser {
   }
 
   /**
+   * A quick, low resourse way to read the names of the first four directory sectors in a CFB file.
+   *
+   * @param {array}  file_bytes
+   * @return {array} A String array of the first four directory sector names.
+   */
+  static parse_directory_sector_names(file_bytes) {
+    let sector_names = [];
+
+    // Byte order LITTLE_ENDIAN or BIG_ENDIAN
+    let byte_order = (file_bytes[29] == 255) ? "LITTLE_ENDIAN" : "BIG_ENDIAN";
+
+    //Sector size will indicate where the beginning of file record starts.
+    let sector_size = (file_bytes[30] == 12) ? 4096 : 512;
+
+    let sec_id_1 = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(48,52), byte_order);
+    let sec_pos = 512 + (sec_id_1 * sector_size); // Should be Root Entry
+
+    for (let i=0; i<4; i++) {
+      sec_pos += (128 * i);
+      let directory_name_bytes = file_bytes.slice(sec_pos, sec_pos+64);
+      let directory_name_buf_size = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(sec_pos+64, sec_pos+66), byte_order);
+
+      directory_name_bytes = directory_name_bytes.slice(0,directory_name_buf_size); //trim bytes to name length
+      let directory_name = Static_File_Analyzer.get_string_from_array(directory_name_bytes.filter(i => i > 6));
+
+      sector_names.push(directory_name);
+    }
+
+    return sector_names;
+  }
+
+  /**
+   * A quick, low resourse way to parse the rood object GUID of a CFB file.
+   *
+   * @param {array}   file_bytes
+   * @return {String} The root GUID.
+   */
+  static parse_root_guid(file_bytes) {
+    // Byte order LITTLE_ENDIAN or BIG_ENDIAN
+    let byte_order = (file_bytes[29] == 255) ? "LITTLE_ENDIAN" : "BIG_ENDIAN";
+
+    //Sector size will indicate where the beginning of file record starts.
+    let sector_size = (file_bytes[30] == 12) ? 4096 : 512;
+
+    let sec_id_1 = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(48,52), byte_order);
+    let root_pos = 512 + (sec_id_1 * sector_size); // Should be Root Entry
+    let guid_bytes = file_bytes.slice(root_pos+80, root_pos+96);
+    let guid = CFB_Parser.parse_guid(guid_bytes, byte_order);
+
+    return guid;
+  }
+
+  /**
    * Returns a flat array of all children for and incliding a given child_id
    *
    * @param {array}   entries The list of entries for the CFB object.
@@ -8004,6 +8055,29 @@ class CFB_Parser {
     }
 
     return offset_ints[current_block_index];
+  }
+
+  /**
+   * Identifies the file type using a given CFB file.
+   *
+   * @param {array}  file_bytes
+   * @return {String} A String indicating the file type.
+   */
+  static identify_file_type(file_bytes) {
+    let file_type = "cfb";
+    let sector_names = CFB_Parser.parse_directory_sector_names(file_bytes);
+
+    if (sector_names[1].toLowerCase() == "__properties_version1.0") {
+      file_type = "msg";
+    } else if (sector_names[1].toLowerCase() == "1table") {
+      file_type = "doc";
+    } else if (sector_names[2].toLowerCase() == "projectwm") {
+      file_type = "ppt";
+    } else if (sector_names[1].toLowerCase() == "workbook") {
+      file_type = "xls";
+    }
+
+    return file_type;
   }
 
   /**
