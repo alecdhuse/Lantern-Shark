@@ -250,7 +250,7 @@ class Static_File_Analyzer {
   analyze_cbf(file_bytes) {
     let file_info = this.get_default_file_json();
 
-    file_info.file_format = "cbf";
+    file_info.file_format = CFB_Parser.identify_file_type(file_bytes);
 
     let document_obj = {
       'type': "unknown",
@@ -378,9 +378,8 @@ class Static_File_Analyzer {
           file_info.file_generic_type = "Spreadsheet";
           document_obj.type = "spreadsheet";
         }
-      } else if (document_obj.compound_file_binary.root_entry.guid == "00020D0B-0000-0000-C000-000000000046") {
+      } else if (file_info.file_format = "msg") {
         // MailMessage
-        file_info.file_format = "msg";
         file_info.file_generic_type = "Mail Message";
         document_obj.type = "mailmessage";
       }
@@ -7860,14 +7859,29 @@ class CFB_Parser {
           } else {
             if (cmb_obj.entries[i].stream_size > 0) {
               let result_data = new Int8Array(cmb_obj.entries[i].stream_size);
+              let copied_byte_count = 0;
+              let idx = 0;
 
-              for (let i2 = 0, idx = 0; i2 < chain.length; i2++) {
+              for (let i2 = 0; i2 < chain.length; i2++) {
                 entry_byte_start = CFB_Parser.get_block_byte_start(file_bytes, cmb_obj.entries, difat_index, chain[i2], cmb_obj.sector_size, cmb_obj.byte_order);
                 let data = file_bytes.slice(entry_byte_start, entry_byte_start+64);
 
                 for (let j = 0; j < data.length; j++) {
                   result_data[idx++] = data[j];
+                  copied_byte_count++;
                 }
+              }
+
+              if (copied_byte_count < cmb_obj.entries[i].stream_size) {
+                entry_byte_start += 64;
+                let bytes_to_copy = cmb_obj.entries[i].stream_size - copied_byte_count;
+                let data = file_bytes.slice(entry_byte_start, entry_byte_start+bytes_to_copy);
+
+                for (let j = 0; j < data.length; j++) {
+                  result_data[idx++] = data[j];
+                  copied_byte_count++;
+                }
+
               }
 
               cmb_obj.entries[i].entry_bytes = Array.from(result_data).slice(0,cmb_obj.entries[i].stream_size);
@@ -8934,7 +8948,7 @@ class MSG_Tools {
         } else if (data_type == "str") {
           prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes);
         } else if (data_type == "unicode") {
-          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes.filter(i => i > 6));
+          prop_value = Static_File_Analyzer.get_string_from_array(entry.entry_bytes.filter(ci => ci > 6));
         } else {
           prop_value = entry.entry_bytes;
         }
