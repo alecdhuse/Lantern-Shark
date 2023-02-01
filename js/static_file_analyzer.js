@@ -778,10 +778,10 @@ class Static_File_Analyzer {
     parsed_lnk['LinkCLSID'] = this.get_guid(file_bytes.slice(4,20));
 
     var link_flags_arr = [
-      this.get_binary_array([file_bytes[20]]).reverse(),
-      this.get_binary_array([file_bytes[21]]).reverse(),
-      this.get_binary_array([file_bytes[22]]).reverse(),
-      this.get_binary_array([file_bytes[23]]).reverse(),
+      Static_File_Analyzer.get_binary_array([file_bytes[20]]).reverse(),
+      Static_File_Analyzer.get_binary_array([file_bytes[21]]).reverse(),
+      Static_File_Analyzer.get_binary_array([file_bytes[22]]).reverse(),
+      Static_File_Analyzer.get_binary_array([file_bytes[23]]).reverse(),
     ];
 
     var link_flags = [].concat.apply([], link_flags_arr);
@@ -821,7 +821,7 @@ class Static_File_Analyzer {
       'Unused7': (link_flags[31]==1) ? true : false,
     };
 
-    var file_attribute_flags = this.get_binary_array(file_bytes.slice(24,28));
+    var file_attribute_flags = Static_File_Analyzer.get_binary_array(file_bytes.slice(24,28));
     parsed_lnk['FileAttributes'] = {
       'FILE_ATTRIBUTE_READONLY': (file_attribute_flags[0]==1) ? true : false,
       'FILE_ATTRIBUTE_HIDDEN': (file_attribute_flags[1]==1) ? true : false,
@@ -978,7 +978,7 @@ class Static_File_Analyzer {
         if (link_info_flags_obj.CommonNetworkRelativeLinkAndPathSuffix) {
           // CommonNetworkRelativeLink
           var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-          var cnrl_flags = this.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
+          var cnrl_flags = Static_File_Analyzer.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
           var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
           var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
           var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
@@ -1554,6 +1554,55 @@ class Static_File_Analyzer {
     if (header_dict['cbExpectedFileLength'] != file_bytes.length) {
       file_info.analytic_findings.push("SUSPICIOUS - Expected File Length Does Not Match Actual File Length");
     }
+
+    // Root File Node List
+    let rfnl_dict = {};
+    let rfnl_bytes = file_bytes.slice(header_dict['fcrFileNodeListRoot'].offset, header_dict['fcrFileNodeListRoot'].offset + header_dict['fcrFileNodeListRoot'].length);
+
+    rfnl_dict['uintMagic'] = Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(0,8), "LITTLE_ENDIAN");
+    rfnl_dict['FileNodeListID'] = Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(8,12), "LITTLE_ENDIAN");
+    rfnl_dict['nFragmentSequence'] = Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(12,16), "LITTLE_ENDIAN");
+
+    rfnl_dict['FileNodes'] = [];
+
+    let current_byte = 16;
+    let file_node_header = {'FileNodeID': 0};
+
+    // Loop until a file node with a FileNodeID of 0x808010B8 (ObjectGroupEndFND) is found.
+    while (file_node_header['FileNodeID'] != 0x808010B8) {
+      let file_node = {};
+
+      file_node_header = MS_Document_Parser.parse_file_node_header(rfnl_bytes.slice(current_byte,current_byte+=4));
+      file_node['FileNodeHeader'] = file_node_header;
+
+      if (file_node_header['FileNodeID'] == 0x808060B4) {
+        file_node_header['FileNodeID_str'] = "ObjectGroupStartFND";
+      } else if (file_node_header['FileNodeID'] == 0x80801022) {
+        file_node_header['FileNodeID_str'] = "GlobalIdTableStart2FND";
+      } else if (file_node_header['FileNodeID'] == 0x80806024) {
+        file_node_header['FileNodeID_str'] = "GlobalIdTableEntryFNDX";
+      } else if (file_node_header['FileNodeID'] == 0x80801028) {
+        file_node_header['FileNodeID_str'] = "GlobalIdTableEndFNDX";
+      } else if (file_node_header['FileNodeID'] == 0x8080608C) {
+        file_node_header['FileNodeID_str'] = "DataSignatureGroupDefinitionFND";
+      } else if (file_node_header['FileNodeID'] == 0x8D0044A4) {
+        file_node_header['FileNodeID_str'] = "ObjectDeclaration2RefCountFND";
+      } else if (file_node_header['FileNodeID'] == 0x808010B8) {
+        file_node_header['FileNodeID_str'] = "ObjectGroupEndFND";
+      }
+
+      rfnl_dict['FileNodes'].push(file_node);
+    }
+
+    rfnl_dict['FileNodes'].push({
+      'FileNodeHeader': MS_Document_Parser.parse_file_node_header(rfnl_bytes.slice(16,20)),
+      'ObjectGroupStartFND': {
+        'ExtendedGUID': {
+          'guid': this.get_guid(rfnl_bytes.slice(20,36)),
+          'n': Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(36,40), "LITTLE_ENDIAN");
+        }
+      }
+    });
 
     // DEBUG
     console.log(header_dict);
@@ -2592,7 +2641,7 @@ class Static_File_Analyzer {
           var sheet_state_val = file_bytes[i+8];
 
           // Some malicious Excel files will have unused bits set that are part of this byte.
-          sheet_state_val = this.get_int_from_bin(this.get_binary_array([sheet_state_val]).slice(-2));
+          sheet_state_val = this.get_int_from_bin(Static_File_Analyzer.get_binary_array([sheet_state_val]).slice(-2));
           var sheet_state = (sheet_state_val == 1) ? "hidden" : ((sheet_state_val == 1) ? "very hidden": "visible");
 
           // 0 - Worksheet or dialog sheet, 1 - Macro sheet, 2 - Chart sheet, 6 - VBA module
@@ -2696,7 +2745,7 @@ class Static_File_Analyzer {
         if (file_bytes[i] == 0x18 && file_bytes[i+1] == 0x00) {
           var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
           //var prop_bits = this.get_bin_from_int(file_bytes[4]).concat(this.get_bin_from_int(file_bytes[5]));
-          var prop_bits = this.get_binary_array([file_bytes[4],file_bytes[5]]);
+          var prop_bits = Static_File_Analyzer.get_binary_array([file_bytes[4],file_bytes[5]]);
           var is_hidden = (prop_bits[0] == 1) ? true : false;
           var is_function = (prop_bits[1] == 1) ? true : false;
           var is_vba_macro = (prop_bits[2] == 1) ? true : false;
@@ -3027,7 +3076,7 @@ class Static_File_Analyzer {
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0x01 && file_bytes[i+3] == 0x00 && file_bytes[i+4] == 0x41 && file_bytes[i+5] == 0x74 && file_bytes[i+6] == 0x74) {
           var compressed_header = [file_bytes[i+2], file_bytes[i+1]]; // Little Endian
-          var header_bit_array = this.get_binary_array(Uint8Array.from(compressed_header));
+          var header_bit_array = Static_File_Analyzer.get_binary_array(Uint8Array.from(compressed_header));
           var compressed_chunk_byte_size = this.get_int_from_bin(header_bit_array.slice(4, 16), this.BIG_ENDIAN) + 5;
 
           var vba_compressed_bytes = file_bytes.slice(i,i+compressed_chunk_byte_size);
@@ -4064,7 +4113,7 @@ class Static_File_Analyzer {
 
     if (header_block_found == true) {
       // Get header data
-      var header_bit_array = this.get_binary_array(Uint8Array.from(compressed_header));
+      var header_bit_array = Static_File_Analyzer.get_binary_array(Uint8Array.from(compressed_header));
       var compressed_chunk_byte_size = this.get_int_from_bin(header_bit_array.slice(4, 16), this.BIG_ENDIAN) + 3;
       var compressed_chunk_signature = this.get_int_from_bin(header_bit_array.slice(1, 4), this.BIG_ENDIAN);
       var compressed_chunk_flag = header_bit_array[0];
@@ -4080,7 +4129,7 @@ class Static_File_Analyzer {
 
       // Token Sequences
       while (current_byte < compressed_data.length) {
-        compression_flags = this.get_binary_array(Uint8Array.from([compressed_data[current_byte]])).reverse();
+        compression_flags = Static_File_Analyzer.get_binary_array(Uint8Array.from([compressed_data[current_byte]])).reverse();
         current_byte++;
 
         for (var i=0; i<8; i++) {
@@ -4091,7 +4140,7 @@ class Static_File_Analyzer {
           } else {
             // copy token
             var copy_token_bytes = [compressed_data[current_byte+1], compressed_data[current_byte]];
-            var copy_token_bits = this.get_binary_array(Uint8Array.from(copy_token_bytes));
+            var copy_token_bits = Static_File_Analyzer.get_binary_array(Uint8Array.from(copy_token_bytes));
 
             var number_of_bits = Math.ceil(Math.log2(decompressed_buffer.length));
             var number_of_offset_bits = (number_of_bits < 4) ? 4 : ((number_of_bits > 12) ? 12 : number_of_bits);
@@ -5162,7 +5211,7 @@ class Static_File_Analyzer {
    * @param {array} u8int_array Array with int values 0-255 representing byte values.
    * @return {array}  An array with int values of 0 or 1, representing the binary value of the given integer.
    */
-  get_binary_array(u8int_array) {
+  static get_binary_array(u8int_array) {
     var binary_array = Array(u8int_array.length * 8);
     var bin_str = "";
 
@@ -5347,6 +5396,34 @@ class Static_File_Analyzer {
       var bit_pos = 0;
       for (var i=binary_array.length-1; i>=0; i--) {
         int_val += binary_array[i] * Math.pow(2, bit_pos);
+        bit_pos++;
+      }
+    }
+
+    return int_val;
+  }
+
+  /**
+   * Converts an array of bytes (integer values 0-255) to an integer based on a number of bits.
+   *
+   * @param {array}    bytes An array containing byte values.
+   * @param {integer}  bit_start The bit to start converting to integer from.
+   * @param {integer}  bit_end The bit to end the integer conversion at.
+   * @param {String}   endianness Value indicating how to interperate the bit order of the binary array. Default is BIG_ENDIAN.
+   * @return {integer} The integer value parsed from the byte array.
+   */
+  static get_int_from_bits(bytes, bit_start, bit_end, endianness="BIG_ENDIAN") {
+    let int_val = 0;
+    let bits = Static_File_Analyzer.get_binary_array(bytes).slice(bit_start, bit_end);
+
+    if (endianness == "LITTLE_ENDIAN") {
+      for (var i=0; i<bits.length; i++) {
+        int_val += bits[i] * Math.pow(2, i);
+      }
+    } else {
+      var bit_pos = 0;
+      for (var i=bits.length-1; i>=0; i--) {
+        int_val += bits[i] * Math.pow(2, bit_pos);
         bit_pos++;
       }
     }
@@ -6877,7 +6954,7 @@ class Static_File_Analyzer {
       } else if (formula_type == 0x42) {
         // PtgFuncVar - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d105171-6b73-4f40-a7cd-6bf2aae15e83
         var param_count = rgce_bytes[current_rgce_byte];
-        var tab_bits = this.get_binary_array(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
+        var tab_bits = Static_File_Analyzer.get_binary_array(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3));
         var tab_int = rgce_bytes[current_rgce_byte+1];
         var tab_int2 = this.get_int_from_bin(tab_bits.slice(0,15), document_obj.byte_order);
         var exec_stack = true;
@@ -7480,7 +7557,7 @@ class Static_File_Analyzer {
     var cell_ref  = this.convert_xls_column(cell_col) + cell_row;
 
     var cell_ixfe = this.get_two_byte_int(bytes.slice(4, 6), byte_order);
-    var rk_number_bits = this.get_binary_array(bytes.slice(6, 10), byte_order);
+    var rk_number_bits = Static_File_Analyzer.get_binary_array(bytes.slice(6, 10), byte_order);
     var cell_value = 0;
     var rk_bits = this.get_bin_from_int(bytes[6]);
 
@@ -8319,7 +8396,6 @@ class CFB_Parser {
 
 class Encoding_Tools {
 
-
   /**
    * Encodes a byte array into a Base64 string.
    *
@@ -8922,6 +8998,24 @@ class MS_Document_Parser {
     }
 
     return document_relations;
+  }
+
+  /**
+   * Parses the FileNodeHeader of a One Note file.
+   *
+   * @param  {array} header_bytes An array of integers 0-255 that represent the bytes of the FileNodeHeader.
+   * @return {object} An object with all the parsed header information.
+   */
+  static parse_file_node_header(header_bytes) {
+    let header = {};
+
+    header['FileNodeID'] = Static_File_Analyzer.get_int_from_bits(header_bytes.slice(0,2), 0, 10, "LITTLE_ENDIAN");
+    header['Size'] = Static_File_Analyzer.get_int_from_bits(header_bytes.slice(1,3), 2, 15, "LITTLE_ENDIAN");
+    header['StpFormat'] = Static_File_Analyzer.get_int_from_bits(header_bytes.slice(2,4), 7, 9, "LITTLE_ENDIAN");
+    header['CbFormat'] = Static_File_Analyzer.get_int_from_bits([header_bytes[3]], 1, 3, "LITTLE_ENDIAN");
+    header['BaseType'] = Static_File_Analyzer.get_int_from_bits([header_bytes[3]], 3, 7, "LITTLE_ENDIAN");
+
+    return header;
   }
 }
 
