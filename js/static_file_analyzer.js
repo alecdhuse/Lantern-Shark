@@ -1469,6 +1469,60 @@ class Static_File_Analyzer {
     file_info.file_format = "one";
     file_info.file_generic_type = "Document";
 
+    // Read header
+    let header_dict = {};
+
+    header_dict['guidFileType'] = this.get_guid(file_bytes.slice(0,16));
+    header_dict['guidFile'] = this.get_guid(file_bytes.slice(16,32));
+    header_dict['guidLegacyFileVersion'] = this.get_guid(file_bytes.slice(32,48));
+    header_dict['guidFileFormat'] = this.get_guid(file_bytes.slice(48,64));
+    header_dict['ffvLastCodeThatWroteToThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(64,68), "LITTLE_ENDIAN");
+    header_dict['ffvOldestCodeThatHasWrittenToThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(68,72), "LITTLE_ENDIAN");
+    header_dict['ffvNewestCodeThatHasWrittenToThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(72,76), "LITTLE_ENDIAN");
+    header_dict['ffvOldestCodeThatMayReadThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(76,80), "LITTLE_ENDIAN");
+    header_dict['fcrLegacyFreeChunkList'] = file_bytes.slice(80,88);
+    header_dict['fcrLegacyTransactionLog'] = file_bytes.slice(88,96);
+    header_dict['cTransactionsInLog'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(96,100), "LITTLE_ENDIAN");
+    header_dict['cbLegacyExpectedFileLength'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(100,104), "LITTLE_ENDIAN");
+    header_dict['rgbPlaceholder'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(104,112), "LITTLE_ENDIAN");
+    header_dict['fcrLegacyFileNodeListRoot'] = file_bytes.slice(112,120);
+    header_dict['cbLegacyFreeSpaceInFreeChunkList'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(120,124), "LITTLE_ENDIAN");
+    header_dict['fNeedsDefrag'] = (file_bytes[124] == 1) ? true : false;
+    header_dict['fRepairedFile'] = (file_bytes[125] == 1) ? true : false;
+    header_dict['fNeedsGarbageCollect'] = (file_bytes[126] == 1) ? true : false;
+    header_dict['fHasNoEmbeddedFileObjects'] = (file_bytes[127] == 1) ? true : false;
+    header_dict['guidAncestor'] = this.get_guid(file_bytes.slice(128,144));
+    header_dict['crcName'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(144,148), "LITTLE_ENDIAN");
+    header_dict['fcrHashedChunkList'] = file_bytes.slice(148,160);
+    header_dict['fcrTransactionLog'] = file_bytes.slice(160,172);
+    header_dict['fcrFileNodeListRoot'] = file_bytes.slice(172,184);
+    header_dict['fcrFreeChunkList'] = file_bytes.slice(184,196);
+    header_dict['cbExpectedFileLength'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(196,204), "LITTLE_ENDIAN");
+    header_dict['cbFreeSpaceInFreeChunkList'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(204,212), "LITTLE_ENDIAN");
+    header_dict['guidFileVersion'] = this.get_guid(file_bytes.slice(212,228));
+    header_dict['nFileVersionGeneration'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(228,236), "LITTLE_ENDIAN");
+    header_dict['guidDenyReadFileVersion'] = this.get_guid(file_bytes.slice(236,252));
+    header_dict['grfDebugLogFlags'] = file_bytes.slice(252,256);
+    header_dict['fcrDebugLog'] = file_bytes.slice(256,268);
+    header_dict['fcrAllocVerificationFreeChunkList'] = file_bytes.slice(268,280);
+    header_dict['bnCreated'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(280,284), "LITTLE_ENDIAN");
+    header_dict['bnLastWroteToThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(284,288), "LITTLE_ENDIAN");
+    header_dict['bnOldestWritten'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(288,292), "LITTLE_ENDIAN");
+    header_dict['bnNewestWritten'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(292,296), "LITTLE_ENDIAN");
+    header_dict['rgbReserved'] = file_bytes.slice(296,1024);
+
+    if (header_dict['cbExpectedFileLength'] != file_bytes.length) {
+      file_info.analytic_findings.push("SUSPICIOUS - Expected File Length Does Not Match Actual File Length");
+    }
+
+    // DEBUG
+    console.log(header_dict);
+
+    // Set parsed file info
+    file_info.parsed = JSON.stringify({
+      'header': header_dict
+    }, null, 2);
+
     return file_info;
   }
 
