@@ -382,16 +382,14 @@ class Static_File_Analyzer {
           file_info.file_generic_type = "Spreadsheet";
           document_obj.type = "spreadsheet";
         }
-      } else if (file_info.file_format = "msg") {
-        // MailMessage
-        file_info.file_generic_type = "Mail Message";
-        document_obj.type = "mailmessage";
       }
     }
 
     if (file_info.file_format == "xls") {
       file_info = this.analyze_xls(file_bytes, file_info, document_obj);
     } else if (file_info.file_format == "msg") {
+      file_info.file_generic_type = "Mail Message";
+      document_obj.type = "mailmessage";
       file_info = this.analyze_msg(file_bytes, file_info, document_obj.compound_file_binary);
     }
 
@@ -1594,6 +1592,7 @@ class Static_File_Analyzer {
       rfnl_dict['FileNodes'].push(file_node);
     }
 
+    /*
     rfnl_dict['FileNodes'].push({
       'FileNodeHeader': MS_Document_Parser.parse_file_node_header(rfnl_bytes.slice(16,20)),
       'ObjectGroupStartFND': {
@@ -1603,6 +1602,7 @@ class Static_File_Analyzer {
         }
       }
     });
+    */
 
     // DEBUG
     console.log(header_dict);
