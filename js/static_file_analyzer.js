@@ -1567,26 +1567,28 @@ class Static_File_Analyzer {
     let file_node_header = {'FileNodeID': 0};
 
     // Loop until a file node with a FileNodeID of 0x808010B8 (ObjectGroupEndFND) is found.
-    while (file_node_header['FileNodeID'] != 0x808010B8) {
+    while (file_node_header['FileNodeID'] != 0x808010B8 && current_byte < rfnl_bytes.length) {
       let file_node = {};
 
       file_node_header = MS_Document_Parser.parse_file_node_header(rfnl_bytes.slice(current_byte,current_byte+=4));
       file_node['FileNodeHeader'] = file_node_header;
 
+      let extra_bytes = rfnl_bytes.slice(current_byte, current_byte += (file_node_header['Size'] - 4));
+
       if (file_node_header['FileNodeID'] == 0x808060B4) {
-        file_node_header['FileNodeID_str'] = "ObjectGroupStartFND";
+        file_node_header['type'] = "ObjectGroupStartFND";
       } else if (file_node_header['FileNodeID'] == 0x80801022) {
-        file_node_header['FileNodeID_str'] = "GlobalIdTableStart2FND";
+        file_node_header['type'] = "GlobalIdTableStart2FND";
       } else if (file_node_header['FileNodeID'] == 0x80806024) {
-        file_node_header['FileNodeID_str'] = "GlobalIdTableEntryFNDX";
+        file_node_header['type'] = "GlobalIdTableEntryFNDX";
       } else if (file_node_header['FileNodeID'] == 0x80801028) {
-        file_node_header['FileNodeID_str'] = "GlobalIdTableEndFNDX";
+        file_node_header['type'] = "GlobalIdTableEndFNDX";
       } else if (file_node_header['FileNodeID'] == 0x8080608C) {
-        file_node_header['FileNodeID_str'] = "DataSignatureGroupDefinitionFND";
+        file_node_header['type'] = "DataSignatureGroupDefinitionFND";
       } else if (file_node_header['FileNodeID'] == 0x8D0044A4) {
-        file_node_header['FileNodeID_str'] = "ObjectDeclaration2RefCountFND";
+        file_node_header['type'] = "ObjectDeclaration2RefCountFND";
       } else if (file_node_header['FileNodeID'] == 0x808010B8) {
-        file_node_header['FileNodeID_str'] = "ObjectGroupEndFND";
+        file_node_header['type'] = "ObjectGroupEndFND";
       }
 
       rfnl_dict['FileNodes'].push(file_node);
@@ -1604,13 +1606,17 @@ class Static_File_Analyzer {
     });
     */
 
-    // DEBUG
-    console.log(header_dict);
-
     // Set parsed file info
     file_info.parsed = JSON.stringify({
-      'header': header_dict
+      'Header': header_dictm,
+      'RootFileNodeList': rfnl_dict
     }, null, 2);
+
+    // DEBUG
+    console.log({
+      'Header': header_dictm,
+      'RootFileNodeList': rfnl_dict
+    });
 
     return file_info;
   }
