@@ -1480,12 +1480,26 @@ class Static_File_Analyzer {
     header_dict['ffvOldestCodeThatHasWrittenToThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(68,72), "LITTLE_ENDIAN");
     header_dict['ffvNewestCodeThatHasWrittenToThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(72,76), "LITTLE_ENDIAN");
     header_dict['ffvOldestCodeThatMayReadThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(76,80), "LITTLE_ENDIAN");
-    header_dict['fcrLegacyFreeChunkList'] = file_bytes.slice(80,88);
-    header_dict['fcrLegacyTransactionLog'] = file_bytes.slice(88,96);
+
+    header_dict['fcrLegacyFreeChunkList'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(80,84), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(84,88), "LITTLE_ENDIAN")
+    };
+
+    header_dict['fcrLegacyTransactionLog'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(88,92), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(92,96), "LITTLE_ENDIAN")
+    };
+
     header_dict['cTransactionsInLog'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(96,100), "LITTLE_ENDIAN");
     header_dict['cbLegacyExpectedFileLength'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(100,104), "LITTLE_ENDIAN");
     header_dict['rgbPlaceholder'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(104,112), "LITTLE_ENDIAN");
-    header_dict['fcrLegacyFileNodeListRoot'] = file_bytes.slice(112,120);
+
+    header_dict['fcrLegacyFileNodeListRoot'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(112,116), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(116,120), "LITTLE_ENDIAN")
+    };
+
     header_dict['cbLegacyFreeSpaceInFreeChunkList'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(120,124), "LITTLE_ENDIAN");
     header_dict['fNeedsDefrag'] = (file_bytes[124] == 1) ? true : false;
     header_dict['fRepairedFile'] = (file_bytes[125] == 1) ? true : false;
@@ -1493,18 +1507,44 @@ class Static_File_Analyzer {
     header_dict['fHasNoEmbeddedFileObjects'] = (file_bytes[127] == 1) ? true : false;
     header_dict['guidAncestor'] = this.get_guid(file_bytes.slice(128,144));
     header_dict['crcName'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(144,148), "LITTLE_ENDIAN");
-    header_dict['fcrHashedChunkList'] = file_bytes.slice(148,160);
-    header_dict['fcrTransactionLog'] = file_bytes.slice(160,172);
-    header_dict['fcrFileNodeListRoot'] = file_bytes.slice(172,184);
-    header_dict['fcrFreeChunkList'] = file_bytes.slice(184,196);
+
+    header_dict['fcrHashedChunkList'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(148,156), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(156,160), "LITTLE_ENDIAN")
+    };
+
+    header_dict['fcrTransactionLog'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(160,168), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(168,172), "LITTLE_ENDIAN")
+    };
+
+    header_dict['fcrFileNodeListRoot'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(172,180), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(180,184), "LITTLE_ENDIAN")
+    };
+
+    header_dict['fcrFreeChunkList'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(184,192), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(192,196), "LITTLE_ENDIAN")
+    };
+
     header_dict['cbExpectedFileLength'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(196,204), "LITTLE_ENDIAN");
     header_dict['cbFreeSpaceInFreeChunkList'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(204,212), "LITTLE_ENDIAN");
     header_dict['guidFileVersion'] = this.get_guid(file_bytes.slice(212,228));
     header_dict['nFileVersionGeneration'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(228,236), "LITTLE_ENDIAN");
     header_dict['guidDenyReadFileVersion'] = this.get_guid(file_bytes.slice(236,252));
     header_dict['grfDebugLogFlags'] = file_bytes.slice(252,256);
-    header_dict['fcrDebugLog'] = file_bytes.slice(256,268);
-    header_dict['fcrAllocVerificationFreeChunkList'] = file_bytes.slice(268,280);
+
+    header_dict['fcrDebugLog'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(256,264), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(264,268), "LITTLE_ENDIAN")
+    };
+
+    header_dict['fcrAllocVerificationFreeChunkList'] = {
+      'offset': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(268,276), "LITTLE_ENDIAN"),
+      'length': Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(276,280), "LITTLE_ENDIAN")
+    };
+
     header_dict['bnCreated'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(280,284), "LITTLE_ENDIAN");
     header_dict['bnLastWroteToThisFile'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(284,288), "LITTLE_ENDIAN");
     header_dict['bnOldestWritten'] = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(288,292), "LITTLE_ENDIAN");
