@@ -56,6 +56,8 @@ class Static_File_Analyzer {
       file_info = this.analyze_jpeg(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
       file_info = this.analyze_lnk(file_bytes);
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,16), [0xE4,0x52,0x5C,0x7B,0x8C,0xD8,0xA7,0x4D,0xAE,0xB1,0x53,0x78,0xD0,0x29,0x96,0xD3])) {
+      file_info = this.analyze_one(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,6), [82,97,114,33,26,7])) {
       file_info = this.analyze_rar(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x7b,0x5c,0x72,0x74])) {
@@ -113,6 +115,8 @@ class Static_File_Analyzer {
       return_val = {'is_valid': true, 'type': "jpeg"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
       return_val = {'is_valid': true, 'type': "lnk"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,16), [0xE4,0x52,0x5C,0x7B,0x8C,0xD8,0xA7,0x4D,0xAE,0xB1,0x53,0x78,0xD0,0x29,0x96,0xD3])) {
+      return_val = {'is_valid': true, 'type': "one"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,6), [82,97,114,33,26,7])) {
       return_val = {'is_valid': true, 'type': "rar"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x7b,0x5c,0x72,0x74])) {
@@ -1448,6 +1452,22 @@ class Static_File_Analyzer {
     }
 
     file_info.file_components = file_info.file_components.concat(msg_properties.message_attachments);
+
+    return file_info;
+  }
+
+  /**
+   * Extracts meta data and other information from One Note files.
+   *
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_one(file_bytes) {
+    var file_info = this.get_default_file_json();
+
+    file_info.file_format = "one";
+    file_info.file_generic_type = "Document";
 
     return file_info;
   }
