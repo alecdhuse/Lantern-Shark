@@ -1608,13 +1608,13 @@ class Static_File_Analyzer {
 
     // Set parsed file info
     file_info.parsed = JSON.stringify({
-      'Header': header_dictm,
+      'Header': header_dict,
       'RootFileNodeList': rfnl_dict
     }, null, 2);
 
     // DEBUG
     console.log({
-      'Header': header_dictm,
+      'Header': header_dict,
       'RootFileNodeList': rfnl_dict
     });
 
@@ -8957,6 +8957,48 @@ class ISO_9660_Parser {
 }
 
 class MS_Document_Parser {
+  static one_note = {
+    'file_node_struct': {
+      0x004: "ObjectSpaceManifestRootFND",
+      0x008: "ObjectSpaceManifestListReferenceFND",
+      0x00C: "ObjectSpaceManifestListStartFND",
+      0x010: "RevisionManifestListReferenceFND",
+      0x014: "RevisionManifestListStartFND",
+      0x01B: "RevisionManifestStart4FND",
+      0x01C: "RevisionManifestEndFND",
+      0x01E: "RevisionManifestStart6FND",
+      0x01F: "RevisionManifestStart7FND",
+      0x021: "GlobalIdTableStartFNDX",
+      0x022: "GlobalIdTableStart2FND",
+      0x024: "GlobalIdTableEntryFNDX",
+      0x025: "GlobalIdTableEntry2FNDX",
+      0x026: "GlobalIdTableEntry3FNDX",
+      0x028: "GlobalIdTableEndFNDX",
+      0x02D: "ObjectDeclarationWithRefCountFNDX",
+      0x02E: "ObjectDeclarationWithRefCount2FNDX",
+      0x041: "ObjectRevisionWithRefCountFNDX",
+      0x042: "ObjectRevisionWithRefCount2FNDX",
+      0x059: "RootObjectReference2FNDX",
+      0x05C: "RevisionRoleDeclarationFND",
+      0x05D: "RevisionRoleAndContextDeclarationFND",
+      0x072: "ObjectDeclarationFileData3RefCountFND",
+      0x073: "ObjectDeclarationFileData3LargeRefCountFND",
+      0x07C: "ObjectDataEncryptionKeyV2FNDX",
+      0x084: "ObjectInfoDependencyOverridesFND",
+      0x08C: "DataSignatureGroupDefinitionFND",
+      0x090: "FileDataStoreListReferenceFND",
+      0x094: "FileDataStoreObjectReferenceFND",
+      0x0A4: "ObjectDeclaration2RefCountFND",
+      0x0A5: "ObjectDeclaration2LargeRefCountFND",
+      0x0B0: "ObjectGroupListReferenceFND",
+      0x0B4: "ObjectGroupStartFND",
+      0x0B8: "ObjectGroupEndFND",
+      0x0C2: "HashedChunkDescriptor2FND",
+      0x0C4: "ReadOnlyObjectDeclaration2RefCountFND",
+      0x0C5: "ReadOnlyObjectDeclaration2LargeRefCountFND",
+      0x0FF: "ChunkTerminatorFND"
+    }
+  };
 
   /**
    * Parses a OOXML Document relations file.
@@ -9009,17 +9051,23 @@ class MS_Document_Parser {
   /**
    * Parses the FileNodeHeader of a One Note file.
    *
+   * @see https://interoperability.blob.core.windows.net/files/MS-ONESTORE/%5bMS-ONESTORE%5d.pdf - 2.4.3 FileNode
+   *
    * @param  {array} header_bytes An array of integers 0-255 that represent the bytes of the FileNodeHeader.
    * @return {object} An object with all the parsed header information.
    */
   static parse_file_node_header(header_bytes) {
     let header = {};
 
-    header['FileNodeID'] = Static_File_Analyzer.get_int_from_bits(header_bytes.slice(0,2), 0, 10, "LITTLE_ENDIAN");
-    header['Size'] = Static_File_Analyzer.get_int_from_bits(header_bytes.slice(1,3), 2, 15, "LITTLE_ENDIAN");
-    header['StpFormat'] = Static_File_Analyzer.get_int_from_bits(header_bytes.slice(2,4), 7, 9, "LITTLE_ENDIAN");
-    header['CbFormat'] = Static_File_Analyzer.get_int_from_bits([header_bytes[3]], 1, 3, "LITTLE_ENDIAN");
-    header['BaseType'] = Static_File_Analyzer.get_int_from_bits([header_bytes[3]], 3, 7, "LITTLE_ENDIAN");
+    header['FileNodeID'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 0, 10, "BIG_ENDIAN");
+    header['Size'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 10, 23, "LITTLE_ENDIAN");
+    header['StpFormat'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 23, 25, "LITTLE_ENDIAN");
+    header['CbFormat'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 25, 27, "LITTLE_ENDIAN");
+    header['BaseType'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 27, 31, "LITTLE_ENDIAN");
+
+    if (MS_Document_Parser.one_note.file_node_struct.hasOwnProperty(header['FileNodeID'])) {
+      header['FileNodeType'] = MS_Document_Parser.one_note.file_node_struct[header['FileNodeID']];
+    }
 
     return header;
   }
