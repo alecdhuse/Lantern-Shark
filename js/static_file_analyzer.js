@@ -1574,13 +1574,6 @@ class Static_File_Analyzer {
       //'HashedChunkList': hcl_dict
     }, null, 2);
 
-    // DEBUG
-    console.log({
-      'Header': header_dict,
-      //'RootFileNodeList': rfnl_dict,
-      //'HashedChunkList': hcl_dict
-    });
-
     return file_info;
   }
 
@@ -8980,9 +8973,10 @@ class MS_Document_Parser {
     // Search for and extract file metadata
     for (let i=0; i<file_bytes.length; i++) {
       if (Static_File_Analyzer.array_equals(file_bytes.slice(i,i+16), embedded_meta_header)) {
+        let meta_index = i;
         let adjust = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i-2,i), "LITTLE_ENDIAN");
 
-        /*
+        /* TODO: Implement this later
         let ent_count = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i+=24,i+=4), "LITTLE_ENDIAN");
         if (ent_count == 0x88003462) ent_count = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i,i+=4), "LITTLE_ENDIAN");
 
@@ -8997,7 +8991,6 @@ class MS_Document_Parser {
         */
 
         i+=132;
-        console.log(i);
         while (file_bytes[i] != 0xD4 && i < file_bytes.length) i+=4;
         i+=20;
 
@@ -9007,14 +9000,13 @@ class MS_Document_Parser {
 
         if (i < file_bytes.length) {
           embedded_files_meta.push({
-            'name': file_name
+            'name': file_name,
+            'meta_index': meta_index
           });
         }
-
-        console.log(file_name);
       }
     }
-    console.log("/n--/n");
+
     // Search for embedded file header
     for (let i=0; i<file_bytes.length; i+=8) {
       if (Static_File_Analyzer.array_equals(file_bytes.slice(i,i+16), embedded_file_header)) {
@@ -9027,12 +9019,23 @@ class MS_Document_Parser {
           'name': temp_file_name,
           'type': is_valid.type,
           'directory': false,
-          'file_bytes': embedded_file_bytes
+          'file_bytes': embedded_file_bytes,
+          'file_index': i
         });
-        console.log(i);
       }
     }
-    console.log(embedded_files);
+
+    // Match meta info with file data
+    for (let i=0; i<embedded_files.length; i++) {
+
+      for (let k=0; k<embedded_files_meta.length; k++) {
+        if (embedded_files_meta[k].meta_index < embedded_files[i].file_index &&
+           (embedded_files[i].file_index - embedded_files_meta[k].meta_index) < 2048) {
+
+          embedded_files[i].name = embedded_files_meta[k].name;
+        }
+      }
+    }
 
     return embedded_files;
   }
