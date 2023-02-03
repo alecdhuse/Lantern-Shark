@@ -1557,65 +1557,28 @@ class Static_File_Analyzer {
     let rfnl_dict = {};
     let rfnl_bytes = file_bytes.slice(header_dict['fcrFileNodeListRoot'].offset, header_dict['fcrFileNodeListRoot'].offset + header_dict['fcrFileNodeListRoot'].length);
 
-    rfnl_dict['uintMagic'] = Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(0,8), "LITTLE_ENDIAN");
-    rfnl_dict['FileNodeListID'] = Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(8,12), "LITTLE_ENDIAN");
-    rfnl_dict['nFragmentSequence'] = Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(12,16), "LITTLE_ENDIAN");
+    // Transaction Log
 
-    rfnl_dict['FileNodes'] = [];
+    // Hashed Chunk List
+    let hcl_bytes = file_bytes.slice(header_dict['fcrHashedChunkList'].offset, header_dict['fcrHashedChunkList'].offset + header_dict['fcrHashedChunkList'].length);
+    //let hcl_dict = MS_Document_Parser.parse_file_node_list(hcl_bytes);
 
-    let current_byte = 16;
-    let file_node_header = {'FileNodeID': 0};
-
-    // Loop until a file node with a FileNodeID of 0x808010B8 (ObjectGroupEndFND) is found.
-    while (file_node_header['FileNodeID'] != 0x808010B8 && current_byte < rfnl_bytes.length) {
-      let file_node = {};
-
-      file_node_header = MS_Document_Parser.parse_file_node_header(rfnl_bytes.slice(current_byte,current_byte+=4));
-      file_node['FileNodeHeader'] = file_node_header;
-
-      let extra_bytes = rfnl_bytes.slice(current_byte, current_byte += (file_node_header['Size'] - 4));
-
-      if (file_node_header['FileNodeID'] == 0x808060B4) {
-        file_node_header['type'] = "ObjectGroupStartFND";
-      } else if (file_node_header['FileNodeID'] == 0x80801022) {
-        file_node_header['type'] = "GlobalIdTableStart2FND";
-      } else if (file_node_header['FileNodeID'] == 0x80806024) {
-        file_node_header['type'] = "GlobalIdTableEntryFNDX";
-      } else if (file_node_header['FileNodeID'] == 0x80801028) {
-        file_node_header['type'] = "GlobalIdTableEndFNDX";
-      } else if (file_node_header['FileNodeID'] == 0x8080608C) {
-        file_node_header['type'] = "DataSignatureGroupDefinitionFND";
-      } else if (file_node_header['FileNodeID'] == 0x8D0044A4) {
-        file_node_header['type'] = "ObjectDeclaration2RefCountFND";
-      } else if (file_node_header['FileNodeID'] == 0x808010B8) {
-        file_node_header['type'] = "ObjectGroupEndFND";
-      }
-
-      rfnl_dict['FileNodes'].push(file_node);
-    }
-
-    /*
-    rfnl_dict['FileNodes'].push({
-      'FileNodeHeader': MS_Document_Parser.parse_file_node_header(rfnl_bytes.slice(16,20)),
-      'ObjectGroupStartFND': {
-        'ExtendedGUID': {
-          'guid': this.get_guid(rfnl_bytes.slice(20,36)),
-          'n': Static_File_Analyzer.get_int_from_bytes(rfnl_bytes.slice(36,40), "LITTLE_ENDIAN");
-        }
-      }
-    });
-    */
+    // Look for embedded files
+    let files = MS_Document_Parser.extract_embedded_file_from_one_note(file_bytes);
+    file_info.file_components = files;
 
     // Set parsed file info
     file_info.parsed = JSON.stringify({
       'Header': header_dict,
-      'RootFileNodeList': rfnl_dict
+      //'RootFileNodeList': rfnl_dict,
+      //'HashedChunkList': hcl_dict
     }, null, 2);
 
     // DEBUG
     console.log({
       'Header': header_dict,
-      'RootFileNodeList': rfnl_dict
+      //'RootFileNodeList': rfnl_dict,
+      //'HashedChunkList': hcl_dict
     });
 
     return file_info;
@@ -9001,6 +8964,80 @@ class MS_Document_Parser {
   };
 
   /**
+   * Parses the FileNodeHeader of a One Note file.
+   *
+   * @see https://interoperability.blob.core.windows.net/files/MS-ONESTORE/%5bMS-ONESTORE%5d.pdf
+   *
+   * @param  {array} file_bytes An array of integers 0-255 that represent the bytes of the FileNodeHeader.
+   * @return {array} An array of found embedded files.
+   */
+  static extract_embedded_file_from_one_note(file_bytes) {
+    let embedded_file_header = [0xe7,0x16,0xe3,0xbd,0x65,0x26,0x11,0x45,0xa4,0xc4,0x8d,0x4d,0x0b,0x7a,0x9e,0xac];
+    let embedded_meta_header = [0xf3,0x1c,0x00,0x1c,0x30,0x1c,0x00,0x1c,0xff,0x1d,0x00,0x14,0x82,0x1d,0x00,0x14];
+    let embedded_files = [];
+    let embedded_files_meta = [];
+
+    // Search for and extract file metadata
+    for (let i=0; i<file_bytes.length; i++) {
+      if (Static_File_Analyzer.array_equals(file_bytes.slice(i,i+16), embedded_meta_header)) {
+        let adjust = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i-2,i), "LITTLE_ENDIAN");
+
+        /*
+        let ent_count = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i+=24,i+=4), "LITTLE_ENDIAN");
+        if (ent_count == 0x88003462) ent_count = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i,i+=4), "LITTLE_ENDIAN");
+
+        let ent_bytes = file_bytes.slice(i,i+=ent_count);
+        let ent2_count = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i,i+=4), "LITTLE_ENDIAN");
+        let ent2_bytes = file_bytes.slice(i,i+=ent2_count);
+
+        let ent3_count = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i+=20,i+=4), "LITTLE_ENDIAN");
+        if (ent3_count == 0) ent3_count = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i,i+=4), "LITTLE_ENDIAN");
+
+        i += 50;
+        */
+
+        i+=132;
+        console.log(i);
+        while (file_bytes[i] != 0xD4 && i < file_bytes.length) i+=4;
+        i+=20;
+
+        let size = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i,i+=4), "LITTLE_ENDIAN");
+        let name_bytes = file_bytes.slice(i,i+=size);
+        let file_name = Static_File_Analyzer.get_string_from_array(name_bytes);
+
+        if (i < file_bytes.length) {
+          embedded_files_meta.push({
+            'name': file_name
+          });
+        }
+
+        console.log(file_name);
+      }
+    }
+    console.log("/n--/n");
+    // Search for embedded file header
+    for (let i=0; i<file_bytes.length; i+=8) {
+      if (Static_File_Analyzer.array_equals(file_bytes.slice(i,i+16), embedded_file_header)) {
+        let file_size = Static_File_Analyzer.get_int_from_bytes(file_bytes.slice(i+16,i+20), "LITTLE_ENDIAN");
+        let embedded_file_bytes = file_bytes.slice(i+36,i+36+file_size);
+        let is_valid = Static_File_Analyzer.is_valid_file(embedded_file_bytes);
+        let temp_file_name = i + "." + is_valid.type;
+
+        embedded_files.push({
+          'name': temp_file_name,
+          'type': is_valid.type,
+          'directory': false,
+          'file_bytes': embedded_file_bytes
+        });
+        console.log(i);
+      }
+    }
+    console.log(embedded_files);
+
+    return embedded_files;
+  }
+
+  /**
    * Parses a OOXML Document relations file.
    *
    * @param  {object} file_info  The file_info object to add findings to.
@@ -9059,10 +9096,35 @@ class MS_Document_Parser {
   static parse_file_node_header(header_bytes) {
     let header = {};
 
-    header['FileNodeID'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 0, 10, "BIG_ENDIAN");
-    header['Size'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 10, 23, "LITTLE_ENDIAN");
+    //header['FileNodeID'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 0, 10, "LITTLE_ENDIAN");
+    //header['Size'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 10, 23, "LITTLE_ENDIAN");
+
+    let bits = Static_File_Analyzer.get_binary_array(header_bytes);
+
+    header['FileNodeID'] = header_bytes[0];
+    header['Size'] = header_bytes[1];
+
+    /* StpFormat
+    *  0 - 8 bytes, uncompressed.
+    *  1 - 4 bytes, uncompressed.
+    *  2 - 2 bytes, compressed
+    *  3 - 4 bytes, compressed.
+    */
     header['StpFormat'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 23, 25, "LITTLE_ENDIAN");
+
+    /* CbFormat
+    *  0 - 4 bytes, uncompressed.
+    *  1 - 8 bytes, uncompressed.
+    *  2 - 1 byte, compressed.
+    *  3 - 2 bytes, compressed.
+    */
     header['CbFormat'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 25, 27, "LITTLE_ENDIAN");
+
+    /* BaseType
+    *  0 - does not reference other data.
+    *  1 - contains a reference to data.
+    *  2 - contains a reference to a file node list.
+    */
     header['BaseType'] = Static_File_Analyzer.get_int_from_bits(header_bytes, 27, 31, "LITTLE_ENDIAN");
 
     if (MS_Document_Parser.one_note.file_node_struct.hasOwnProperty(header['FileNodeID'])) {
@@ -9070,6 +9132,74 @@ class MS_Document_Parser {
     }
 
     return header;
+  }
+
+  /**
+   * Parses the FileNodeHeader of a One Note file.
+   *
+   * @see https://interoperability.blob.core.windows.net/files/MS-ONESTORE/%5bMS-ONESTORE%5d.pdf
+   *
+   * @param  {array} bytes An array of integers 0-255 that represent the bytes of the FileNodeHeader.
+   * @return {object} An object with all the parsed file node information.
+   */
+  static parse_file_node_list(bytes) {
+    let stp_dict = {0: 8, 1: 4, 2: 2, 3: 4};
+    let cb_dict = {0: 4, 1: 8, 2: 1, 3: 2};
+    let node_list = {};
+
+    node_list['uintMagic'] = Static_File_Analyzer.get_int_from_bytes(bytes.slice(0,8), "LITTLE_ENDIAN");
+
+    if (node_list['uintMagic'] == 0xA4567AB1F5F7F4C4) {
+      node_list['FileNodeListID'] = Static_File_Analyzer.get_int_from_bytes(bytes.slice(8,12), "LITTLE_ENDIAN");
+      node_list['nFragmentSequence'] = Static_File_Analyzer.get_int_from_bytes(bytes.slice(12,16), "LITTLE_ENDIAN");
+      node_list['FileNodes'] = [];
+
+      let current_byte = 16;
+
+      let file_node = {};
+      file_node['FileNodeHeader'] = MS_Document_Parser.parse_file_node_header(bytes.slice(current_byte,current_byte+=4));
+
+      while (file_node['FileNodeHeader']['FileNodeID'] > 0 && current_byte < bytes.length) {
+        let extra_bytes = bytes.slice(current_byte, current_byte += (file_node['FileNodeHeader']['Size'] - 4));
+        let stp_byte_cnt = stp_dict[file_node['FileNodeHeader']['StpFormat']];
+        let cb_byte_cnt = cb_dict[file_node['FileNodeHeader']['CbFormat']];
+
+        if (file_node['FileNodeHeader']['FileNodeType'] == "HashedChunkDescriptor2FND") {
+          let stp_bytes = extra_bytes.slice(0,stp_byte_cnt);
+          let cb_bytes = extra_bytes.slice(stp_byte_cnt, stp_byte_cnt+cb_byte_cnt);
+
+          let stp_val = Static_File_Analyzer.get_int_from_bytes(stp_bytes, "LITTLE_ENDIAN");
+          // Check if STP val is 'compressed' or not.
+          stp_val = (file_node['FileNodeHeader']['StpFormat'] > 1) ? stp_val * 8 : stp_val;
+
+          let cb_val = Static_File_Analyzer.get_int_from_bytes(cb_bytes, "LITTLE_ENDIAN");
+          // Check if CB val is 'compressed' or not.
+          cb_val = (file_node['FileNodeHeader']['CbFormat'] > 1) ? cb_val * 8 : cb_val;
+
+          let cb_test1 = Static_File_Analyzer.get_int_from_bytes(cb_bytes.slice(0,2), "BIG_ENDIAN");
+
+          // Read guidHash
+          let current_extra_byte = stp_byte_cnt+cb_byte_cnt;
+          let guid_hash_bytes = extra_bytes.slice(current_extra_byte,current_extra_byte+16);
+
+          file_node['value'] = {
+            'BlobRef': {
+              'stp': stp_val, // Byte location of the referenced data
+              'cb':  cb_val // Size in bytes of ref data
+            },
+            'guidHash': guid_hash_bytes
+          };
+        }
+
+        node_list['FileNodes'].push(file_node);
+
+        file_node['FileNodeHeader'] = MS_Document_Parser.parse_file_node_header(bytes.slice(current_byte,current_byte+=4));
+      }
+    } else {
+      return null;
+    }
+
+    return node_list;
   }
 }
 
