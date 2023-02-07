@@ -8431,6 +8431,75 @@ class HTML_Parser {
     };
 
     // Try to detect HTML Smuggling
+    let detect_smuggling_result = HTML_Parser.detect_html_smuggling(file_bytes, file_text);
+
+    return_val.analytic_findings = return_val.analytic_findings.concat(detect_smuggling_result.analytic_findings);
+    return_val.file_components = return_val.file_components.concat(detect_smuggling_result.file_components);
+
+    return return_val;
+  }
+
+  /**
+   * Decode a Base64 encoded string.
+   *
+   * @param  {String}   base64_string The Base64 encoded string of the smuggled file.
+   * @param  {integer}  slice_size    [options] The decoding slice size.
+   * @return {array}    The decoded file in byte array form.
+   */
+  static decode_smuggled_file(base64_string, slice_size=512) {
+    let byte_arrays = [];
+
+    try {
+      const byte_characters = atob(base64_string);
+
+      for (let offset = 0; offset < byte_characters.length; offset += slice_size) {
+        let slice = byte_characters.slice(offset, offset + slice_size);
+        let byte_codes = new Array(slice.length);
+
+        for (let i = 0; i < slice.length; i++) {
+          byte_codes[i] = slice.charCodeAt(i);
+        }
+
+        byte_arrays = byte_arrays.concat(byte_codes);
+      }
+    } catch(err) {}
+
+    return byte_arrays;
+  }
+
+  /**
+   * Decode a Base64 encoded string.
+   *
+   * @param  {String}   str       The Base64 encoded string.
+   * @param  {String}   encoding  [Optional] The string encoding type.
+   * @return {String}   The decoded string.
+   */
+  static decode_base64(str, encoding="utf-8") {
+    try {
+      let decoded = window.atob(str);
+      return decoded;
+    } catch(err) {
+      return str;
+    }
+
+    // Fail
+    return str;
+  }
+
+  /**
+   * Attempts to find and extract any smuggled / encoded file within the document.
+   *
+   * @param {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}     file_text  [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
+   * @return {object}    An object with analyzed, parsed HTML file.
+   */
+  static detect_html_smuggling(file_bytes, file_text) {
+    let return_val = {
+      'analytic_findings': [],
+      'file_components': []
+    };
+
+    // Try to detect HTML Smuggling
     let possible_b64_literals = HTML_Parser.find_base64_literals(file_text);
     let base64_text;
     var decoded_base64;
@@ -8516,53 +8585,6 @@ class HTML_Parser {
     }
 
     return return_val;
-  }
-
-  /**
-   * Decode a Base64 encoded string.
-   *
-   * @param  {String}   base64_string The Base64 encoded string of the smuggled file.
-   * @param  {integer}  slice_size    [options] The decoding slice size.
-   * @return {array}    The decoded file in byte array form.
-   */
-  static decode_smuggled_file(base64_string, slice_size=512) {
-    let byte_arrays = [];
-
-    try {
-      const byte_characters = atob(base64_string);
-
-      for (let offset = 0; offset < byte_characters.length; offset += slice_size) {
-        let slice = byte_characters.slice(offset, offset + slice_size);
-        let byte_codes = new Array(slice.length);
-
-        for (let i = 0; i < slice.length; i++) {
-          byte_codes[i] = slice.charCodeAt(i);
-        }
-
-        byte_arrays = byte_arrays.concat(byte_codes);
-      }
-    } catch(err) {}
-
-    return byte_arrays;
-  }
-
-  /**
-   * Decode a Base64 encoded string.
-   *
-   * @param  {String}   str       The Base64 encoded string.
-   * @param  {String}   encoding  [Optional] The string encoding type.
-   * @return {String}   The decoded string.
-   */
-  static decode_base64(str, encoding="utf-8") {
-    try {
-      let decoded = window.atob(str);
-      return decoded;
-    } catch(err) {
-      return str;
-    }
-
-    // Fail
-    return str;
   }
 
   /**
@@ -9006,6 +9028,8 @@ class MS_Document_Parser {
         }
       }
     }
+
+    console.log(embedded_files_meta);
 
     // Search for embedded file header
     for (let i=0; i<file_bytes.length; i+=8) {
