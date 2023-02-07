@@ -8623,7 +8623,7 @@ class HTML_Parser {
    */
   static extract_embedded_scripts(file_text) {
     let extracted_scripts = [];
-    let script_regex = /\<\s*script\s+type\s*\=\s*[\"\']text\s*\/\s*([^\"\']+)[\"\']\s*\>\s*([\s\S]+)\<\s*\/script\s*>/gmi;
+    let script_regex = /\<\s*script\s+(?:type|language)\s*\=\s*[\"\'](?:text\s*\/\s*)?([^\"\']+)[\"\']\s*\>\s*([\s\S]+)\<\s*\/script\s*>/gmi;
     let script_matches = script_regex.exec(file_text);
 
     while (script_matches != null) {
