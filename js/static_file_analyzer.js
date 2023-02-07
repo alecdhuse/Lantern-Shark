@@ -1469,7 +1469,7 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  analyze_one(file_bytes) {
+  async analyze_one(file_bytes) {
     var file_info = this.get_default_file_json();
 
     file_info.file_format = "one";
@@ -1574,6 +1574,19 @@ class Static_File_Analyzer {
     // Look for embedded files
     let files = MS_Document_Parser.extract_embedded_file_from_one_note(file_bytes);
     file_info.file_components = files;
+
+    // Look for scripts and IoCs in file_components
+    for (let i=0; i<file_info.file_components.length; i++) {
+      let analyzer_results = await new Static_File_Analyzer(file_info.file_components[i].file_bytes, "", "");
+
+      if(analyzer_results.scripts.script_type != "none") {
+        this.add_extracted_script(analyzer_results.scripts.script_type, analyzer_results.scripts.extracted_script, file_info);
+      }
+
+      for (let i=0; i<analyzer_results.iocs.length; i++) {
+        file_info = Static_File_Analyzer.search_for_iocs(analyzer_results.iocs[i], file_info);
+      }
+    }
 
     // Set parsed file info
     file_info.parsed = JSON.stringify({
