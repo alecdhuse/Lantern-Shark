@@ -604,13 +604,20 @@ class Static_File_Analyzer {
   analyze_html(file_bytes, file_text) {
     var file_info = this.get_default_file_json();
 
-    file_info.file_format = "html";
     file_info.file_generic_type = "Document";
 
     let html_obj = new HTML_Parser(file_bytes, file_text);
 
+    file_info.file_format = html_obj.file_format;
     file_info.file_components = html_obj.file_components;
     file_info.analytic_findings = html_obj.analytic_findings;
+
+    // Extract embedded script
+    let extracted_scripts = HTML_Parser.extract_embedded_scripts(file_text);
+
+    for (let i=0; i<extracted_scripts.length; i++) {
+      this.add_extracted_script(extracted_scripts[i].script_type, extracted_scripts[i].script_code, file_info);
+    }
 
     return file_info;
   }
@@ -8427,8 +8434,15 @@ class HTML_Parser {
 
     let return_val = {
       'analytic_findings': [],
-      'file_components': []
+      'file_components': [],
+      'file_format': "html",
+      'file_generic_type': "Document"
     };
+
+    // Check to see if this is an HTA file (HTML Application)
+    if (/\<\s*hta\s*\:/gi.test(file_text)) {
+      return_val.file_format = "hta";
+    }
 
     // Try to detect HTML Smuggling
     let detect_smuggling_result = HTML_Parser.detect_html_smuggling(file_bytes, file_text);
@@ -8585,6 +8599,29 @@ class HTML_Parser {
     }
 
     return return_val;
+  }
+
+  /**
+   * Attempts to extract embedded scripts within an HTML file.
+   *
+   * @param  {String}   file_text The string text of an HTML file.
+   * @return {array}    An array of object containing the script type and extracted sctipt.
+   */
+  static extract_embedded_scripts(file_text) {
+    let extracted_scripts = [];
+    let script_regex = /\<\s*script\s+type\s*\=\s*[\"\']text\s*\/\s*([^\"\']+)[\"\']\s*\>\s*([\s\S]+)\<\s*\/script\s*>/gmi;
+    let script_matches = script_regex.exec(file_text);
+
+    while (script_matches != null) {
+      extracted_scripts.push({
+        'script_type': script_matches[1],
+        'script_code': script_matches[2]
+      });
+
+      script_matches = script_regex.exec(file_text);
+    }
+
+    return extracted_scripts;
   }
 
   /**
