@@ -617,6 +617,7 @@ class Static_File_Analyzer {
 
     for (let i=0; i<extracted_scripts.length; i++) {
       this.add_extracted_script(extracted_scripts[i].script_type, extracted_scripts[i].script_code, file_info);
+      file_info = Static_File_Analyzer.search_for_iocs(extracted_scripts[i].script_code, file_info);
     }
 
     return file_info;
@@ -7747,7 +7748,7 @@ class Static_File_Analyzer {
     var found_urls = Static_File_Analyzer.search_for_url(search_text);
 
     for (var i=0; i<found_urls.urls.length; i++) {
-      if (!file_json.iocs.includes(found_urls.urls[i])) {
+      if (!file_json.iocs.includes(found_urls.urls[i]) && found_urls.urls[i] != "\\\\.") {
         file_json.iocs.push(found_urls.urls[i]);
       }
     }
