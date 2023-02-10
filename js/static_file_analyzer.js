@@ -26,6 +26,10 @@
  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 class Static_File_Analyzer {
+  static BIG_ENDIAN = "BIG_ENDIAN";
+  static LITTLE_ENDIAN = "LITTLE_ENDIAN";
+  static XML_DOMAINS = ["openoffice.org","purl.org","schemas.microsoft.com","schemas.openxmlformats.org","w3.org"];
+
   /**
    * Created the default object structure for the output of this class.
    *
@@ -35,11 +39,7 @@ class Static_File_Analyzer {
    * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
    */
   constructor(file_bytes, file_text="", file_password=undefined) {
-    this.BIG_ENDIAN = "BIG_ENDIAN";
-    this.LITTLE_ENDIAN = "LITTLE_ENDIAN";
-    this.XML_DOMAINS = ["openoffice.org","purl.org","schemas.microsoft.com","schemas.openxmlformats.org","w3.org"];
-
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
       file_info = this.analyze_ace(file_bytes);
@@ -87,10 +87,28 @@ class Static_File_Analyzer {
       }
     }
 
+    // Get file hashes
+    //file_info.file_hashes.md5 = Hash_Tools.get_md5(file_bytes);
+    //file_info.file_hashes.sha256 = Hash_Tools.get_sha256(Uint8Array.from(file_bytes));
+
     // Attempt to identify threat actor and or malware.
     file_info = this.identify_threat(file_info);
 
+    //console.log(file_info);
+
     return file_info;
+  }
+
+  /**
+   * Created the default object structure for the output of this class.
+   *
+   * @param {Uint8Array} file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}     file_text     [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
+   * @param {String}     file_password [Optional] File password for encrypted or protected files.
+   * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
+   */
+  static async analyze(file_bytes, file_text="", file_password=undefined) {
+
   }
 
   /**
@@ -220,7 +238,7 @@ class Static_File_Analyzer {
    */
   analyze_ace(file_bytes) {
     var ace_os_list  = ["MS-DOS", "OS/2", "Windows", "Unix", "MAC-OS", "Windows NT", "Primos", "APPLE GS", "ATARI", "VAX VMS", "AMIGA", "NEXT"];
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "ace";
     file_info.file_generic_type = "File Archive";
@@ -252,13 +270,13 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_cbf(file_bytes) {
-    let file_info = this.get_default_file_json();
+    let file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = CFB_Parser.identify_file_type(file_bytes);
 
     let document_obj = {
       'type': "unknown",
-      'byte_order': this.LITTLE_ENDIAN,
+      'byte_order': Static_File_Analyzer.LITTLE_ENDIAN,
       'document_properties': {},
       'compound_file_binary': {}
     };
@@ -523,11 +541,11 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_exe(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
     var id_byte_vals = [1,3,5,7,15,129,201];
 
     // Header offset starts at 3C / 60
-    var header_offset = this.get_two_byte_int(file_bytes.slice(60,62), this.LITTLE_ENDIAN);
+    var header_offset = this.get_two_byte_int(file_bytes.slice(60,62), Static_File_Analyzer.LITTLE_ENDIAN);
     var file_type_id_byte = file_bytes[header_offset+23];
 
     if (id_byte_vals.includes(file_type_id_byte)) {
@@ -546,7 +564,7 @@ class Static_File_Analyzer {
 
     // Get compile time
     var compile_time_offset = header_offset + 8;
-    var compile_timestamp_int = this.get_four_byte_int(file_bytes.slice(compile_time_offset,compile_time_offset+4), this.LITTLE_ENDIAN);
+    var compile_timestamp_int = this.get_four_byte_int(file_bytes.slice(compile_time_offset,compile_time_offset+4), Static_File_Analyzer.LITTLE_ENDIAN);
     var compile_timestamp = new Date(compile_timestamp_int*1000);
     file_info.metadata.creation_date = compile_timestamp.toISOString().slice(0, 19).replace("T", " ");;
 
@@ -555,14 +573,14 @@ class Static_File_Analyzer {
     }
 
     // Get optional header size
-    var optional_header_size = this.get_four_byte_int(file_bytes.slice(header_offset+20,header_offset+22), this.LITTLE_ENDIAN);
+    var optional_header_size = this.get_four_byte_int(file_bytes.slice(header_offset+20,header_offset+22), Static_File_Analyzer.LITTLE_ENDIAN);
 
     if (optional_header_size > 0) {
       var optional_header_offset = header_offset+24;
       var optional_header_bytes = file_bytes.slice(optional_header_offset, optional_header_offset+optional_header_size);
 
       if (optional_header_bytes.length > 67) {
-        var checksum = this.get_four_byte_int(optional_header_bytes.slice(64,68), this.LITTLE_ENDIAN);
+        var checksum = this.get_four_byte_int(optional_header_bytes.slice(64,68), Static_File_Analyzer.LITTLE_ENDIAN);
 
         if (checksum == 0) {
           file_info.analytic_findings.push("SUSPICIOUS - No Image File Checksum");
@@ -582,7 +600,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   async analyze_gz(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "gz";
     file_info.file_generic_type = "File Archive";
@@ -602,7 +620,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info   A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_html(file_bytes, file_text) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_generic_type = "Document";
 
@@ -631,7 +649,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info   A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_iso9660(file_bytes, file_text="") {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "iso";
     file_info.file_generic_type = "Disk Image";
@@ -680,7 +698,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_jpeg(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "jpeg";
     file_info.file_generic_type = "Image";
@@ -714,7 +732,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_lnk(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     var drive_types_arr = ['DRIVE_UNKNOWN','DRIVE_NO_ROOT_DIR','DRIVE_REMOVABLE','DRIVE_FIXED','DRIVE_REMOTE','DRIVE_CDROM','DRIVE_RAMDISK'];
 
@@ -780,7 +798,7 @@ class Static_File_Analyzer {
     file_info.file_encryption_type = "none";
 
     var parsed_lnk = {};
-    parsed_lnk['HeaderSize'] = this.get_four_byte_int(file_bytes.slice(0,4), this.LITTLE_ENDIAN);
+    parsed_lnk['HeaderSize'] = this.get_four_byte_int(file_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
     parsed_lnk['LinkCLSID'] = this.get_guid(file_bytes.slice(4,20));
 
     var link_flags_arr = [
@@ -846,9 +864,9 @@ class Static_File_Analyzer {
       'FILE_ATTRIBUTE_ENCRYPTED': (file_attribute_flags[14]==1) ? true : false,
     };
 
-    parsed_lnk['CreationTime']  = this.get_eight_byte_date(file_bytes.slice(28,36), this.LITTLE_ENDIAN);
-    parsed_lnk['AccessTime'] = this.get_eight_byte_date(file_bytes.slice(36,44), this.LITTLE_ENDIAN);
-    parsed_lnk['WriteTime'] = this.get_eight_byte_date(file_bytes.slice(44,52), this.LITTLE_ENDIAN);
+    parsed_lnk['CreationTime']  = this.get_eight_byte_date(file_bytes.slice(28,36), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['AccessTime'] = this.get_eight_byte_date(file_bytes.slice(36,44), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['WriteTime'] = this.get_eight_byte_date(file_bytes.slice(44,52), Static_File_Analyzer.LITTLE_ENDIAN);
 
     if (parsed_lnk['CreationTime'] != "1601-01-01T00:00:00.000Z") {
       file_info.metadata.creation_date = parsed_lnk['CreationTime'];
@@ -858,9 +876,9 @@ class Static_File_Analyzer {
       file_info.metadata.last_modified_date = parsed_lnk['AccessTime'];
     }
 
-    parsed_lnk['FileSize'] = this.get_four_byte_int(file_bytes.slice(52,56), this.LITTLE_ENDIAN);
-    parsed_lnk['IconIndex'] = this.get_four_byte_int(file_bytes.slice(56,60), this.LITTLE_ENDIAN);
-    parsed_lnk['ShowCommand'] = show_commands[this.get_four_byte_int(file_bytes.slice(60,64), this.LITTLE_ENDIAN)];
+    parsed_lnk['FileSize'] = this.get_four_byte_int(file_bytes.slice(52,56), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['IconIndex'] = this.get_four_byte_int(file_bytes.slice(56,60), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['ShowCommand'] = show_commands[this.get_four_byte_int(file_bytes.slice(60,64), Static_File_Analyzer.LITTLE_ENDIAN)];
 
     if (hot_key_high_bit[file_bytes[65]] != "" && hot_key_low_bit[file_bytes[64]] != "") {
       parsed_lnk['HotKey'] = hot_key_high_bit[file_bytes[65]] + " + " + hot_key_low_bit[file_bytes[64]];
@@ -874,7 +892,7 @@ class Static_File_Analyzer {
     if (parsed_lnk['LinkFlags']['HasLinkTargetIDList'] == true) {
       // HasLinkTargetIDList
       parsed_lnk['TargetIDList'] = [];
-      var id_list_size = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+      var id_list_size = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       var id_list_bytes = file_bytes.slice(byte_offset,byte_offset+=id_list_size);
 
       var id_list_offset = 0;
@@ -883,9 +901,9 @@ class Static_File_Analyzer {
       var item_id_code;
 
       while (id_list_offset < id_list_bytes.length) {
-        item_id_size = this.get_two_byte_int(id_list_bytes.slice(id_list_offset,id_list_offset+=2), this.LITTLE_ENDIAN) - 2;
+        item_id_size = this.get_two_byte_int(id_list_bytes.slice(id_list_offset,id_list_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN) - 2;
         item_id_bytes = id_list_bytes.slice(id_list_offset,id_list_offset+=item_id_size);
-        item_id_code = this.get_two_byte_int(item_id_bytes.slice(0,2), this.LITTLE_ENDIAN);
+        item_id_code = this.get_two_byte_int(item_id_bytes.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
 
         if (item_id_code == 17199) {
           // Drive
@@ -913,10 +931,10 @@ class Static_File_Analyzer {
     if (parsed_lnk['LinkFlags']['HasLinkInfo'] == true) {
       // LinkInfo
       var link_info_start = byte_offset;
-      var link_info_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var link_info_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
       if (link_info_size < file_bytes.length) {
-        var link_info_header_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var link_info_header_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         var link_info_end = link_info_start + link_info_size;
 
         var link_info_flags = this.get_bin_from_int(file_bytes[byte_offset]).reverse();
@@ -927,8 +945,8 @@ class Static_File_Analyzer {
           'CommonNetworkRelativeLinkAndPathSuffix': (link_info_flags[1]==1) ? true : false
         };
 
-        var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
         if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
           // LocalBasePath
@@ -937,18 +955,18 @@ class Static_File_Analyzer {
           parsed_lnk['LocalBasePath'] = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i > 31));
         }
 
-        var common_network_relative_link_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var common_network_relative_link_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
-        var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         var common_path_suffix_start = (link_info_start+common_path_suffix_offset);
 
         if (link_info_header_size >= 0x24) {
-          var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var local_base_path_start_unicode = (link_info_start+local_base_path_offset_unicode);
           var local_base_path_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start_unicode), true);
           parsed_lnk['LocalBasePathUnicode'] = Static_File_Analyzer.get_string_from_array(local_base_path_unicode_bytes);
 
-          var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var common_path_suffix_start_unicode = (link_info_start+common_path_suffix_offset_unicode);
 
           var common_path_suffix_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
@@ -963,17 +981,17 @@ class Static_File_Analyzer {
           var volume_obj_start = byte_offset;
 
           parsed_lnk['VolumeID'] = {
-            'VolumeIDSize': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'DriveType': drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)],
-            'DriveSerialNumber': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'VolumeLabelOffset': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN)
+            'VolumeIDSize': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'DriveType': drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN)],
+            'DriveSerialNumber': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'VolumeLabelOffset': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN)
           };
 
           var drive_volume_lbl_start = volume_obj_start + parsed_lnk['VolumeID']['VolumeLabelOffset'];
 
           if (parsed_lnk['VolumeID']['VolumeLabelOffset'] == 0x14) {
             // NULL-terminated string of Unicode characters
-            var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
             drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset_unicode;
           }
 
@@ -983,18 +1001,18 @@ class Static_File_Analyzer {
 
         if (link_info_flags_obj.CommonNetworkRelativeLinkAndPathSuffix) {
           // CommonNetworkRelativeLink
-          var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var cnrl_flags = Static_File_Analyzer.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
-          var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-          var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-          var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
           if (net_name_offset > 0x14) {
-            var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           }
 
           if (parsed_lnk['VolumeID']['VolumeLabelOffset'] > 0x14) {
-            var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           }
         }
 
@@ -1010,41 +1028,41 @@ class Static_File_Analyzer {
     parsed_lnk['StringData'] = {};
 
     if (parsed_lnk['LinkFlags'].HasName) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['NAME_STRING'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasRelativePath) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['RELATIVE_PATH'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasWorkingDir) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['WORKING_DIR'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasArguments) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['COMMAND_LINE_ARGUMENTS'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasIconLocation) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['ICON_LOCATION'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     // ExtraData
     parsed_lnk['ExtraData'] = [];
-    var block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+    var block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
     while (block_size >= 4) {
-      var block_sig = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      var block_sig = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
       var block_end = byte_offset + block_size;
 
       if (block_sig == 0xA0000001) {
@@ -1070,35 +1088,35 @@ class Static_File_Analyzer {
         parsed_lnk['ExtraData'].push({
           'type': "distributed_link_tracker_properties",
           'data': {
-            'fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'popup_fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'screen_buffer_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'screen_buffer_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'window_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'window_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'window_origin_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'window_origin_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN),
-            'unused1': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'unused2': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'font_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'font_family': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'font_weight': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'popup_fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'screen_buffer_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'screen_buffer_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_origin_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_origin_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'unused1': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'unused2': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'font_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'font_family': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'font_weight': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
             'font_name_bytes': file_bytes.slice(byte_offset,byte_offset+=64),
-            'cursor_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'full_screen': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'quick_edit': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'insert_mode': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'auto_position': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'history_buff_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'number_of_history_buffers': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
-            'history_no_dup': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN),
+            'cursor_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'full_screen': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'quick_edit': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'insert_mode': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'auto_position': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'history_buff_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'number_of_history_buffers': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'history_no_dup': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
             'color_table': file_bytes.slice(byte_offset,byte_offset+=64)
           }
         });
       } else if (block_sig == 0xA0000003) {
         // TrackerDataBlock
-        var tracker_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var tracker_version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var tracker_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var tracker_version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         var distributed_link_tracker_properties = {};
 
         distributed_link_tracker_properties['MachineID'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=16).filter(i => i !== 0));
@@ -1127,11 +1145,11 @@ class Static_File_Analyzer {
         parsed_lnk['ExtraData'].push({'type': "DistributedLinkTrackerProperties", 'data': distributed_link_tracker_properties});
       } else if (block_sig == 0xA0000004) {
         // ConsoleFEDataBlock
-        var code_page = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var code_page = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
       } else if (block_sig == 0xA0000005) {
         // SpecialFolderDataBlock
-        var special_folder_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
-        var special_folder_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var special_folder_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var special_folder_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         // TODO get special folder info.
       } else if (block_sig == 0xA0000006) {
         // DarwinDataBlock
@@ -1158,41 +1176,41 @@ class Static_File_Analyzer {
         // PropertyStoreDataBlock
         var data_block_properties = [];
         var id_name = "Unknown";
-        var storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
         while (storage_size > 0) {
-          var version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          var version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var format_id = file_bytes.slice(byte_offset,byte_offset+=16);
           var guid = this.get_guid(format_id.slice(0,16));
 
           if (guid == "D5CDD505-2E9C-101B-9397-08002B2CF9AE" || guid == "05D5CDD5-9C2E-1B10-9397-08002B2CF9AE") {
             // String
-            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
             while (value_size != 0 && !isNaN(value_size)) {
-              var name_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+              var name_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
               byte_offset++ // skip reserved byte
 
               var name_bytes = file_bytes.slice(byte_offset,byte_offset+=name_size);
               var name_str = Static_File_Analyzer.get_string_from_array(name_bytes);
 
               var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(value_size-name_bytes));
-              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
             }
           } else {
             // Serialized Property Value
             var struct_start = byte_offset;
-            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
             var struct_end = struct_start + value_size;
 
             while (value_size != 0 && !isNaN(value_size)) {
               var value = "";
               var value_type = "";
-              var value_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+              var value_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
               byte_offset++ // skip reserved byte
 
-              var type = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
-              var padding = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), this.LITTLE_ENDIAN);
+              var type = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+              var padding = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
 
               // See: https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-OLEPS/%5bMS-OLEPS%5d.pdf - 2.15 TypedPropertyValue
               if (type == 0x0000) {
@@ -1227,7 +1245,7 @@ class Static_File_Analyzer {
               } else if (type == 0x0015) {
                 // VT_UI8 - 8-byte unsigned integer
                 value_type = "VT_UI8";
-                value = this.get_eight_byte_int(file_bytes.slice(byte_offset,byte_offset+=8), this.LITTLE_ENDIAN);
+                value = this.get_eight_byte_int(file_bytes.slice(byte_offset,byte_offset+=8), Static_File_Analyzer.LITTLE_ENDIAN);
               } else if (type == 0x0016) {
                 // VT_INT - 4-byte signed integer
                 value_type = "VT_INT";
@@ -1237,7 +1255,7 @@ class Static_File_Analyzer {
               } else if (type == 0x001F) {
                 // VT_LPWSTR - UnicodeString
                 value_type = "VT_LPWSTR";
-                var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN) - 1;
+                var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN) - 1;
                 var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(char_length*2));
 
                 var two_bit = [6,15];
@@ -1252,7 +1270,7 @@ class Static_File_Analyzer {
               } else if (type == 0x0040) {
                 // VT_FILETIME
                 value_type = "VT_FILETIME";
-                value = this.get_eight_byte_date(file_bytes.slice(byte_offset,byte_offset+=8), this.LITTLE_ENDIAN);
+                value = this.get_eight_byte_date(file_bytes.slice(byte_offset,byte_offset+=8), Static_File_Analyzer.LITTLE_ENDIAN);
               } else if (type == 0x0048) {
                 // VT_CLSID - MUST be a GUID
                 value_type = "VT_CLSID";
@@ -1286,25 +1304,25 @@ class Static_File_Analyzer {
                 file_info.metadata.creation_application = value;
               }
 
-              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
               if (value_size > (file_bytes.length - byte_offset)) {
                 // Byte index is off, or this file is malformed.
                 // Try backing up two bytes and re-reading.
                 byte_offset -= 5;
-                value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+                value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
               }
             }
           }
 
 
-          storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+          storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
           if (storage_size > (file_bytes.length - byte_offset)) {
             // Byte index is off, or this file is malformed.
             // Try backing up two bytes and re-reading.
             byte_offset -= 2;
-            storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+            storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           }
         }
 
@@ -1315,7 +1333,7 @@ class Static_File_Analyzer {
       } else if (block_sig == 0xA000000B) {
         // KnownFolderDataBlock
         var known_folder_id_bytes = file_bytes.slice(byte_offset,byte_offset+=16);
-        var known_folder_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+        var known_folder_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
       } else if (block_sig == 0xA000000C) {
         // VistaAndAboveIDListDataBlock
         break;
@@ -1323,7 +1341,7 @@ class Static_File_Analyzer {
         break;
       }
 
-      block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), this.LITTLE_ENDIAN);
+      block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
     }
 
     // Build LNK shell code
@@ -1470,7 +1488,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   async analyze_one(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "one";
     file_info.file_generic_type = "Document";
@@ -1605,7 +1623,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_pdf(file_bytes, file_text) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "pdf";
     file_info.file_generic_type = "Document";
@@ -1820,7 +1838,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_png(file_bytes, file_text) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "png";
     file_info.file_generic_type = "Image";
@@ -1883,7 +1901,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_rar(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "rar";
     file_info.file_generic_type = "File Archive";
@@ -1926,7 +1944,7 @@ class Static_File_Analyzer {
     var file_text_unicode = Static_File_Analyzer.get_string_from_array(file_bytes);
     var file_text_ascii = Static_File_Analyzer.get_ascii(file_bytes);
 
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "rtf";
     file_info.file_generic_type = "Document";
@@ -2047,7 +2065,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   async analyze_tnef(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "tnef";
     file_info.file_generic_type = "Mail Message";
@@ -2086,7 +2104,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_udf(file_bytes, file_text="") {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "iso";
     file_info.file_generic_type = "Disk Image";
@@ -2140,13 +2158,13 @@ class Static_File_Analyzer {
         anchor_pointer = anchor_descriptor_tag.tag_location;
 
         main_volume_descriptor_sequence_extent = {
-          'length': this.get_four_byte_int(file_bytes.slice(sector_start+16, sector_start+20), this.LITTLE_ENDIAN),
-          'location': this.get_four_byte_int(file_bytes.slice(sector_start+20, sector_start+24), this.LITTLE_ENDIAN)
+          'length': this.get_four_byte_int(file_bytes.slice(sector_start+16, sector_start+20), Static_File_Analyzer.LITTLE_ENDIAN),
+          'location': this.get_four_byte_int(file_bytes.slice(sector_start+20, sector_start+24), Static_File_Analyzer.LITTLE_ENDIAN)
         }
 
         reserve_volume_descriptor_sequence_extent = {
-          'length': this.get_four_byte_int(file_bytes.slice(sector_start+24, sector_start+28), this.LITTLE_ENDIAN),
-          'location': this.get_four_byte_int(file_bytes.slice(sector_start+28, sector_start+32), this.LITTLE_ENDIAN)
+          'length': this.get_four_byte_int(file_bytes.slice(sector_start+24, sector_start+28), Static_File_Analyzer.LITTLE_ENDIAN),
+          'location': this.get_four_byte_int(file_bytes.slice(sector_start+28, sector_start+32), Static_File_Analyzer.LITTLE_ENDIAN)
         }
 
         break;
@@ -3060,7 +3078,7 @@ class Static_File_Analyzer {
         if (file_bytes[i] == 0x01 && file_bytes[i+3] == 0x00 && file_bytes[i+4] == 0x41 && file_bytes[i+5] == 0x74 && file_bytes[i+6] == 0x74) {
           var compressed_header = [file_bytes[i+2], file_bytes[i+1]]; // Little Endian
           var header_bit_array = Static_File_Analyzer.get_binary_array(Uint8Array.from(compressed_header));
-          var compressed_chunk_byte_size = this.get_int_from_bin(header_bit_array.slice(4, 16), this.BIG_ENDIAN) + 5;
+          var compressed_chunk_byte_size = this.get_int_from_bin(header_bit_array.slice(4, 16), Static_File_Analyzer.BIG_ENDIAN) + 5;
 
           var vba_compressed_bytes = file_bytes.slice(i,i+compressed_chunk_byte_size);
           var vba_bytes = this.decompress_vba(vba_compressed_bytes);
@@ -3118,7 +3136,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_xml(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "xml";
     file_info.file_generic_type = "Document";
@@ -3139,7 +3157,7 @@ class Static_File_Analyzer {
    */
   async analyze_zip(file_bytes, file_password=undefined) {
     var zip_os_list  = ["MS-DOS", "Amiga", "OpenVMS", "UNIX", "VM/CMS", "Atari ST", "OS/2 H.P.F.S.", "Macintosh", "Z-System", "CP/M", "Windows NTFS", "MVS", "VSE", "Acorn Risc", "VFAT", "alternate MVS", "BeOS", "Tandem", "OS/400", "OS X (Darwin)"];
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "zip";
     file_info.file_generic_type = "File Archive";
@@ -3265,7 +3283,7 @@ class Static_File_Analyzer {
           var xml_type_match = xml_type_regex.exec(xml_text);
 
           while (xml_type_match !== null) {
-            if (!this.XML_DOMAINS.includes(xml_type_match[2])) {
+            if (!Static_File_Analyzer.XML_DOMAINS.includes(xml_type_match[2])) {
               file_info.analytic_findings.push("SUSPICIOUS - Unusual XML Schema Domain: " + xml_type_match[2]);
               console.log(xml_text); // DEBUG
             }
@@ -3400,7 +3418,7 @@ class Static_File_Analyzer {
                 var option_bits = this.get_bin_from_int(current_record_bytes[0]);
                 var current_byte2 = 1;
 
-                var string_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                var string_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                 var string_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+string_size));
                 var string_text = Static_File_Analyzer.get_string_from_array(string_bytes.filter(i => i !== 0));
                 current_byte2 = current_byte2 + 4 + string_size;
@@ -3506,7 +3524,7 @@ class Static_File_Analyzer {
               // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
               if (current_record_info.record_number == 35) {
                 // BrtFRTBegin
-                var product_version = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
+                var product_version = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
               } else if (current_record_info.record_number == 36) {
                 // BrtFRTEnd
               } else if (current_record_info.record_number == 37) {
@@ -3536,13 +3554,13 @@ class Static_File_Analyzer {
                 // BrtFileRecover
               } else if (current_record_info.record_number == 156) {
                 // BrtBundleSh - Sheet information
-                var sheet_state_val = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
+                var sheet_state_val = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
                 var sheet_state = (sheet_state_val == 1) ? "hidden" : ((sheet_state_val == 1) ? "very hidden": "visible");
 
-                var sheet_id = this.get_four_byte_int(current_record_bytes.slice(4,8), this.LITTLE_ENDIAN);
-                var sheet_type_size = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN) * 2;
+                var sheet_id = this.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
+                var sheet_type_size = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                 var sheet_type_bytes = (current_record_bytes.slice(12,12+sheet_type_size));
-                var sheet_name_size = this.get_four_byte_int(current_record_bytes.slice(sheet_type_size+12,sheet_type_size+16), this.LITTLE_ENDIAN) * 2;
+                var sheet_name_size = this.get_four_byte_int(current_record_bytes.slice(sheet_type_size+12,sheet_type_size+16), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                 var sheet_name_bytes = (current_record_bytes.slice(sheet_type_size+16,sheet_type_size+16+sheet_name_size));
 
                 var sheet_type = Static_File_Analyzer.get_string_from_array(sheet_type_bytes.filter(i => i !== 0));
@@ -3677,13 +3695,13 @@ class Static_File_Analyzer {
                   // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
                   if (current_record_info.record_number == 0) {
                     // BrtRowHdr
-                    current_row = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN) + 1;
+                    current_row = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN) + 1;
                   } else if (current_record_info.record_number == 1) {
                     // BrtCellBlank - Blank cell
                   } else if (current_record_info.record_number == 7) {
                     // BrtCellIsst - A cell record that contains a string.
-                    var col = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
-                    var sst_index = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN);
+                    var col = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var sst_index = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
                     var cell_value = string_constants[sst_index];
 
                     if (current_row > -1) {
@@ -3720,11 +3738,11 @@ class Static_File_Analyzer {
                     // BrtWsDim - specifies the used range of the sheet.
                   } else if (current_record_info.record_number == 152) {
                     // BrtSel
-                    var pane = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
-                    var row = this.get_four_byte_int(current_record_bytes.slice(4,8), this.LITTLE_ENDIAN);
-                    var col = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN);
-                    var rfx_index = this.get_four_byte_int(current_record_bytes.slice(12,16), this.LITTLE_ENDIAN);
-                    var rfx_count = this.get_four_byte_int(current_record_bytes.slice(16,20), this.LITTLE_ENDIAN);
+                    var pane = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var row = this.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var col = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var rfx_index = this.get_four_byte_int(current_record_bytes.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var rfx_count = this.get_four_byte_int(current_record_bytes.slice(16,20), Static_File_Analyzer.LITTLE_ENDIAN);
                     var rgrfx_bytes = current_record_bytes.slice(20,20+rfx_count);
                   } else if (current_record_info.record_number == 390) {
                     // BrtBeginColInfos
@@ -3738,27 +3756,27 @@ class Static_File_Analyzer {
                     // BrtWsFmtInfo
                   } else if (current_record_info.record_number == 494) {
                     // BrtHLink - specifies a hyperlink that applies to a range of cells.
-                    var row_start = this.get_four_byte_int(current_record_bytes.slice(0,4), this.LITTLE_ENDIAN);
-                    var row_end = this.get_four_byte_int(current_record_bytes.slice(4,8), this.LITTLE_ENDIAN);
-                    var col_start = this.get_four_byte_int(current_record_bytes.slice(8,12), this.LITTLE_ENDIAN);
-                    var col_end = this.get_four_byte_int(current_record_bytes.slice(12,16), this.LITTLE_ENDIAN);
+                    var row_start = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var row_end = this.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var col_start = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var col_end = this.get_four_byte_int(current_record_bytes.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
 
-                    var rid_size = this.get_four_byte_int(current_record_bytes.slice(16,20), this.LITTLE_ENDIAN) * 2;
+                    var rid_size = this.get_four_byte_int(current_record_bytes.slice(16,20), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var rid_bytes = (current_record_bytes.slice(20, 20+rid_size));
                     var rid = Static_File_Analyzer.get_string_from_array(rid_bytes.filter(i => i !== 0));
                     var current_byte2 = 20+rid_size;
 
-                    var location_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                    var location_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var location_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+location_size));
                     var location = Static_File_Analyzer.get_string_from_array(location_bytes.filter(i => i !== 0));
                     current_byte2 = current_byte2 + 4 + location_size;
 
-                    var tool_tip_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                    var tool_tip_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var tool_tip_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+tool_tip_size));
                     var tool_tip = Static_File_Analyzer.get_string_from_array(tool_tip_bytes.filter(i => i !== 0));
                     current_byte2 = current_byte2 + 4 + tool_tip_size;
 
-                    var display_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), this.LITTLE_ENDIAN) * 2;
+                    var display_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var display_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+display_size));
                     var display = Static_File_Analyzer.get_string_from_array(display_bytes.filter(i => i !== 0));
                     current_byte2 = current_byte2 + 4 + display_size;
@@ -3844,7 +3862,7 @@ class Static_File_Analyzer {
 
         var document_obj = {
           'type': "spreadsheet",
-          'byte_order': this.LITTLE_ENDIAN,
+          'byte_order': Static_File_Analyzer.LITTLE_ENDIAN,
           'document_properties': {},
           'sheets': spreadsheet_sheet_names,
           'string_constants': string_constants,
@@ -3881,7 +3899,7 @@ class Static_File_Analyzer {
    * @return {Object}     file_info     A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   async analyze_zlib(file_bytes) {
-    var file_info = this.get_default_file_json();
+    var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "zlib";
     file_info.file_generic_type = "File Archive";
@@ -4097,8 +4115,8 @@ class Static_File_Analyzer {
     if (header_block_found == true) {
       // Get header data
       var header_bit_array = Static_File_Analyzer.get_binary_array(Uint8Array.from(compressed_header));
-      var compressed_chunk_byte_size = this.get_int_from_bin(header_bit_array.slice(4, 16), this.BIG_ENDIAN) + 3;
-      var compressed_chunk_signature = this.get_int_from_bin(header_bit_array.slice(1, 4), this.BIG_ENDIAN);
+      var compressed_chunk_byte_size = this.get_int_from_bin(header_bit_array.slice(4, 16), Static_File_Analyzer.BIG_ENDIAN) + 3;
+      var compressed_chunk_signature = this.get_int_from_bin(header_bit_array.slice(1, 4), Static_File_Analyzer.BIG_ENDIAN);
       var compressed_chunk_flag = header_bit_array[0];
       var current_byte = 0;
       var compression_flags;
@@ -4128,8 +4146,8 @@ class Static_File_Analyzer {
             var number_of_bits = Math.ceil(Math.log2(decompressed_buffer.length));
             var number_of_offset_bits = (number_of_bits < 4) ? 4 : ((number_of_bits > 12) ? 12 : number_of_bits);
 
-            var offset_bytes = this.get_int_from_bin(copy_token_bits.slice(0, number_of_offset_bits), this.BIG_ENDIAN) + 1;
-            var byte_length = this.get_int_from_bin(copy_token_bits.slice(number_of_offset_bits), this.BIG_ENDIAN) + 3;
+            var offset_bytes = this.get_int_from_bin(copy_token_bits.slice(0, number_of_offset_bits), Static_File_Analyzer.BIG_ENDIAN) + 1;
+            var byte_length = this.get_int_from_bin(copy_token_bits.slice(number_of_offset_bits), Static_File_Analyzer.BIG_ENDIAN) + 3;
             current_byte += 2;
 
             // do the copy
@@ -5235,15 +5253,19 @@ class Static_File_Analyzer {
    *
    * @return {object} The defaut object structure for the analyzed file.
    */
-  get_default_file_json() {
+  static get_default_file_json() {
     return {
       file_format: "unknown",
       file_generic_type: "unknown",
       file_format_ver: "unknown",
       file_encrypted: "unknown",
       file_encryption_type: "unknown",
-      file_components: [],
       file_password: "unknown",
+      file_components: [],
+      file_hashes: {
+        md5: "",
+        sha256: ""
+      },
       metadata: {
         author: "unknown",
         creation_application: "unknown",
@@ -5274,8 +5296,8 @@ class Static_File_Analyzer {
    * @return {String} The timestamp converted from the four byte array.
    */
   get_ecma_timestamp(bytes) {
-    var type_and_timezone = this.get_two_byte_int(bytes.slice(0,2), this.LITTLE_ENDIAN);
-    var year = this.get_two_byte_int(bytes.slice(2,4), this.LITTLE_ENDIAN);
+    var type_and_timezone = this.get_two_byte_int(bytes.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
+    var year = this.get_two_byte_int(bytes.slice(2,4), Static_File_Analyzer.LITTLE_ENDIAN);
     year = (year == 0) ? "0000" : year;
 
     var month = (bytes[4] < 10) ? "0"+bytes[4] : bytes[4];
@@ -5296,10 +5318,10 @@ class Static_File_Analyzer {
    * @param {String}   endianness Value indicating how to interperate the bit order of the byte array. Default is BIG_ENDIAN.
    * @return {integer} The integer value of the given bit array.
    */
-  get_eight_byte_date(bytes, endianness = this.BIG_ENDIAN) {
+  get_eight_byte_date(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
     var int_bits = "";
 
-    if (endianness == this.LITTLE_ENDIAN) {
+    if (endianness == Static_File_Analyzer.LITTLE_ENDIAN) {
       for (var byte_index = (bytes.length-1); byte_index >= 0; byte_index--) {
         int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
       }
@@ -5326,10 +5348,10 @@ class Static_File_Analyzer {
    * @param {String}   endianness Value indicating how to interperate the bit order of the byte array. Default is BIG_ENDIAN.
    * @return {long} The integer value of the given bit array.
    */
-  get_eight_byte_int(bytes, endianness = this.BIG_ENDIAN) {
+  get_eight_byte_int(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
     var int_bits = "";
 
-    if (endianness == this.LITTLE_ENDIAN) {
+    if (endianness == Static_File_Analyzer.LITTLE_ENDIAN) {
       for (var byte_index = 7; byte_index >= 0; byte_index--) {
         int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
       }
@@ -5368,10 +5390,10 @@ class Static_File_Analyzer {
    * @param {String}   endianness Value indicating how to interperate the bit order of the binary array. Default is BIG_ENDIAN.
    * @return {integer} The integer value of the given bit array.
    */
-  get_int_from_bin(binary_array, endianness = this.BIG_ENDIAN) {
+  get_int_from_bin(binary_array, endianness = Static_File_Analyzer.BIG_ENDIAN) {
     var int_val = 0;
 
-    if (endianness == this.LITTLE_ENDIAN) {
+    if (endianness == Static_File_Analyzer.LITTLE_ENDIAN) {
       for (var i=0; i<binary_array.length; i++) {
         int_val += binary_array[i] * Math.pow(2, i);
       }
@@ -5444,10 +5466,10 @@ class Static_File_Analyzer {
    * @param {String}   endianness Value indicating how to interperate the bit order of the byte array. Default is BIG_ENDIAN.
    * @return {integer} The integer value of the given bit array.
    */
-  get_four_byte_int(bytes, endianness = this.BIG_ENDIAN) {
+  get_four_byte_int(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
     var int_bits = "";
 
-    if (endianness == this.LITTLE_ENDIAN) {
+    if (endianness == Static_File_Analyzer.LITTLE_ENDIAN) {
       for (var byte_index = (bytes.length-1); byte_index >= 0; byte_index--) {
         int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
       }
@@ -5508,10 +5530,10 @@ class Static_File_Analyzer {
    * @param {String}   endianness Value indicating how to interperate the bit order of the byte array. Default is BIG_ENDIAN.
    * @return {integer} The integer value of the given bit array.
    */
-  get_two_byte_int(bytes, endianness = this.BIG_ENDIAN) {
+  get_two_byte_int(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
     var int_bits = "";
 
-    if (endianness == this.LITTLE_ENDIAN) {
+    if (endianness == Static_File_Analyzer.LITTLE_ENDIAN) {
       for (var byte_index = (bytes.length-1); byte_index >= 0; byte_index--) {
         int_bits += ("00000000" + (bytes[byte_index]).toString(2)).slice(-8);
       }
@@ -6293,14 +6315,14 @@ class Static_File_Analyzer {
       'valid': false
     };
 
-    descriptor_tag.tag_identifier = this.get_two_byte_int(decr_tag_buffer.slice(0,2), this.LITTLE_ENDIAN);
+    descriptor_tag.tag_identifier = this.get_two_byte_int(decr_tag_buffer.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
     if (tag_identifiers.includes(descriptor_tag.tag_identifier)) {
-      descriptor_tag.descriptor_version = this.get_two_byte_int(decr_tag_buffer.slice(2,4), this.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_version = this.get_two_byte_int(decr_tag_buffer.slice(2,4), Static_File_Analyzer.LITTLE_ENDIAN);
       descriptor_tag.tag_checksum = decr_tag_buffer[4];
-      descriptor_tag.tag_serial_number = this.get_two_byte_int(decr_tag_buffer.slice(6,8), this.LITTLE_ENDIAN);
-      descriptor_tag.descriptor_crc = this.get_two_byte_int(decr_tag_buffer.slice(8,10), this.LITTLE_ENDIAN);
-      descriptor_tag.descriptor_crc_length = this.get_two_byte_int(decr_tag_buffer.slice(10,12), this.LITTLE_ENDIAN);
-      descriptor_tag.tag_location = this.get_four_byte_int(decr_tag_buffer.slice(12,16), this.LITTLE_ENDIAN);
+      descriptor_tag.tag_serial_number = this.get_two_byte_int(decr_tag_buffer.slice(6,8), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_crc = this.get_two_byte_int(decr_tag_buffer.slice(8,10), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_crc_length = this.get_two_byte_int(decr_tag_buffer.slice(10,12), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.tag_location = this.get_four_byte_int(decr_tag_buffer.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
     }
 
     // Verify checksum
@@ -6332,7 +6354,7 @@ class Static_File_Analyzer {
    * @param {String}   byte_order Optional. this is the byte order to read records in. Default is Little Endian.
    * @return {Object}  An object with the parsed cell data.
    */
-  parse_xls_formula_record(cell_record_obj, document_obj, file_info, byte_order=this.LITTLE_ENDIAN) {
+  parse_xls_formula_record(cell_record_obj, document_obj, file_info, byte_order=Static_File_Analyzer.LITTLE_ENDIAN) {
     document_obj.current_sheet_name = cell_record_obj.sheet_name;
     document_obj.current_cell = cell_record_obj.cell_name;
 
@@ -7500,7 +7522,7 @@ class Static_File_Analyzer {
    * @param {String}   byte_order Optional. this is the byte order to read records in. Default is Little Endian.
    * @return {Object}  An object with the parsed cell data.
    */
-  parse_xls_label_set_record(cell_record_obj, string_constants, byte_order=this.LITTLE_ENDIAN) {
+  parse_xls_label_set_record(cell_record_obj, string_constants, byte_order=Static_File_Analyzer.LITTLE_ENDIAN) {
     var bytes = cell_record_obj.record_bytes;
 
     var cell_row  = this.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
@@ -7532,7 +7554,7 @@ class Static_File_Analyzer {
    * @param {String}   byte_order Optional. this is the byte order to read records in. Default is Little Endian.
    * @return {Object}  An object with the parsed cell data.
    */
-  parse_xls_rk_record(cell_record_obj, byte_order=this.LITTLE_ENDIAN) {
+  parse_xls_rk_record(cell_record_obj, byte_order=Static_File_Analyzer.LITTLE_ENDIAN) {
     var bytes = cell_record_obj.record_bytes;
 
     var cell_row  = this.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
@@ -7644,7 +7666,7 @@ class Static_File_Analyzer {
    * @param  {String} byte_order - Optional, default is LITTLE_ENDIAN.
    * @return {array} An array containing all the records raw bytes.
    */
-  read_dbcell_records(file_bytes, document_obj, byte_order=this.LITTLE_ENDIAN) {
+  read_dbcell_records(file_bytes, document_obj, byte_order=Static_File_Analyzer.LITTLE_ENDIAN) {
     // Find workbook entry
     var cell_records = [];
     var sheet_name = "";
@@ -8432,6 +8454,33 @@ class Encoding_Tools {
       : uint6 === 63
       ? 47
       : 65;
+  }
+}
+
+class Hash_Tools {
+
+  /**
+   * Creates a MD5 hash of the given bytes.
+   *
+   * @param  {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {String}     The MD5 Hash of the given bytes
+   */
+  static async get_md5(file_bytes) {
+
+    return "";
+  }
+
+  /**
+   * Creates a SHA256 hash of the given bytes.
+   *
+   * @param  {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {String}     The SHAR256 Hash of the given bytes
+   */
+  static async get_sha256(file_bytes) {
+    const hash_buffer = await crypto.subtle.digest('SHA-256', file_bytes);           // hash the message
+    const hash_array = Array.from(new Uint8Array(hash_buffer));                     // convert buffer to byte array
+    const hash_hex = hash_array.map(b => b.toString(16).padStart(2, '0')).join(''); // convert bytes to hex string
+    return hash_hex;
   }
 }
 
