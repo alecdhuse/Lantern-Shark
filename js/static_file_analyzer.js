@@ -39,6 +39,18 @@ class Static_File_Analyzer {
    * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
    */
   constructor(file_bytes, file_text="", file_password=undefined) {
+    return this.analyze(file_bytes, file_text, file_password);
+  }
+
+  /**
+   * Created the default object structure for the output of this class.
+   *
+   * @param {Uint8Array} file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}     file_text     [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
+   * @param {String}     file_password [Optional] File password for encrypted or protected files.
+   * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
+   */
+  async analyze(file_bytes, file_text="", file_password=undefined) {
     var file_info = Static_File_Analyzer.get_default_file_json();
 
     if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
@@ -97,18 +109,6 @@ class Static_File_Analyzer {
     //console.log(file_info);
 
     return file_info;
-  }
-
-  /**
-   * Created the default object structure for the output of this class.
-   *
-   * @param {Uint8Array} file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
-   * @param {String}     file_text     [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
-   * @param {String}     file_password [Optional] File password for encrypted or protected files.
-   * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
-   */
-  static async analyze(file_bytes, file_text="", file_password=undefined) {
-
   }
 
   /**
