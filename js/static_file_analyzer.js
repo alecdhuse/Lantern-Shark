@@ -99,10 +99,6 @@ class Static_File_Analyzer {
       }
     }
 
-    // Get file hashes
-    //file_info.file_hashes.md5 = Hash_Tools.get_md5(file_bytes);
-    //file_info.file_hashes.sha256 = Hash_Tools.get_sha256(Uint8Array.from(file_bytes));
-
     // Attempt to identify threat actor and or malware.
     file_info = this.identify_threat(file_info);
 
@@ -5262,10 +5258,6 @@ class Static_File_Analyzer {
       file_encryption_type: "unknown",
       file_password: "unknown",
       file_components: [],
-      file_hashes: {
-        md5: "",
-        sha256: ""
-      },
       metadata: {
         author: "unknown",
         creation_application: "unknown",
