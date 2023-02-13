@@ -56,7 +56,7 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
       file_info = this.analyze_exe(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x47,0x49,0x46,0x38,0x39])) {
-      // GIF
+      file_info = this.analyze_gif(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [31,139])) {
       file_info = this.analyze_gz(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
@@ -604,12 +604,31 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Extracts meta data and other information from gif image files.
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_gif(file_bytes) {
+    var file_info = Static_File_Analyzer.get_default_file_json();
+
+    file_info.file_format = "gif";
+    file_info.file_generic_type = "Image";
+
+    // This format does not support encryption
+    file_info.file_encrypted = "false";
+    file_info.file_encryption_type = "none";
+
+    return file_info;
+  }
+
+  /**
    * Extracts meta data and other information from gz archive files.
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  async analyze_gz(file_bytes) {
+  analyze_gz(file_bytes) {
     var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "gz";
@@ -3895,7 +3914,7 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info     A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  async analyze_zlib(file_bytes) {
+  analyze_zlib(file_bytes) {
     var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "zlib";
