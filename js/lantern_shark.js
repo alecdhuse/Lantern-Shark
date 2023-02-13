@@ -139,7 +139,9 @@ function change_tab(e) {
  */
 async function decrypt_file(e) {
   file_password = $("#summary_file_encrypted_password_txt").val();
-  analyzer_results = await new Static_File_Analyzer(file_byte_array, "", file_password);
+
+  let static_analyzer = new Static_File_Analyzer();
+  analyzer_results = await static_analyzer.analyze(file_byte_array, "", file_password);
 
   if (analyzer_results.file_password == "unknown") {
     // wrong password
@@ -152,7 +154,8 @@ async function decrypt_file(e) {
       for (var i=0; i<analyzer_results.file_components.length; i++) {
         if (analyzer_results.file_components[i].directory == false) {
           // Analyze the first file that is not a directory.
-          var subfile_analyzer_results = await new Static_File_Analyzer(analyzer_results.file_components[i].file_bytes);
+          var subfile_analyzer_results = await static_analyzer.analyze(analyzer_results.file_components[i].file_bytes);
+
           display_file_summary(subfile_analyzer_results);
           select_file_component(null, i);
 
@@ -314,7 +317,9 @@ function read_file(e) {
 
       let file_byte_array = Array.from(array);
 
-      analyzer_results = await new Static_File_Analyzer(file_byte_array);
+      let static_analyzer = new Static_File_Analyzer();
+      analyzer_results = await static_analyzer.analyze(file_byte_array);
+
       await display_sub_components(analyzer_results, "top_level_file");
 
       // If the file is a type of file archive or disk image and it contains a single file.
@@ -355,7 +360,8 @@ async function display_sub_components(analyzer_results, parent_element_id) {
 
     if (analyzer_results.file_components[i].directory == false) {
       if (analyzer_results.file_components[i].hasOwnProperty("file_bytes")) {
-        var subfile_analyzer_results = await new Static_File_Analyzer(Array.from(analyzer_results.file_components[i].file_bytes));
+        let static_analyzer = new Static_File_Analyzer();
+        var subfile_analyzer_results = await static_analyzer.analyze(Array.from(analyzer_results.file_components[i].file_bytes));
 
         if (subfile_analyzer_results.file_components.length > 0) {
           await display_sub_components(subfile_analyzer_results, child_element_id);
@@ -384,7 +390,8 @@ async function save_selected_file(e) {
     selected_file_component = select_analyzer_results.file_components[c_component_index];
 
     if (i+1 < component_info.length) {
-      select_analyzer_results = await new Static_File_Analyzer(selected_file_component.file_bytes);
+      let static_analyzer = new Static_File_Analyzer();
+      select_analyzer_results = await static_analyzer.analyze(selected_file_component.file_bytes);
     } else {
       // Don't analyze file if it's the last one.
       break;
@@ -432,7 +439,9 @@ async function select_file_component(e, component_index=null) {
     for (let i=0; i<component_info.length; i++) {
       let c_component_index = parseInt(component_info[i]);
       selected_file_component = select_analyzer_results.file_components[c_component_index];
-      select_analyzer_results = await new Static_File_Analyzer(selected_file_component.file_bytes);
+
+      let static_analyzer = new Static_File_Analyzer();
+      select_analyzer_results = await static_analyzer.analyze(selected_file_component.file_bytes);
     }
 
     // Remove all selected classes

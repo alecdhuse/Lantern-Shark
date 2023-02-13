@@ -31,15 +31,11 @@ class Static_File_Analyzer {
   static XML_DOMAINS = ["openoffice.org","purl.org","schemas.microsoft.com","schemas.openxmlformats.org","w3.org"];
 
   /**
-   * Created the default object structure for the output of this class.
+   * Empty constructor.
    *
-   * @param {Uint8Array} file_bytes    Array with int values 0-255 representing the bytes of the file to be analyzed.
-   * @param {String}     file_text     [Optional] The text version of the file, it can be provided to save compute time, otherwise it will be generated in this constructor.
-   * @param {String}     file_password [Optional] File password for encrypted or protected files.
-   * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
    */
-  constructor(file_bytes, file_text="", file_password=undefined) {
-    return this.analyze(file_bytes, file_text, file_password);
+  constructor() {
+
   }
 
   /**
@@ -51,7 +47,7 @@ class Static_File_Analyzer {
    * @return {object}    An object with analyzed file results. See get_default_file_json for the format.
    */
   async analyze(file_bytes, file_text="", file_password=undefined) {
-    var file_info = Static_File_Analyzer.get_default_file_json();
+    var file_info = await Static_File_Analyzer.get_default_file_json();
 
     if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
       file_info = this.analyze_ace(file_bytes);
@@ -59,12 +55,14 @@ class Static_File_Analyzer {
       file_info = this.analyze_cbf(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
       file_info = this.analyze_exe(file_bytes);
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x47,0x49,0x46,0x38,0x39])) {
+      // GIF
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [31,139])) {
       file_info = this.analyze_gz(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
                Static_File_Analyzer.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
       file_info = this.analyze_iso9660(file_bytes, file_text);
-    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,3), [0xFF,0xD8,0xFF])) {
       file_info = this.analyze_jpeg(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
       file_info = this.analyze_lnk(file_bytes);
@@ -85,7 +83,7 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
-      file_info = this.analyze_zip(file_bytes, file_password);
+      file_info = await this.analyze_zip(file_bytes, file_password);
     } else if (file_bytes[0] == 0x78 && [0x01,0x5e,0x9c,0xda,0x20,0x7d,0xbb,0xf9].includes(file_bytes[1])) {
       file_info = this.analyze_zlib(file_bytes);
     } else {
@@ -99,8 +97,22 @@ class Static_File_Analyzer {
       }
     }
 
+    // Look for scripts and IoCs in file_components
+    for (let i=0; i<file_info.file_components.length; i++) {
+      let static_analyzer = new Static_File_Analyzer();
+      let analyzer_results = await static_analyzer.analyze(file_info.file_components[i].file_bytes, "", "");
+
+      if (analyzer_results.scripts.script_type != "none") {
+        this.add_extracted_script(analyzer_results.scripts.script_type, analyzer_results.scripts.extracted_script, file_info);
+      }
+
+      for (let i=0; i<analyzer_results.iocs.length; i++) {
+        file_info = Static_File_Analyzer.search_for_iocs(analyzer_results.iocs[i], file_info);
+      }
+    }
+
     // Attempt to identify threat actor and or malware.
-    file_info = this.identify_threat(file_info);
+    file_info = await this.identify_threat(file_info);
 
     //console.log(file_info);
 
@@ -120,12 +132,14 @@ class Static_File_Analyzer {
       return_val = {'is_valid': true, 'type': "ace"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
       return_val = {'is_valid': true, 'type': "exe"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x47,0x49,0x46,0x38,0x39])) {
+      return_val = {'is_valid': true, 'type': "gif"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [31,139])) {
       return_val = {'is_valid': true, 'type': "gz"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(32769,32774), [67,68,48,48,49]) ||
                Static_File_Analyzer.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
       return_val = {'is_valid': true, 'type': "iso"};
-    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(6,10), [74,70,73,70])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,3), [0xFF,0xD8,0xFF])) {
       return_val = {'is_valid': true, 'type': "jpeg"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
       return_val = {'is_valid': true, 'type': "lnk"};
@@ -707,7 +721,7 @@ class Static_File_Analyzer {
     if (jfif_ver_bytes[1] < 10) {
       jfif_ver_str += ".0" +  jfif_ver_bytes[1].toString();
     }  else {
-      if (jfif_ver_bytes[1].toString().length = 2) {
+      if (jfif_ver_bytes[1].toString().length == 2) {
         jfif_ver_str += "." + jfif_ver_bytes[1].toString();
       } else {
         jfif_ver_str += "." + jfif_ver_bytes[1].toString() + "0";
@@ -1483,7 +1497,7 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  async analyze_one(file_bytes) {
+  analyze_one(file_bytes) {
     var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "one";
@@ -1588,19 +1602,6 @@ class Static_File_Analyzer {
     // Look for embedded files
     let files = MS_Document_Parser.extract_embedded_file_from_one_note(file_bytes);
     file_info.file_components = files;
-
-    // Look for scripts and IoCs in file_components
-    for (let i=0; i<file_info.file_components.length; i++) {
-      let analyzer_results = await new Static_File_Analyzer(file_info.file_components[i].file_bytes, "", "");
-
-      if(analyzer_results.scripts.script_type != "none") {
-        this.add_extracted_script(analyzer_results.scripts.script_type, analyzer_results.scripts.extracted_script, file_info);
-      }
-
-      for (let i=0; i<analyzer_results.iocs.length; i++) {
-        file_info = Static_File_Analyzer.search_for_iocs(analyzer_results.iocs[i], file_info);
-      }
-    }
 
     // Set parsed file info
     file_info.parsed = JSON.stringify({
@@ -2060,7 +2061,7 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  async analyze_tnef(file_bytes) {
+  analyze_tnef(file_bytes) {
     var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "tnef";
@@ -9120,8 +9121,6 @@ class MS_Document_Parser {
         }
       }
     }
-
-    console.log(embedded_files_meta);
 
     // Search for embedded file header
     for (let i=0; i<file_bytes.length; i+=8) {
