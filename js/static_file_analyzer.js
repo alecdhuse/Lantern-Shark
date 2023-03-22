@@ -1473,6 +1473,20 @@ class Static_File_Analyzer {
       file_info.metadata.title = msg_properties.properties['PidTagSubject'].val;
     }
 
+    // Check for CVE-2023-23397
+    if (msg_properties.properties.hasOwnProperty("PidLidReminderFileParameter")) {
+      let file_reminder_str = msg_properties.properties['PidLidReminderFileParameter'].val;
+      file_info = Static_File_Analyzer.search_for_iocs(file_reminder_str, file_info);
+
+      var cve_regex = /\\.+\..+/gm;
+      var cve_match = cve_regex.exec(file_reminder_str);
+
+      while (cve_match !== null) {
+        file_info.analytic_findings.push("MALICIOUS - CVE-2023-23397 Exploit Found");
+        break;
+      }
+    }
+
     sender_display_name = (sender_display_name.length > 0) ? sender_display_name + " " : "";
     file_info.metadata.author = sender_display_name + "<" + sender_email + ">";
     file_info.parsed = JSON.stringify(msg_properties.properties, null, 2);
@@ -8293,6 +8307,8 @@ class CFB_Parser {
       file_type = "msg";
     } else if (sector_names[1].toLowerCase() == "__properties_version1.0") {
       file_type = "msg";
+    } else if (sector_names.indexOf("__substg1.0_001A001E") >= 0) {
+      file_type = "msg";
     } else if (sector_names[1].toLowerCase() == "1table") {
       file_type = "doc";
     } else if (sector_names[2].toLowerCase() == "projectwm") {
@@ -10127,6 +10143,7 @@ class TNEF_Parser {
     0x7ffc0040: "PidTagExceptionEndTime",
     0x7ffd0003: "PidTagAttachmentFlags",
     0x7ffe000b: "PidTagAttachmentHidden",
+    0x8000001e: "PidLidReminderFileParameter",
     0x8000001f: "attFrom",
     0x8006001f: "attDateRecd"
   };
