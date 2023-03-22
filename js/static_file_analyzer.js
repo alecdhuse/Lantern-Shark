@@ -1478,7 +1478,7 @@ class Static_File_Analyzer {
       let file_reminder_str = msg_properties.properties['PidLidReminderFileParameter'].val;
       file_info = Static_File_Analyzer.search_for_iocs(file_reminder_str, file_info);
 
-      var cve_regex = /\\.+\..+/gm;
+      var cve_regex = /\\.+[\.:].+/gm;
       var cve_match = cve_regex.exec(file_reminder_str);
 
       while (cve_match !== null) {
