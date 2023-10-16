@@ -1865,6 +1865,7 @@ class Static_File_Analyzer {
    * @see http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}      file_text    The unicode text of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
   analyze_png(file_bytes, file_text) {
@@ -1919,6 +1920,16 @@ class Static_File_Analyzer {
       } else {
         break;
       }
+    }
+
+    // Check for RDF Metadata
+    let metadata = this.extract_rdf_metadata(file_bytes, file_text);
+    if (metadata.found) {
+      file_info.metadata.title = metadata.title;
+      file_info.metadata.description = metadata.description;
+      file_info.metadata.author = metadata.author;
+      file_info.metadata.creation_date = metadata.creation_date;
+      file_info.metadata.creation_application = metadata.creation_application;      
     }
 
     return file_info;
@@ -5087,6 +5098,74 @@ class Static_File_Analyzer {
     }
 
     return stack[0];
+  }
+
+  /**
+   * Extracts RDF Metadata from a given file.
+   *
+   * @see https://www.w3.org/TR/1999/REC-rdf-syntax-19990222/
+   * @see https://en.wikipedia.org/wiki/Extensible_Metadata_Platform
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}      file_text    The unicode text of the file to be analyzed.
+   * @return {Object}     metadata     A Javascript object representing the extracted information from this file.
+   */
+  extract_rdf_metadata(file_bytes, file_text) {
+    let metadata = {
+      'found': false,
+      'title': "unknown",
+      'description': "unknown",
+      'author': "unknown",
+      'creation_date': "0000-00-00 00:00:00",
+      'last_modified_date': "0000-00-00 00:00:00",
+      'creation_application': "unknown",
+      'creation_os': "unknown",
+      'last_saved_location': "unknown",
+      'ext_id': "",
+      'fb_id': ""
+    }
+
+    let rdf_match = /<rdf:rdf/gmi.exec(file_text);
+
+    if (rdf_match) {
+      metadata.found = true;
+      let rdf_start = rdf_match.index;
+      let rdf_end = file_text.length;
+
+      let rdf_match2 = /<\/rdf:rdf/gmi.exec(file_text);
+      if (rdf_match2) {
+        rdf_end = rdf_match2.index;
+      }
+
+      let rdf_text = file_text.substr(rdf_start, rdf_end);
+
+      let author_match = /:author\s*>([^<]+)/gmi.exec(rdf_text);
+      if (author_match !== null) {
+        metadata.author = author_match[1];
+      }
+
+      let created_match = /:created\s*>([^<]+)/gmi.exec(rdf_text);
+      if (created_match !== null) {
+        metadata.creation_date = created_match[1];
+      }
+
+      let creator_tool_match = /:creatortool\s*>([^<]+)/gmi.exec(rdf_text);
+      if (creator_tool_match !== null) {
+        metadata.creation_application = creator_tool_match[1];
+      }
+
+      let ext_id_match = /:extid\s*>([^<]+)/gmi.exec(rdf_text);
+      if (ext_id_match !== null) {
+        metadata.ext_id = ext_id_match[1];
+      }
+
+      let fb_id_match = /:fbid\s*>([^<]+)/gmi.exec(rdf_text);
+      if (fb_id_match !== null) {
+        metadata.fb_id = fb_id_match[1];
+      }
+    }
+
+    return metadata;
   }
 
   /**
