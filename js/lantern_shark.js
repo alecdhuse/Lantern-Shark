@@ -219,9 +219,7 @@ function display_file_summary(file_analyzer_results) {
   $("#summary_metadata_creation_date").html(file_analyzer_results.metadata.creation_date);
   $("#summary_metadata_last_modified_date").html(file_analyzer_results.metadata.last_modified_date);
   $("#summary_metadata_last_saved_location").html(file_analyzer_results.metadata.last_saved_location);
-
   $("#summary_metadata_sha256").html(file_analyzer_results.file_hashes.sha256);
-  $("#summary_metadata_md5").html(file_analyzer_results.file_hashes.md5);
 
   $("#script_code").val(file_analyzer_results.scripts.extracted_script);
   $("#extracted_iocs").val(file_analyzer_results.iocs.join("\n"));
