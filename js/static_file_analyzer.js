@@ -1782,7 +1782,7 @@ class Static_File_Analyzer {
     if (metadata_obj_found == false) {
       // Backup method to extract meta data, this need refining.
 
-      // RDF Meta data
+      // RDF Metadata
       file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "xmp:CreatorTool", 0);
       if (file_info.metadata.creation_application == "unknown") {
         file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "pdf:Producer", 0);
@@ -1854,6 +1854,11 @@ class Static_File_Analyzer {
     // Extract more meta data from what we have already collected.
     if (file_info.metadata.creation_application.indexOf("Macintosh") > 0 || file_info.metadata.author.indexOf("Macintosh") > 0 ) {
       file_info.metadata.creation_os = "macOS";
+    }
+
+    // Remove þÿ from creation application.
+    if (file_info.metadata.creation_application.startsWith("þÿ")) {
+      file_info.metadata.creation_application = file_info.metadata.creation_application.substr(2);
     }
 
     return file_info;
@@ -1929,7 +1934,7 @@ class Static_File_Analyzer {
       file_info.metadata.description = metadata.description;
       file_info.metadata.author = metadata.author;
       file_info.metadata.creation_date = metadata.creation_date;
-      file_info.metadata.creation_application = metadata.creation_application;      
+      file_info.metadata.creation_application = metadata.creation_application;
     }
 
     return file_info;
