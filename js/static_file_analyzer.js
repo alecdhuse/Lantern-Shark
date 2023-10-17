@@ -114,7 +114,9 @@ class Static_File_Analyzer {
     // Attempt to identify threat actor and or malware.
     file_info = await this.identify_threat(file_info);
 
-    //console.log(file_info);
+    // Generate file hashes
+    file_info.file_hashes.sha256 = await Hash_Tools.get_sha256(file_bytes);
+    file_info.file_hashes.md5 = await Hash_Tools.get_md5(file_bytes);
 
     return file_info;
   }
@@ -5376,6 +5378,10 @@ class Static_File_Analyzer {
       file_encryption_type: "unknown",
       file_password: "unknown",
       file_components: [],
+      file_hashes: {
+        md5: "",
+        sha256: ""
+      },
       metadata: {
         author: "unknown",
         creation_application: "unknown",
@@ -8589,7 +8595,11 @@ class Hash_Tools {
    * @return {String}     The SHAR256 Hash of the given bytes
    */
   static async get_sha256(file_bytes) {
-    const hash_buffer = await crypto.subtle.digest('SHA-256', file_bytes);           // hash the message
+    if (file_bytes instanceof Array) {
+      file_bytes = new Uint8Array(file_bytes);
+    }
+
+    const hash_buffer = await crypto.subtle.digest('SHA-256', file_bytes.buffer);   // hash the message
     const hash_array = Array.from(new Uint8Array(hash_buffer));                     // convert buffer to byte array
     const hash_hex = hash_array.map(b => b.toString(16).padStart(2, '0')).join(''); // convert bytes to hex string
     return hash_hex;
