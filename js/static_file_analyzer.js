@@ -5156,7 +5156,7 @@ class Static_File_Analyzer {
         metadata.creation_date = created_match[1];
       }
 
-      let creator_tool_match = /:creatortool\s*>([^<]+)/gmi.exec(rdf_text);
+      let creator_tool_match = /:creatortool\s*[=>\'\"]+([^<\"\']+)/gmi.exec(rdf_text);
       if (creator_tool_match !== null) {
         metadata.creation_application = creator_tool_match[1];
       }
