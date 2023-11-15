@@ -63,7 +63,7 @@ class Static_File_Analyzer {
                Static_File_Analyzer.array_equals(file_bytes.slice(32769,32775), [66,69,65,48,49,1])) {
       file_info = this.analyze_iso9660(file_bytes, file_text);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,3), [0xFF,0xD8,0xFF])) {
-      file_info = this.analyze_jpeg(file_bytes);
+      file_info = await this.analyze_jpeg(file_bytes, file_text);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [76,0,0,0])) {
       file_info = this.analyze_lnk(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,16), [0xE4,0x52,0x5C,0x7B,0x8C,0xD8,0xA7,0x4D,0xAE,0xB1,0x53,0x78,0xD0,0x29,0x96,0xD3])) {
@@ -728,7 +728,7 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  analyze_jpeg(file_bytes) {
+  async analyze_jpeg(file_bytes, file_text) {
     var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "jpeg";
@@ -750,6 +750,22 @@ class Static_File_Analyzer {
     }
 
     file_info.file_format_ver = "JFIF Version " + jfif_ver_str;
+
+    // Check for RDF Metadata
+    if (file_text == "") {
+      //let u16_file_bytes = new Uint8Array(file_bytes);
+      //let text_decoder = new TextDecoder('utf-8');
+      file_text = Static_File_Analyzer.get_ascii(file_bytes);
+    }
+
+    let metadata = this.extract_rdf_metadata(file_bytes, file_text);
+    if (metadata.found) {
+      file_info.metadata.title = metadata.title;
+      file_info.metadata.description = metadata.description;
+      file_info.metadata.author = metadata.author;
+      file_info.metadata.creation_date = metadata.creation_date;
+      file_info.metadata.creation_application = metadata.creation_application;
+    }
 
     return file_info;
   }
@@ -5149,11 +5165,21 @@ class Static_File_Analyzer {
       let author_match = /:author\s*>([^<]+)/gmi.exec(rdf_text);
       if (author_match !== null) {
         metadata.author = author_match[1];
+      } else {
+        author_match = /dc:creator\>(?:\<[^\>]+\>)*([^\<]+)/gmi.exec(rdf_text);
+        if (author_match !== null) {
+          metadata.author = author_match[1];
+        }
       }
 
       let created_match = /:created\s*>([^<]+)/gmi.exec(rdf_text);
       if (created_match !== null) {
         metadata.creation_date = created_match[1];
+      } else {
+        created_match = /xmp:CreateDate\>([^\<]+)/gmi.exec(rdf_text);
+        if (created_match !== null) {
+          metadata.creation_date = created_match[1];
+        }
       }
 
       let creator_tool_match = /:creatortool\s*[=>\'\"]+([^<\"\']+)/gmi.exec(rdf_text);
