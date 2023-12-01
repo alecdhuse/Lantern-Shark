@@ -1797,6 +1797,15 @@ class Static_File_Analyzer {
       script_matches = script_regex.exec(file_text);
     }
 
+    // Look for URIs
+    var uri_regex = /\/URI\s*\((\s*[\"\']{0,1}(?:http|https)\:\/\/[A-Za-z0-9\$\-\_\.\+\!\*\)\/\&\?\%]+[\"\']{0,1}\s*)\)/gmi;
+    var uri_matches = uri_regex.exec(file_text);
+
+    while (uri_matches != null) {
+      file_info.iocs.push(uri_matches[1]);
+      uri_matches = uri_regex.exec(file_text);
+    }
+
     if (metadata_obj_found == false) {
       // Backup method to extract meta data, this need refining.
 
