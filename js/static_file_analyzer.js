@@ -1819,6 +1819,11 @@ class Static_File_Analyzer {
       file_info.metadata.last_modified_date = this.get_xml_tag_content(file_text, "xmp:ModifyDate", 0);
       file_info.metadata.author = this.get_xml_tag_content(file_text, "dc:creator", 0);
       file_info.metadata.author = file_info.metadata.author.replace(/\<\/?\w+\:?\w+\>/gm, "").trim(); //Remove XML tags from author string
+      file_info.metadata.title = this.get_xml_tag_content(file_text, "dc:title", 0);
+
+      if (file_info.metadata.title.indexOf("rdf:li")) {
+        file_info.metadata.title = this.get_xml_tag_content(file_info.metadata.title, "rdf:li", 0);
+      }
 
       // Meta data tags
       var tag_matches = /\<\<\s*\/(?:[Cc]reator|[Cc]reationDate|[Pp]roducer|[Mm]od[Dd]ate)/gm.exec(file_text);
