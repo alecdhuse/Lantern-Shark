@@ -9693,7 +9693,7 @@ class PDF_Parser {
    * @param {array}   object_array - An array containing the embedded objects of the PDF file.
    * @return {array}  An array containing the embedded file components of the PDF file.
    */
-  static get_file_components(object_array) {
+  static async get_file_components(object_array) {
     let file_components = [];
 
     for (let i=0; i<object_array.length; i++) {
@@ -9718,7 +9718,7 @@ class PDF_Parser {
                 'directory': false,
                 'file_bytes': object_array[i].stream_bytes
               });
-            } else if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode") {
+            } else if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode" && object_array[i].stream_bytes.length > 0) {
               /*
               *  This logic branch is for other image types encoded in FlateDecode.
               *  FlateDecode is a Zlib encoded data stream.
@@ -9732,98 +9732,102 @@ class PDF_Parser {
               // We need to use the pako library to decode the ZLib stream.
               // Check to see if the pako library is available.
               if (pako !== null && pako !== undefined) {
-                let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
-                let stream_bytesU8 = new Uint8Array(object_array[i].stream_bytes);
-                let deflate_bytes = pako.inflate(stream_bytesU8);
+                try {
+                  let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
+                  let stream_bytesU8 = new Uint8Array(object_array[i].stream_bytes);
+                  let deflate_bytes = await pako.inflate(stream_bytesU8);
 
-                // Set default values for image file.
-                let k = 0;
-                let is_black = false;
-                let columns = 1728;
-                let rows = 0;
-                let img_height = 0;
-                let img_width = 0;
-                let img_byte_len = 0;
-                let bits_per_sample = 8;
+                  // Set default values for image file.
+                  let k = 0;
+                  let is_black = false;
+                  let columns = 1728;
+                  let rows = 0;
+                  let img_height = 0;
+                  let img_width = 0;
+                  let img_byte_len = 0;
+                  let bits_per_sample = 8;
 
-                /*
-                *
-                * A predictor value from 10 to 15 indicates that a PNG predictor is in use.
-                *
-                *  1 - No prediction (the default value)
-                *  2 - TIFF Predictor 2
-                * 10 - PNG prediction (on encoding, PNG None on all rows)
-                * 11 - PNG prediction (on encoding, PNG Sub on all rows)
-                * 12 - PNG prediction (on encoding, PNG Up on all rows)
-                * 13 - PNG prediction (on encoding, PNG Average on all rows)
-                * 14 - PNG prediction (on encoding, PNG Paeth on all rows)
-                * 15 - PNG prediction (on encoding, PNG optimum)
-                */
-                let predictor = 1;
+                  /*
+                  *
+                  * A predictor value from 10 to 15 indicates that a PNG predictor is in use.
+                  *
+                  *  1 - No prediction (the default value)
+                  *  2 - TIFF Predictor 2
+                  * 10 - PNG prediction (on encoding, PNG None on all rows)
+                  * 11 - PNG prediction (on encoding, PNG Sub on all rows)
+                  * 12 - PNG prediction (on encoding, PNG Up on all rows)
+                  * 13 - PNG prediction (on encoding, PNG Average on all rows)
+                  * 14 - PNG prediction (on encoding, PNG Paeth on all rows)
+                  * 15 - PNG prediction (on encoding, PNG optimum)
+                  */
+                  let predictor = 1;
 
-                // Get the actual values for tiff file.
-                if (object_array[i].object_dictionary.hasOwnProperty("DecodeParms")) {
-                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("K")) {
-                    k = parseInt(object_array[i].object_dictionary['DecodeParms']['K']);
+                  // Get the actual values for tiff file.
+                  if (object_array[i].object_dictionary.hasOwnProperty("DecodeParms")) {
+                    if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("K")) {
+                      k = parseInt(object_array[i].object_dictionary['DecodeParms']['K']);
+                    }
+
+                    if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Columns")) {
+                      columns = parseInt(object_array[i].object_dictionary['DecodeParms']['Columns']);
+                    }
+
+                    if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Rows")) {
+                      rows = parseInt(object_array[i].object_dictionary['DecodeParms']['Rows']);
+                    } else {
+                      rows = columns;
+                    }
+
+                    if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Predictor")) {
+                      predictor = parseInt(object_array[i].object_dictionary['DecodeParms']['Predictor']);
+                    }
                   }
 
-                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Columns")) {
-                    columns = parseInt(object_array[i].object_dictionary['DecodeParms']['Columns']);
+                  if (object_array[i].object_dictionary.hasOwnProperty("Length")) {
+                    img_byte_len = parseInt(object_array[i].object_dictionary['Length']);
                   }
 
-                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Rows")) {
-                    rows = parseInt(object_array[i].object_dictionary['DecodeParms']['Rows']);
-                  } else {
-                    rows = columns;
+                  if (object_array[i].object_dictionary.hasOwnProperty("Height")) {
+                    img_height = parseInt(object_array[i].object_dictionary['Height']);
+                  } else if (columns > 0) {
+                    img_height = columns;
                   }
 
-                  if (object_array[i].object_dictionary['DecodeParms'].hasOwnProperty("Predictor")) {
-                    predictor = parseInt(object_array[i].object_dictionary['DecodeParms']['Predictor']);
+                  if (object_array[i].object_dictionary.hasOwnProperty("Width")) {
+                    img_width = parseInt(object_array[i].object_dictionary['Width']);
+                  } else if (rows > 0) {
+                    img_width = rows;
                   }
+
+                  if (object_array[i].object_dictionary.hasOwnProperty("BitsPerComponent")) {
+                    bits_per_sample = parseInt(object_array[i].object_dictionary['BitsPerComponent']);
+                  }
+
+                  // Write the CCITT image data at the end of the array
+                  //tiff_file_bytes = tiff_file_bytes.concat(Array.from(deflate_bytes));
+
+                  let image_file_bytes = [];
+
+                  /*
+                  file_components.push({
+                    'name': "Image_" + object_array[i].object_number + ".tif",
+                    'type': "txt",
+                    'directory': false,
+                    'file_bytes': image_file_bytes
+                  });
+                  */
+
+                  // Image decode is not worring at the moment, just return the file as a zlib file.
+
+                  file_components.push({
+                    'name': "Image_" + object_array[i].object_number + ".zlib",
+                    'type': "zlib",
+                    'directory': false,
+                    'file_bytes': object_array[i].stream_bytes
+                  });
+                } catch (err) {
+                  console.log("Can't deflate PDF stream.");
                 }
-
-                if (object_array[i].object_dictionary.hasOwnProperty("Length")) {
-                  img_byte_len = parseInt(object_array[i].object_dictionary['Length']);
-                }
-
-                if (object_array[i].object_dictionary.hasOwnProperty("Height")) {
-                  img_height = parseInt(object_array[i].object_dictionary['Height']);
-                } else if (columns > 0) {
-                  img_height = columns;
-                }
-
-                if (object_array[i].object_dictionary.hasOwnProperty("Width")) {
-                  img_width = parseInt(object_array[i].object_dictionary['Width']);
-                } else if (rows > 0) {
-                  img_width = rows;
-                }
-
-                if (object_array[i].object_dictionary.hasOwnProperty("BitsPerComponent")) {
-                  bits_per_sample = parseInt(object_array[i].object_dictionary['BitsPerComponent']);
-                }
-
-                // Write the CCITT image data at the end of the array
-                //tiff_file_bytes = tiff_file_bytes.concat(Array.from(deflate_bytes));
-
-                let image_file_bytes = [];
-
-                /*
-                file_components.push({
-                  'name': "Image_" + object_array[i].object_number + ".tif",
-                  'type': "txt",
-                  'directory': false,
-                  'file_bytes': image_file_bytes
-                });
-                */
-
-                // Image decode is not worring at the moment, just return the file as a zlib file.
-
-                file_components.push({
-                  'name': "Image_" + object_array[i].object_number + ".zlib",
-                  'type': "zlib",
-                  'directory': false,
-                  'file_bytes': object_array[i].stream_bytes
-                });
 
               } else {
                 // The Pako library is require to deflate this stream.
@@ -9836,6 +9840,31 @@ class PDF_Parser {
                   'file_bytes': object_array[i].stream_bytes
                 });
 
+              }
+
+            }
+          }
+        }
+      } else if (object_array[i].object_dictionary.hasOwnProperty("Type")) {
+        if (object_array[i].object_dictionary['Type'].toLowerCase() == "objstm") {
+          // Stream object, it might contain a URI / URL
+          // REF: https://blog.didierstevens.com/2019/03/07/analyzing-a-phishing-pdf-with-objstm/
+          if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode") {
+            // We need to use the pako library to decode the ZLib stream.
+            // Check to see if the pako library is available.
+            if (pako !== null && pako !== undefined) {
+              let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
+              let stream_bytesU8 = new Uint8Array(object_array[i].stream_bytes);
+
+              try {
+                let deflate_bytes = await pako.inflate(stream_bytesU8);
+
+                let decoder = new TextDecoder("utf-8");
+                let deflate_str = decoder.decode(deflate_bytes);
+
+                let debug12= 12;
+              } catch (err) {
+                console.log("Error decoding stream.");
               }
 
             }
@@ -9867,17 +9896,21 @@ class PDF_Parser {
       let object_dictionary = {};
       let object_start_index = match.index + match[0].length;
       let object_end_index = file_text.indexOf("endobj", match.index) - 1;
-      let object_text = file_text.substring(object_start_index, object_end_index);
+      let object_text = file_text.substring(object_start_index, object_end_index) + "\n";
       let object_bytes = file_bytes.slice(object_start_index, object_end_index);
 
       // Extract object's dictionary
       try {
-        let object_dict_regex = /(?:<<|\[)([^\n\r]+)(?:>>|\])[\r\n]/gm;
-        let object_dict_match = object_dict_regex.exec(object_text+"\n");
+        let cur_obj_index = 0;
+        let end_obj_index = 0;
+        let dictionary_text = "";
+        cur_obj_index = object_text.indexOf("<<", cur_obj_index) + 2;
 
-        // Check to see if a dictionaly actualy exists.
-        if (object_dict_match !== null && object_dict_match !== undefined) {
-          let dictionary_text = object_dict_match[1].trim();
+        while (cur_obj_index >= 0 && cur_obj_index < object_text.length) {
+          end_obj_index = object_text.indexOf(">>", cur_obj_index);
+          dictionary_text = object_text.substr(cur_obj_index, end_obj_index-2);
+          cur_obj_index = end_obj_index + 2;
+
           let dictionary_pair_regex = /\/([^\s<]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
           let match2;
 
@@ -9926,6 +9959,8 @@ class PDF_Parser {
               }
             }
           }
+
+          cur_pdf_index = file_text.indexOf("<<", cur_pdf_index) + 2;
         }
       } catch(err) {
         console.log("Error extracting PDF object dictionary: " + object_number);
