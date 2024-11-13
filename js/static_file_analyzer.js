@@ -9690,6 +9690,7 @@ class PDF_Parser {
   /**
    * Retrieves embedded files and components within the PDF.
    *
+   * @param {Object}  file_info - The file_info object used file file parsing results.
    * @param {array}   object_array - An array containing the embedded objects of the PDF file.
    * @return {array}  An array containing the embedded file components of the PDF file.
    */
@@ -9845,31 +9846,6 @@ class PDF_Parser {
             }
           }
         }
-      } else if (object_array[i].object_dictionary.hasOwnProperty("Type")) {
-        if (object_array[i].object_dictionary['Type'].toLowerCase() == "objstm") {
-          // Stream object, it might contain a URI / URL
-          // REF: https://blog.didierstevens.com/2019/03/07/analyzing-a-phishing-pdf-with-objstm/
-          if (object_array[i].object_dictionary['Filter'].toLowerCase() == "flatedecode") {
-            // We need to use the pako library to decode the ZLib stream.
-            // Check to see if the pako library is available.
-            if (pako !== null && pako !== undefined) {
-              let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
-              let stream_bytesU8 = new Uint8Array(object_array[i].stream_bytes);
-
-              try {
-                let deflate_bytes = await pako.inflate(stream_bytesU8);
-
-                let decoder = new TextDecoder("utf-8");
-                let deflate_str = decoder.decode(deflate_bytes);
-
-                let debug12= 12;
-              } catch (err) {
-                console.log("Error decoding stream.");
-              }
-
-            }
-          }
-        }
       }
 
     }
@@ -9885,7 +9861,7 @@ class PDF_Parser {
    * @param {array}   file_bytes - An array of the bytes of the PDF file.
    * @return {array}  An array containing the embedded objects of the PDF file.
    */
-  static get_objects(file_info, file_bytes, file_text) {
+  static async get_objects(file_info, file_bytes, file_text) {
     let embedded_objs = [];
     let match;
     let obj_start_regex = /(\d+)\s+(\d+)\s+obj[\r\n]/gmi;
@@ -9969,11 +9945,43 @@ class PDF_Parser {
       // Extract stream text, if it exists.
       let stream_start_index = object_text.indexOf("stream");
       let stream_end_index = (stream_start_index > 0) ? object_text.indexOf("endstream") : -1;
-      let stream_text = (stream_end_index > 0) ? object_text.substring(stream_start_index+7, stream_end_index) : "";
+      let stream_text = (stream_end_index > 0) ? object_text.substring(stream_start_index+7, stream_end_index).trim() : "";
       let stream_bytes = [];
 
       if (stream_text.length > 0) {
-        stream_bytes = object_bytes.slice(stream_start_index+7, stream_end_index)
+        stream_bytes = object_bytes.slice(stream_start_index+8, stream_end_index-2)
+      }
+
+      // Check for compressed stream objects, often used to hide links.
+      if (object_dictionary.hasOwnProperty("Type")) {
+        if (object_dictionary['Type'].toLowerCase() == "objstm") {
+          // Stream object, it might contain a URI / URL
+          // REF: https://blog.didierstevens.com/2019/03/07/analyzing-a-phishing-pdf-with-objstm/
+          if (object_dictionary['Filter'].toLowerCase() == "flatedecode") {
+            if (object_dictionary['Filter'].toLowerCase() == "flatedecode") {
+              // We need to use the pako library to decode the ZLib stream.
+              // Check to see if the pako library is available.
+              if (pako !== null && pako !== undefined) {
+                let stream_type = Static_File_Analyzer.is_valid_file(stream_bytes);
+                let stream_bytesU8 = new Uint8Array(stream_bytes);
+
+                try {
+                  let deflate_bytes = await pako.inflate(stream_bytesU8);
+
+                  let decoder = new TextDecoder("utf-8");
+                  stream_text = decoder.decode(deflate_bytes);
+
+                  // Check for embedded URIs
+                  if (/\/URI/gmi.test(stream_text)) {
+                    file_info = Static_File_Analyzer.search_for_iocs(stream_text, file_info);
+                  }
+                } catch (err) {
+                  console.log("Error decoding stream object.");
+                }
+              }
+            }
+          }
+        }
       }
 
       embedded_objs.push({
