@@ -74,12 +74,14 @@ class Static_File_Analyzer {
       file_info = this.analyze_rtf(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [37,80,68,70])) {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
-      file_info = this.analyze_pdf(file_bytes, file_text);
+      file_info = await this.analyze_pdf(file_bytes, file_text);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_png(file_bytes, file_text);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x78,0x9f,0x3e,0x22])) {
       file_info = this.analyze_tnef(file_bytes);
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0,1,0,0,0])) {
+      file_info = this.analyze_ttf(file_bytes); // TTF True Type Font
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
@@ -160,6 +162,8 @@ class Static_File_Analyzer {
       return_val = {'is_valid': true, 'type': file_type};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x78,0x9f,0x3e,0x22])) {
       return_val = {'is_valid': true, 'type': "tnef"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0,1,0,0,0])) {
+      return_val = {'is_valid': true, 'type': "ttf"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
       return_val = {'is_valid': true, 'type': "xml"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
@@ -1670,7 +1674,7 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  analyze_pdf(file_bytes, file_text) {
+  async analyze_pdf(file_bytes, file_text) {
     var file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "pdf";
@@ -1685,10 +1689,13 @@ class Static_File_Analyzer {
     }
 
     // Get an array of the embedded objects
-    let embedded_objs = PDF_Parser.get_objects(file_info, file_bytes, file_text);
+    let embedded_objs = await PDF_Parser.get_objects(file_info, file_bytes, file_text);
 
     // Get any embedded files and components
-    file_info.file_components = PDF_Parser.get_file_components(embedded_objs);
+    file_info.file_components = await PDF_Parser.get_file_components(embedded_objs);
+
+    // Push streams to file_components
+    file_info.file_components.concat(file_info.file_components);
 
     // Identify Objects and Streams
     var metadata_objs = ["/author", "/creationdate", "/creator", "/moddate", "/producer", "/title"];
@@ -1769,8 +1776,6 @@ class Static_File_Analyzer {
         }
       }
 
-      // TODO push streams to file_components
-      //file_info.file_components.push({});
       objects_matches = objects_regex.exec(file_text);
     }
 
@@ -2171,6 +2176,25 @@ class Static_File_Analyzer {
     }
 
     console.log(parse_result);
+
+    return file_info;
+  }
+
+  /**
+   * Extracts meta data and other information from TNEF formatted files.
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_ttf(file_bytes) {
+    var file_info = Static_File_Analyzer.get_default_file_json();
+
+    file_info.file_format = "ttf";
+    file_info.file_generic_type = "Font";
+
+    // This format does not support encryption
+    file_info.file_encrypted = "false";
+    file_info.file_encryption_type = "none";
 
     return file_info;
   }
@@ -9846,6 +9870,39 @@ class PDF_Parser {
             }
           }
         }
+      } else if (object_array[i].object_dictionary.hasOwnProperty("Filter/FlateDecode/Length")) {
+        if (pako !== null && pako !== undefined) {
+          try {
+            let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
+            let stream_bytesU8 = new Uint8Array(object_array[i].stream_bytes);
+            let deflate_bytes = await pako.inflate(stream_bytesU8);
+            let file_type = Static_File_Analyzer.is_valid_file(deflate_bytes);
+
+            if (file_type.is_valid) {
+              let fc_filename =  "Object_" + object_array[i].object_number + "." + file_type.type;
+
+              file_components.push({
+                'name': fc_filename,
+                'type': file_type.type,
+                'directory': false,
+                'file_bytes': deflate_bytes
+              });
+            }
+          } catch (err) {
+            console.log("Can't deflate PDF stream.");
+          }
+        } else {
+          // The Pako library is require to deflate this stream.
+          console.log("Pako library not found, component file will be added as a Zlib file.");
+        }
+      } else if (object_array[i].stream_text.substring(0,3) == "ÿØÿ") {
+        file_components.push({
+          'name': "Image_" + object_array[i].object_number + ".jpeg",
+          'type': "Image",
+          'directory': false,
+          'file_bytes': object_array[i].stream_bytes,
+          'file_text': object_array[i].stream_text
+        });
       }
 
     }
