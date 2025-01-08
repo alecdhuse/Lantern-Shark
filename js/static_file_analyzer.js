@@ -9842,14 +9842,15 @@ class PDF_Parser {
                   });
                   */
 
-                  // Image decode is not worring at the moment, just return the file as a zlib file.
-
+                  // Image decode is not working at the moment, just return the file as a zlib file.
+                  /*
                   file_components.push({
                     'name': "Image_" + object_array[i].object_number + ".zlib",
                     'type': "zlib",
                     'directory': false,
                     'file_bytes': object_array[i].stream_bytes
                   });
+                  */
                 } catch (err) {
                   console.log("Can't deflate PDF stream.");
                 }
@@ -9884,6 +9885,15 @@ class PDF_Parser {
               file_components.push({
                 'name': fc_filename,
                 'type': file_type.type,
+                'directory': false,
+                'file_bytes': deflate_bytes
+              });
+            } else {
+              let fc_filename =  "Object_" + object_array[i].object_number + ".txt";
+
+              file_components.push({
+                'name': fc_filename,
+                'type': "txt",
                 'directory': false,
                 'file_bytes': deflate_bytes
               });
@@ -9942,71 +9952,94 @@ class PDF_Parser {
         while (cur_obj_index >= 0 && cur_obj_index < object_text.length) {
           end_obj_index = object_text.indexOf(">>", cur_obj_index);
           dictionary_text = object_text.substr(cur_obj_index, end_obj_index-2);
-          cur_obj_index = end_obj_index + 2;
+
+          if (end_obj_index > 0) {
+            cur_obj_index = end_obj_index + 2;
+          } else {
+            break;
+          }
 
           let dictionary_pair_regex = /\/([^\s<]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
           let match2;
 
           while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
-            if (match2[1].toLowerCase() == "filter" ||
-                match2[1].toLowerCase() == "name" ||
-                match2[1].toLowerCase() == "subtype" ||
-                match2[1].toLowerCase() == "type") {
+            try {
+              if (match2[1].toLowerCase() == "filter" ||
+                  match2[1].toLowerCase() == "name" ||
+                  match2[1].toLowerCase() == "subtype" ||
+                  match2[1].toLowerCase() == "type") {
 
-              // Use next key as value
-              let dict_key = match2[1];
-              match2 = dictionary_pair_regex.exec(dictionary_text);
-              object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
-            } else {
-              if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
-                // Sub dictionary
-                let sub_dict_start = match2.index + match2[1].length + 1;
-                let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
-                let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
-
-                let sub_dictionary = {};
-                let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
-                let match3;
-
-                while (match3 = sub_dictionary_regex.exec(match2[2])) {
-                  if (match3[2] !== null && match3[2] !== undefined) {
-                    if (match3[2].trim().endsWith(">>")) {
-                      sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
-                    } else {
-                      sub_dictionary[match3[1]] = match3[2].trim();
-                    }
-                  } else {
-                    sub_dictionary[match3[1]] = "";
-                  }
-
-                  // Check for embedded URIs
-                  if (/\/URI/gmi.test(match3[1])) {
-                    file_info = Static_File_Analyzer.search_for_iocs(match3[1], file_info);
-                  }
-                }
-
-                object_dictionary[match2[1]] = sub_dictionary;
+                // Use next key as value
+                let dict_key = match2[1];
+                match2 = dictionary_pair_regex.exec(dictionary_text);
+                object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
               } else {
-                // Single value
-                object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? match2[2].trim() : "";
+                if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
+                  // Sub dictionary
+                  let sub_dict_start = match2.index + match2[1].length + 1;
+                  let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
+                  let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
+
+                  let sub_dictionary = {};
+                  let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
+                  let match3;
+
+                  while (match3 = sub_dictionary_regex.exec(match2[2])) {
+                    if (match3[2] !== null && match3[2] !== undefined) {
+                      if (match3[2].trim().endsWith(">>")) {
+                        sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
+                      } else {
+                        sub_dictionary[match3[1]] = match3[2].trim();
+                      }
+                    } else {
+                      sub_dictionary[match3[1]] = "";
+                    }
+
+                    // Check for embedded URIs
+                    if (/\/URI/gmi.test(match3[1])) {
+                      file_info = Static_File_Analyzer.search_for_iocs(match3[1], file_info);
+                    }
+                  }
+
+                  object_dictionary[match2[1]] = sub_dictionary;
+                } else {
+                  // Single value
+                  object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? match2[2].trim() : "";
+                }
               }
+            } catch(err) {
+              console.log("Error extracting PDF object dictionary (1): " + object_number + "Error: " + err);
+              break;
             }
           }
 
-          cur_pdf_index = file_text.indexOf("<<", cur_pdf_index) + 2;
+          if (cur_obj_index > 0) {
+            cur_obj_index = file_text.indexOf("<<", cur_obj_index) + 2;
+          } else {
+            break;
+          }
+
         }
       } catch(err) {
-        console.log("Error extracting PDF object dictionary: " + object_number);
+        console.log("Error extracting PDF object dictionary (2): " + object_number + "Error: " + err);
       }
 
       // Extract stream text, if it exists.
       let stream_start_index = object_text.indexOf("stream");
       let stream_end_index = (stream_start_index > 0) ? object_text.indexOf("endstream") : -1;
-      let stream_text = (stream_end_index > 0) ? object_text.substring(stream_start_index+7, stream_end_index).trim() : "";
+      let stream_text = (stream_end_index > 0) ? object_text.substring(stream_start_index+6, stream_end_index).trim() : "";
       let stream_bytes = [];
 
       if (stream_text.length > 0) {
-        stream_bytes = object_bytes.slice(stream_start_index+8, stream_end_index-2)
+        let end_index_adj = 0;
+        let start_index_adj = 6;
+
+        if (object_bytes[stream_start_index+6] == 13 || object_bytes[stream_start_index+6] == 10) start_index_adj = 7;
+        if (object_bytes[stream_start_index+7] == 13 || object_bytes[stream_start_index+7] == 10) start_index_adj = 8;
+        if (object_bytes[stream_end_index-1] == 13 || object_bytes[stream_end_index-1] == 10) end_index_adj = -1;
+        if (object_bytes[stream_end_index-2] == 13 || object_bytes[stream_end_index-2] == 10) end_index_adj = -2;
+
+        stream_bytes = object_bytes.slice(stream_start_index+start_index_adj, stream_end_index+end_index_adj)
       }
 
       // Check for compressed stream objects, often used to hide links.
@@ -10019,21 +10052,25 @@ class PDF_Parser {
               // We need to use the pako library to decode the ZLib stream.
               // Check to see if the pako library is available.
               if (pako !== null && pako !== undefined) {
-                let stream_type = Static_File_Analyzer.is_valid_file(stream_bytes);
-                let stream_bytesU8 = new Uint8Array(stream_bytes);
-
                 try {
-                  let deflate_bytes = await pako.inflate(stream_bytesU8);
+                  if (object_dictionary.hasOwnProperty("Length")) {
+                    let byte_len = parseInt(object_dictionary['Length']);
+                    let stream_bytesU8 = [];
+                    stream_bytesU8 = new Uint8Array(stream_bytes);
 
-                  let decoder = new TextDecoder("utf-8");
-                  stream_text = decoder.decode(deflate_bytes);
+                    let deflate_bytes = await pako.inflate(stream_bytesU8);
+                    let stream_type = Static_File_Analyzer.is_valid_file(deflate_bytes);
 
-                  // Check for embedded URIs
-                  if (/\/URI/gmi.test(stream_text)) {
-                    file_info = Static_File_Analyzer.search_for_iocs(stream_text, file_info);
+                    let decoder = new TextDecoder("utf-8");
+                    stream_text = decoder.decode(deflate_bytes);
+                    console.log(stream_text); // DEBUG
+                    // Check for embedded URIs
+                    if (/\/URI/gmi.test(stream_text)) {
+                      file_info = Static_File_Analyzer.search_for_iocs(stream_text, file_info);
+                    }
                   }
                 } catch (err) {
-                  console.log("Error decoding stream object.");
+                  console.log("Error decoding stream object: " + err);
                 }
               }
             }
