@@ -1802,6 +1802,36 @@ class Static_File_Analyzer {
       script_matches = script_regex.exec(file_text);
     }
 
+    // Look for various items in objects
+    for (let eoi=0; eoi<embedded_objs.length; eoi++) {
+      if (embedded_objs[eoi].object_dictionary.hasOwnProperty("OpenAction")) {
+        let open_action_val = embedded_objs[eoi].object_dictionary['OpenAction'];
+
+        if (/^\d+\s+\d+\s+\w+/.test(open_action_val)) {
+          let object_id = open_action_val.split(" ")[0] - 1;
+          let action_obj = embedded_objs[object_id];
+
+          if (action_obj.object_dictionary['Type'].toLowerCase() == "action") {
+            if (action_obj.object_dictionary.hasOwnProperty("F")) {
+              let finding_txt = "SUSPICIOUS - File launch on open: " + action_obj.object_dictionary['F'];
+              finding_txt = (finding_txt.endsWith(")")) ? finding_txt.slice(0,-1) : finding_txt;
+              file_info.analytic_findings.push(finding_txt);
+
+              if (action_obj.object_dictionary['F'].startsWith("/")) {
+                finding_txt = "SUSPICIOUS - Possible Local NTLM Information Leakage. More info: https://github.com/alecdhuse/Lantern-Shark/wiki/PDF-Exploit-Documentation#local-ntlm-information-leakage";
+                file_info.analytic_findings.push(finding_txt);
+              }
+            }
+          }
+
+        } else {
+
+        }
+      }
+
+    }
+
+
     // Look for URIs
     var uri_regex = /\/URI\s*\((\s*[\"\']{0,1}(?:http|https)\:\/\/[A-Za-z0-9\$\-\_\.\+\!\*\)\/\&\?\%]+[\"\']{0,1}\s*)\)/gmi;
     var uri_matches = uri_regex.exec(file_text);
@@ -7870,10 +7900,6 @@ class Static_File_Analyzer {
               }
             }
 
-            if (sheet_name == "") {
-              var debug123=123;
-            }
-
             var cell_row = 0;
             var cell_col = -1;
             var cell_name = "";
@@ -9964,8 +9990,10 @@ class PDF_Parser {
 
           while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
             try {
-              if (match2[1].toLowerCase() == "filter" ||
+              if (match2[1].toLowerCase() == "f" ||
+                  match2[1].toLowerCase() == "filter" ||
                   match2[1].toLowerCase() == "name" ||
+                  match2[1].toLowerCase() == "s" ||
                   match2[1].toLowerCase() == "subtype" ||
                   match2[1].toLowerCase() == "type") {
 
@@ -9973,6 +10001,11 @@ class PDF_Parser {
                 let dict_key = match2[1];
                 match2 = dictionary_pair_regex.exec(dictionary_text);
                 object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
+                if (object_dictionary[dict_key].endsWith(")")) {
+                  let val_index = dictionary_text.indexOf(object_dictionary[dict_key]);
+                  let check = dictionary_text.substring(val_index-1, val_index);
+                  object_dictionary[dict_key] = (check == "/") ? "/" + object_dictionary[dict_key] : object_dictionary[dict_key];
+                }
               } else {
                 if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
                   // Sub dictionary
@@ -10004,7 +10037,11 @@ class PDF_Parser {
                   object_dictionary[match2[1]] = sub_dictionary;
                 } else {
                   // Single value
-                  object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? match2[2].trim() : "";
+                  let dictionary_val = match2[2].trim();
+                  dictionary_val = (dictionary_val.endsWith(">>")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
+                  dictionary_val = (dictionary_val.endsWith("\n")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
+
+                  object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? dictionary_val : "";
                 }
               }
             } catch(err) {
