@@ -2136,11 +2136,15 @@ class Static_File_Analyzer {
     }
 
     // Look for objects
+    let open_bracket_count = 0;
     let char_index = 0;
     let emb_objects = [];
+    open_bracket_count += 1;
 
     while (char_index >= 0 && char_index < file_text_ascii.length) {
       let obj_index = file_text_ascii.toLowerCase().indexOf("\object", char_index);
+
+      if (obj_index < 0) break;
 
       // find object control words
       let control_words = [];
@@ -2155,9 +2159,11 @@ class Static_File_Analyzer {
         if (open_bracket < close_bracket) {
           object_control_txt = file_text_ascii.substring((obj_index+7), open_bracket);
           char_index = open_bracket+1
+          open_bracket_count += 1
         } else {
           object_control_txt = file_text_ascii.substring((obj_index+7), close_bracket);
           char_index = close_bracket+1
+          open_bracket_count -= 1
         }
 
         let control_word_regex = /\\([\d\w]+)/gmi;
@@ -2165,8 +2171,8 @@ class Static_File_Analyzer {
         while (control_word_match !== null) {
           control_words.push(control_word_match[1]);
 
-          if (control_word_match[1] == "objh1") found_1x_height = true;
-          if (control_word_match[1] == "objw1") found_1x_width = true;
+          if (control_word_match[1].toLowerCase() == "objh1") found_1x_height = true;
+          if (control_word_match[1].toLowerCase() == "objw1") found_1x_width = true;
 
           control_word_match = control_word_regex.exec(object_control_txt);
         }
@@ -2174,6 +2180,40 @@ class Static_File_Analyzer {
         break;
       }
 
+      while (open_bracket_count > 0) {
+        let open_bracket = file_text_ascii.indexOf("{", char_index);
+        let close_bracket = file_text_ascii.indexOf("}", char_index);
+
+        if (open_bracket < 0 || close_bracket < open_bracket) {
+          open_bracket_count -= 1
+          char_index = close_bracket+1
+        } else {
+          open_bracket_count += 1
+
+          let control_word_regex = /\\([\d\w]+)/gmi;
+          let control_word_match = control_word_regex.exec(file_text_ascii.substring(char_index));
+
+          while (control_word_match !== null) {
+            if (control_word_match[1].toLowerCase() == "objdata") {
+              close_bracket = file_text_ascii.indexOf("}", char_index+control_word_match.index);
+              open_bracket_count -= 1
+              let obj_data = file_text_ascii.substring((char_index+control_word_match.index+8), close_bracket)
+              obj_data = obj_data.replace(/\s/g,'');
+
+              // Look for encoded StaticDib control word
+              if (obj_data.indexOf("537461746963446962") >= 0) {
+                file_info.analytic_findings.push("MALICIOUS - CVE-2025-21298 Exploit Found");
+              }
+            }
+
+            char_index = close_bracket+1
+            control_word_match = control_word_regex.exec(file_text_ascii.substring(char_index));
+          }
+
+        }
+      }
+
+      // Analytics
       if (found_1x_height && found_1x_width) {
         // Found a 1x1 sised object, may be an attempt to hide something malicious.
         file_info.analytic_findings.push("SUSPICIOUS - Found 1x1 Sized OLE Object");
