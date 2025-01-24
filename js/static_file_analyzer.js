@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2023 Alec Dhuse. All rights reserved.
+ Copyright (c) 2025 Alec Dhuse. All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -2133,6 +2133,51 @@ class Static_File_Analyzer {
     var doc_creation_app_match = /\\xml[0-9a-z]*\s*https?\:\/\/schemas\.microsoft\.com\/office\/word\//gmi.exec(file_text_ascii);
     if (doc_creation_app_match !== null) {
       file_info.metadata.creation_application = "Microsoft Word";
+    }
+
+    // Look for objects
+    let char_index = 0;
+    let emb_objects = [];
+
+    while (char_index >= 0 && char_index < file_text_ascii.length) {
+      let obj_index = file_text_ascii.toLowerCase().indexOf("\object", char_index);
+
+      // find object control words
+      let control_words = [];
+      let found_1x_width = false;
+      let found_1x_height = false;
+
+      if (obj_index > 0) {
+        let open_bracket = file_text_ascii.indexOf("{", (obj_index+7));
+        let close_bracket = file_text_ascii.indexOf("}", (obj_index+7));
+        let object_control_txt = "";
+
+        if (open_bracket < close_bracket) {
+          object_control_txt = file_text_ascii.substring((obj_index+7), open_bracket);
+          char_index = open_bracket+1
+        } else {
+          object_control_txt = file_text_ascii.substring((obj_index+7), close_bracket);
+          char_index = close_bracket+1
+        }
+
+        let control_word_regex = /\\([\d\w]+)/gmi;
+        let control_word_match = control_word_regex.exec(object_control_txt);
+        while (control_word_match !== null) {
+          control_words.push(control_word_match[1]);
+
+          if (control_word_match[1] == "objh1") found_1x_height = true;
+          if (control_word_match[1] == "objw1") found_1x_width = true;
+
+          control_word_match = control_word_regex.exec(object_control_txt);
+        }
+      } else {
+        break;
+      }
+
+      if (found_1x_height && found_1x_width) {
+        // Found a 1x1 sised object, may be an attempt to hide something malicious.
+        file_info.analytic_findings.push("SUSPICIOUS - Found 1x1 Sized OLE Object");
+      }
     }
 
     // Look for Hex data
