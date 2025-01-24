@@ -45,6 +45,7 @@ Lantern Shark should be able to detect the following CVEs:
   - CVE-2018-4993
 - RTF
   - CVE-2017-11882 (Limited Detection)
+  - CVE-2025-21298
 - XLSB, XLSM, XLSX
   - CVE-2017-11882 (Limited Detection)
 
