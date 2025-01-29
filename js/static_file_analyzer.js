@@ -78,6 +78,8 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_png(file_bytes, file_text);
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x49,0x49,0x2A,0x00])) {
+      file_info = this.analyze_tiff(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x78,0x9f,0x3e,0x22])) {
       file_info = this.analyze_tnef(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0,1,0,0,0])) {
@@ -301,14 +303,14 @@ class Static_File_Analyzer {
     document_obj.byte_order = document_obj.compound_file_binary.byte_order; // Byte order LITTLE_ENDIAN or BIG_ENDIAN
     file_info.file_format_ver = document_obj.compound_file_binary.format_version_major;
 
-    var number_of_directory_sectors = this.get_four_byte_int(file_bytes.slice(40,44), document_obj.byte_order);
-    var number_of_sectors = this.get_four_byte_int(file_bytes.slice(44,48), document_obj.byte_order);
-    var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), document_obj.byte_order);
-    var min_stream_size = this.get_four_byte_int(file_bytes.slice(56,60), document_obj.byte_order);
-    var short_sec_id_1 = this.get_four_byte_int(file_bytes.slice(60,64), document_obj.byte_order);
-    var number_of_short_sectors = this.get_four_byte_int(file_bytes.slice(64,68), document_obj.byte_order);
-    var master_sector_id_1 = this.get_four_byte_int(file_bytes.slice(68,72), document_obj.byte_order);
-    var number_of_master_sectors = this.get_four_byte_int(file_bytes.slice(72,76), document_obj.byte_order);
+    var number_of_directory_sectors = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(40,44), document_obj.byte_order);
+    var number_of_sectors = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(44,48), document_obj.byte_order);
+    var sec_id_1 = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(48,52), document_obj.byte_order);
+    var min_stream_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(56,60), document_obj.byte_order);
+    var short_sec_id_1 = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(60,64), document_obj.byte_order);
+    var number_of_short_sectors = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(64,68), document_obj.byte_order);
+    var master_sector_id_1 = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(68,72), document_obj.byte_order);
+    var number_of_master_sectors = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(72,76), document_obj.byte_order);
 
     var sec_1_pos = 512 + (sec_id_1 * document_obj.compound_file_binary.sector_size); // Should be Root Entry
     var workbook_pos = sec_1_pos + 128;
@@ -561,7 +563,7 @@ class Static_File_Analyzer {
     var id_byte_vals = [1,3,5,7,15,129,201];
 
     // Header offset starts at 3C / 60
-    var header_offset = this.get_two_byte_int(file_bytes.slice(60,62), Static_File_Analyzer.LITTLE_ENDIAN);
+    var header_offset = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(60,62), Static_File_Analyzer.LITTLE_ENDIAN);
     var file_type_id_byte = file_bytes[header_offset+23];
 
     if (id_byte_vals.includes(file_type_id_byte)) {
@@ -580,7 +582,7 @@ class Static_File_Analyzer {
 
     // Get compile time
     var compile_time_offset = header_offset + 8;
-    var compile_timestamp_int = this.get_four_byte_int(file_bytes.slice(compile_time_offset,compile_time_offset+4), Static_File_Analyzer.LITTLE_ENDIAN);
+    var compile_timestamp_int = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(compile_time_offset,compile_time_offset+4), Static_File_Analyzer.LITTLE_ENDIAN);
     var compile_timestamp = new Date(compile_timestamp_int*1000);
     file_info.metadata.creation_date = compile_timestamp.toISOString().slice(0, 19).replace("T", " ");;
 
@@ -589,14 +591,14 @@ class Static_File_Analyzer {
     }
 
     // Get optional header size
-    var optional_header_size = this.get_four_byte_int(file_bytes.slice(header_offset+20,header_offset+22), Static_File_Analyzer.LITTLE_ENDIAN);
+    var optional_header_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(header_offset+20,header_offset+22), Static_File_Analyzer.LITTLE_ENDIAN);
 
     if (optional_header_size > 0) {
       var optional_header_offset = header_offset+24;
       var optional_header_bytes = file_bytes.slice(optional_header_offset, optional_header_offset+optional_header_size);
 
       if (optional_header_bytes.length > 67) {
-        var checksum = this.get_four_byte_int(optional_header_bytes.slice(64,68), Static_File_Analyzer.LITTLE_ENDIAN);
+        var checksum = Static_File_Analyzer.get_four_byte_int(optional_header_bytes.slice(64,68), Static_File_Analyzer.LITTLE_ENDIAN);
 
         if (checksum == 0) {
           file_info.analytic_findings.push("SUSPICIOUS - No Image File Checksum");
@@ -849,7 +851,7 @@ class Static_File_Analyzer {
     file_info.file_encryption_type = "none";
 
     var parsed_lnk = {};
-    parsed_lnk['HeaderSize'] = this.get_four_byte_int(file_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['HeaderSize'] = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
     parsed_lnk['LinkCLSID'] = this.get_guid(file_bytes.slice(4,20));
 
     var link_flags_arr = [
@@ -927,9 +929,9 @@ class Static_File_Analyzer {
       file_info.metadata.last_modified_date = parsed_lnk['AccessTime'];
     }
 
-    parsed_lnk['FileSize'] = this.get_four_byte_int(file_bytes.slice(52,56), Static_File_Analyzer.LITTLE_ENDIAN);
-    parsed_lnk['IconIndex'] = this.get_four_byte_int(file_bytes.slice(56,60), Static_File_Analyzer.LITTLE_ENDIAN);
-    parsed_lnk['ShowCommand'] = show_commands[this.get_four_byte_int(file_bytes.slice(60,64), Static_File_Analyzer.LITTLE_ENDIAN)];
+    parsed_lnk['FileSize'] = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(52,56), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['IconIndex'] = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(56,60), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['ShowCommand'] = show_commands[Static_File_Analyzer.get_four_byte_int(file_bytes.slice(60,64), Static_File_Analyzer.LITTLE_ENDIAN)];
 
     if (hot_key_high_bit[file_bytes[65]] != "" && hot_key_low_bit[file_bytes[64]] != "") {
       parsed_lnk['HotKey'] = hot_key_high_bit[file_bytes[65]] + " + " + hot_key_low_bit[file_bytes[64]];
@@ -943,7 +945,7 @@ class Static_File_Analyzer {
     if (parsed_lnk['LinkFlags']['HasLinkTargetIDList'] == true) {
       // HasLinkTargetIDList
       parsed_lnk['TargetIDList'] = [];
-      var id_list_size = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+      var id_list_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       var id_list_bytes = file_bytes.slice(byte_offset,byte_offset+=id_list_size);
 
       var id_list_offset = 0;
@@ -952,9 +954,9 @@ class Static_File_Analyzer {
       var item_id_code;
 
       while (id_list_offset < id_list_bytes.length) {
-        item_id_size = this.get_two_byte_int(id_list_bytes.slice(id_list_offset,id_list_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN) - 2;
+        item_id_size = Static_File_Analyzer.get_two_byte_int(id_list_bytes.slice(id_list_offset,id_list_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN) - 2;
         item_id_bytes = id_list_bytes.slice(id_list_offset,id_list_offset+=item_id_size);
-        item_id_code = this.get_two_byte_int(item_id_bytes.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
+        item_id_code = Static_File_Analyzer.get_two_byte_int(item_id_bytes.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
 
         if (item_id_code == 17199) {
           // Drive
@@ -982,10 +984,10 @@ class Static_File_Analyzer {
     if (parsed_lnk['LinkFlags']['HasLinkInfo'] == true) {
       // LinkInfo
       var link_info_start = byte_offset;
-      var link_info_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+      var link_info_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
       if (link_info_size < file_bytes.length) {
-        var link_info_header_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var link_info_header_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         var link_info_end = link_info_start + link_info_size;
 
         var link_info_flags = this.get_bin_from_int(file_bytes[byte_offset]).reverse();
@@ -996,8 +998,8 @@ class Static_File_Analyzer {
           'CommonNetworkRelativeLinkAndPathSuffix': (link_info_flags[1]==1) ? true : false
         };
 
-        var volume_id_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
-        var local_base_path_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var volume_id_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var local_base_path_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
         if (link_info_flags_obj.VolumeIDAndLocalBasePath) {
           // LocalBasePath
@@ -1006,18 +1008,18 @@ class Static_File_Analyzer {
           parsed_lnk['LocalBasePath'] = Static_File_Analyzer.get_ascii(local_base_path_bytes.filter(i => i > 31));
         }
 
-        var common_network_relative_link_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var common_network_relative_link_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
-        var common_path_suffix_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var common_path_suffix_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         var common_path_suffix_start = (link_info_start+common_path_suffix_offset);
 
         if (link_info_header_size >= 0x24) {
-          var local_base_path_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var local_base_path_offset_unicode = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var local_base_path_start_unicode = (link_info_start+local_base_path_offset_unicode);
           var local_base_path_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(local_base_path_start_unicode), true);
           parsed_lnk['LocalBasePathUnicode'] = Static_File_Analyzer.get_string_from_array(local_base_path_unicode_bytes);
 
-          var common_path_suffix_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var common_path_suffix_offset_unicode = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var common_path_suffix_start_unicode = (link_info_start+common_path_suffix_offset_unicode);
 
           var common_path_suffix_unicode_bytes = this.get_null_terminated_bytes(file_bytes.slice(common_path_suffix_start), true);
@@ -1032,17 +1034,17 @@ class Static_File_Analyzer {
           var volume_obj_start = byte_offset;
 
           parsed_lnk['VolumeID'] = {
-            'VolumeIDSize': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'DriveType': drive_types_arr[this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN)],
-            'DriveSerialNumber': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'VolumeLabelOffset': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN)
+            'VolumeIDSize': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'DriveType': drive_types_arr[Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN)],
+            'DriveSerialNumber': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'VolumeLabelOffset': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN)
           };
 
           var drive_volume_lbl_start = volume_obj_start + parsed_lnk['VolumeID']['VolumeLabelOffset'];
 
           if (parsed_lnk['VolumeID']['VolumeLabelOffset'] == 0x14) {
             // NULL-terminated string of Unicode characters
-            var drive_volume_lbl_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+            var drive_volume_lbl_offset_unicode = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
             drive_volume_lbl_start = volume_obj_start + drive_volume_lbl_offset_unicode;
           }
 
@@ -1052,18 +1054,18 @@ class Static_File_Analyzer {
 
         if (link_info_flags_obj.CommonNetworkRelativeLinkAndPathSuffix) {
           // CommonNetworkRelativeLink
-          var cnrl_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var cnrl_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var cnrl_flags = Static_File_Analyzer.get_binary_array(file_bytes.slice(byte_offset,byte_offset+=4));
-          var net_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
-          var device_name_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
-          var network_provider_type = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var net_name_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var device_name_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var network_provider_type = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
           if (net_name_offset > 0x14) {
-            var net_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+            var net_name_offset_unicode = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           }
 
           if (parsed_lnk['VolumeID']['VolumeLabelOffset'] > 0x14) {
-            var device_name_offset_unicode = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+            var device_name_offset_unicode = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           }
         }
 
@@ -1079,41 +1081,41 @@ class Static_File_Analyzer {
     parsed_lnk['StringData'] = {};
 
     if (parsed_lnk['LinkFlags'].HasName) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+      var char_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['NAME_STRING'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasRelativePath) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+      var char_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['RELATIVE_PATH'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasWorkingDir) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+      var char_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['WORKING_DIR'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasArguments) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+      var char_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['COMMAND_LINE_ARGUMENTS'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     if (parsed_lnk['LinkFlags'].HasIconLocation) {
-      var char_count = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+      var char_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
       char_count = (parsed_lnk['LinkFlags'].IsUnicode) ? char_count*2 : char_count;
       parsed_lnk['StringData']['ICON_LOCATION'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=char_count).filter(i => i !== 0));
     }
 
     // ExtraData
     parsed_lnk['ExtraData'] = [];
-    var block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+    var block_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
     while (block_size >= 4) {
-      var block_sig = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+      var block_sig = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
       var block_end = byte_offset + block_size;
 
       if (block_sig == 0xA0000001) {
@@ -1139,35 +1141,35 @@ class Static_File_Analyzer {
         parsed_lnk['ExtraData'].push({
           'type': "distributed_link_tracker_properties",
           'data': {
-            'fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'popup_fill_attributes': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'screen_buffer_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'screen_buffer_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'window_size_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'window_size_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'window_origin_x': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'window_origin_y': this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
-            'unused1': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'unused2': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'font_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'font_family': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'font_weight': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'fill_attributes': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'popup_fill_attributes': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'screen_buffer_size_x': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'screen_buffer_size_y': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_size_x': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_size_y': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_origin_x': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'window_origin_y': Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN),
+            'unused1': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'unused2': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'font_size': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'font_family': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'font_weight': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
             'font_name_bytes': file_bytes.slice(byte_offset,byte_offset+=64),
-            'cursor_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'full_screen': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'quick_edit': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'insert_mode': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'auto_position': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'history_buff_size': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'number_of_history_buffers': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
-            'history_no_dup': this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'cursor_size': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'full_screen': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'quick_edit': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'insert_mode': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'auto_position': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'history_buff_size': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'number_of_history_buffers': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
+            'history_no_dup': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN),
             'color_table': file_bytes.slice(byte_offset,byte_offset+=64)
           }
         });
       } else if (block_sig == 0xA0000003) {
         // TrackerDataBlock
-        var tracker_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
-        var tracker_version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var tracker_length = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var tracker_version = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         var distributed_link_tracker_properties = {};
 
         distributed_link_tracker_properties['MachineID'] = Static_File_Analyzer.get_string_from_array(file_bytes.slice(byte_offset,byte_offset+=16).filter(i => i !== 0));
@@ -1196,11 +1198,11 @@ class Static_File_Analyzer {
         parsed_lnk['ExtraData'].push({'type': "DistributedLinkTrackerProperties", 'data': distributed_link_tracker_properties});
       } else if (block_sig == 0xA0000004) {
         // ConsoleFEDataBlock
-        var code_page = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var code_page = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
       } else if (block_sig == 0xA0000005) {
         // SpecialFolderDataBlock
-        var special_folder_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
-        var special_folder_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var special_folder_id = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var special_folder_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
         // TODO get special folder info.
       } else if (block_sig == 0xA0000006) {
         // DarwinDataBlock
@@ -1227,41 +1229,41 @@ class Static_File_Analyzer {
         // PropertyStoreDataBlock
         var data_block_properties = [];
         var id_name = "Unknown";
-        var storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var storage_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
         while (storage_size > 0) {
-          var version = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          var version = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           var format_id = file_bytes.slice(byte_offset,byte_offset+=16);
           var guid = this.get_guid(format_id.slice(0,16));
 
           if (guid == "D5CDD505-2E9C-101B-9397-08002B2CF9AE" || guid == "05D5CDD5-9C2E-1B10-9397-08002B2CF9AE") {
             // String
-            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+            var value_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
             while (value_size != 0 && !isNaN(value_size)) {
-              var name_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+              var name_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
               byte_offset++ // skip reserved byte
 
               var name_bytes = file_bytes.slice(byte_offset,byte_offset+=name_size);
               var name_str = Static_File_Analyzer.get_string_from_array(name_bytes);
 
               var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(value_size-name_bytes));
-              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+              value_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
             }
           } else {
             // Serialized Property Value
             var struct_start = byte_offset;
-            var value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+            var value_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
             var struct_end = struct_start + value_size;
 
             while (value_size != 0 && !isNaN(value_size)) {
               var value = "";
               var value_type = "";
-              var value_id = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+              var value_id = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
               byte_offset++ // skip reserved byte
 
-              var type = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
-              var padding = this.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+              var type = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
+              var padding = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(byte_offset,byte_offset+=2), Static_File_Analyzer.LITTLE_ENDIAN);
 
               // See: https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-OLEPS/%5bMS-OLEPS%5d.pdf - 2.15 TypedPropertyValue
               if (type == 0x0000) {
@@ -1306,7 +1308,7 @@ class Static_File_Analyzer {
               } else if (type == 0x001F) {
                 // VT_LPWSTR - UnicodeString
                 value_type = "VT_LPWSTR";
-                var char_length = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN) - 1;
+                var char_length = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN) - 1;
                 var value_bytes = file_bytes.slice(byte_offset,byte_offset+=(char_length*2));
 
                 var two_bit = [6,15];
@@ -1355,25 +1357,25 @@ class Static_File_Analyzer {
                 file_info.metadata.creation_application = value;
               }
 
-              value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+              value_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
               if (value_size > (file_bytes.length - byte_offset)) {
                 // Byte index is off, or this file is malformed.
                 // Try backing up two bytes and re-reading.
                 byte_offset -= 5;
-                value_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+                value_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
               }
             }
           }
 
 
-          storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+          storage_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
 
           if (storage_size > (file_bytes.length - byte_offset)) {
             // Byte index is off, or this file is malformed.
             // Try backing up two bytes and re-reading.
             byte_offset -= 2;
-            storage_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+            storage_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
           }
         }
 
@@ -1384,7 +1386,7 @@ class Static_File_Analyzer {
       } else if (block_sig == 0xA000000B) {
         // KnownFolderDataBlock
         var known_folder_id_bytes = file_bytes.slice(byte_offset,byte_offset+=16);
-        var known_folder_offset = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+        var known_folder_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
       } else if (block_sig == 0xA000000C) {
         // VistaAndAboveIDListDataBlock
         break;
@@ -1392,7 +1394,7 @@ class Static_File_Analyzer {
         break;
       }
 
-      block_size = this.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
+      block_size = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(byte_offset,byte_offset+=4), Static_File_Analyzer.LITTLE_ENDIAN);
     }
 
     // Build LNK shell code
@@ -1954,7 +1956,7 @@ class Static_File_Analyzer {
       search_index = file_text.indexOf("tEXt", search_index);
       if (search_index > 0) {
         var chunk_length_bytes = file_bytes.slice(search_index-4,search_index);
-        var chunk_length_int = this.get_four_byte_int(chunk_length_bytes);
+        var chunk_length_int = Static_File_Analyzer.get_four_byte_int(chunk_length_bytes);
         var content_bytes = file_bytes.slice(search_index+4, search_index+chunk_length_int+4);
         var chunk_text = file_text.substring(search_index+4,(search_index+chunk_length_int+4));
         var split_index = content_bytes.indexOf(0);
@@ -2033,7 +2035,7 @@ class Static_File_Analyzer {
       file_info.metadata.creation_os = "Unix";
     }
 
-    let header_crc = this.get_four_byte_int(file_bytes.slice(8,12));
+    let header_crc = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(8,12));
     let byte_index = [12];
     let header_size = RAR_Parser.read_vinteger(file_bytes, byte_index);
     let header_type = RAR_Parser.read_vinteger(file_bytes, byte_index);
@@ -2257,6 +2259,42 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Extracts meta data and other information from TIFF formatted files.
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   *
+   * @see https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf
+   * @see https://dev.exiv2.org/projects/exiv2/wiki/The_Metadata_in_TIFF_files
+   */
+  analyze_tiff(file_bytes) {
+    var file_info = Static_File_Analyzer.get_default_file_json();
+    let byte_order = "LITTLE_ENDIAN";
+
+    file_info.file_format = "tiff";
+    file_info.file_generic_type = "Image";
+
+    // This format does not support encryption
+    file_info.file_encrypted = "false";
+    file_info.file_encryption_type = "none";
+
+    // Get Byte Order
+    if (file_bytes[0] == 0x49) {
+      byte_order = "LITTLE_ENDIAN";
+    } else if (file_bytes[0] == 0x49) {
+      byte_order = "BIG_ENDIAN";
+    } else {
+      // Error / Unknown
+      return file_info;
+    }
+
+    let first_ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(4,8), byte_order);
+    let first_ifd_object = Tiff_Tools.parse_ifd(file_bytes, first_ifd_offset, byte_order);
+
+    return file_info;
+  }
+
+  /**
    * Extracts meta data and other information from TNEF formatted files.
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
@@ -2296,7 +2334,7 @@ class Static_File_Analyzer {
   }
 
   /**
-   * Extracts meta data and other information from TNEF formatted files.
+   * Extracts meta data and other information from True Tupe Fonts (TTF) formatted files.
    *
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
@@ -2375,13 +2413,13 @@ class Static_File_Analyzer {
         anchor_pointer = anchor_descriptor_tag.tag_location;
 
         main_volume_descriptor_sequence_extent = {
-          'length': this.get_four_byte_int(file_bytes.slice(sector_start+16, sector_start+20), Static_File_Analyzer.LITTLE_ENDIAN),
-          'location': this.get_four_byte_int(file_bytes.slice(sector_start+20, sector_start+24), Static_File_Analyzer.LITTLE_ENDIAN)
+          'length': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(sector_start+16, sector_start+20), Static_File_Analyzer.LITTLE_ENDIAN),
+          'location': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(sector_start+20, sector_start+24), Static_File_Analyzer.LITTLE_ENDIAN)
         }
 
         reserve_volume_descriptor_sequence_extent = {
-          'length': this.get_four_byte_int(file_bytes.slice(sector_start+24, sector_start+28), Static_File_Analyzer.LITTLE_ENDIAN),
-          'location': this.get_four_byte_int(file_bytes.slice(sector_start+28, sector_start+32), Static_File_Analyzer.LITTLE_ENDIAN)
+          'length': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(sector_start+24, sector_start+28), Static_File_Analyzer.LITTLE_ENDIAN),
+          'location': Static_File_Analyzer.get_four_byte_int(file_bytes.slice(sector_start+28, sector_start+32), Static_File_Analyzer.LITTLE_ENDIAN)
         }
 
         break;
@@ -2804,7 +2842,7 @@ class Static_File_Analyzer {
     document_obj.byte_order = byte_order;
 
     var sector_size = cmb_obj.sector_size; // Size in bytes
-    var sec_id_1 = this.get_four_byte_int(file_bytes.slice(48,52), byte_order);
+    var sec_id_1 = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(48,52), byte_order);
     var sec_1_pos = 512 + (sec_id_1 * sector_size); // Should be Root Entry
     var workbook_pos = sec_1_pos + 128;
     var summary_info_pos = workbook_pos + 128;
@@ -2823,7 +2861,7 @@ class Static_File_Analyzer {
       // Beginning of file record found.
 
       // BIFF 5 and 7 has a length of 8 bytes. For BIFF 8, the length of the BOF record can be either 8 or 16 bytes.
-      var biff_record_length = this.get_two_byte_int(file_bytes.slice(current_byte+2,current_byte+4), byte_order);
+      var biff_record_length = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(current_byte+2,current_byte+4), byte_order);
 
       // Byte value of 5 representing BIFF 5/7 and 6 representing BIFF 8.
       var biff_version = file_bytes[current_byte+5];
@@ -2836,8 +2874,8 @@ class Static_File_Analyzer {
 
       current_byte += 8;
 
-      var rup_build = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
-      var rup_year = this.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
+      var rup_build = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
+      var rup_year = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(current_byte,current_byte+=2), byte_order);
 
       // Other meta data we are skipping for now.
       // See: https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/91ebafbe-ccc0-41a4-839d-15bbec175b9f
@@ -2851,7 +2889,7 @@ class Static_File_Analyzer {
         if (file_bytes[i] == 133 && file_bytes[i+1] == 0 && file_bytes[i+3] == 0 && file_bytes[i+2] > 0 && file_bytes[i+2] < 137) {
           // Found boundsheet
           var boundsheet_length = file_bytes[i+2];
-          var stream_pos = this.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
+          var stream_pos = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
 
           if (boundsheet_length < 4 || stream_pos > file_bytes.length) continue;
 
@@ -2891,11 +2929,11 @@ class Static_File_Analyzer {
       // Find SST - string constants - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b6231b92-d32e-4626-badd-c3310a672bab
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0xFC && file_bytes[i+1] == 0x00) {
-          var sst_record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+          var sst_record_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
 
           if (sst_record_size > 0) {
-            var cst_total = this.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
-            var cst_unique = this.get_four_byte_int(file_bytes.slice(i+8,i+12), byte_order);
+            var cst_total = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(i+4,i+8), byte_order);
+            var cst_unique = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(i+8,i+12), byte_order);
 
             if (cst_unique > cst_total) continue;
 
@@ -2905,7 +2943,7 @@ class Static_File_Analyzer {
             if (rgb_bytes.length > 0) {
               // See https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/173d9f51-e5d3-43da-8de2-be7f22e119b9
               for (var u=0; u < cst_unique; u++) {
-                var char_count = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
+                var char_count = Static_File_Analyzer.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
                 var char_prop_bits = this.get_bin_from_int(rgb_bytes[current_unique_offset+2]).reverse();
                 var double_byte_chars = (char_prop_bits[0] == 1) ? true : false;
                 var rgb_len = (double_byte_chars) ? char_count * 2 : char_count;
@@ -2920,12 +2958,12 @@ class Static_File_Analyzer {
                 var cb_ext_rst;
 
                 if (rich_string) {
-                  c_run = this.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
+                  c_run = Static_File_Analyzer.get_two_byte_int(rgb_bytes.slice(current_unique_offset, current_unique_offset+2), byte_order);
                   varable_offset += 2;
                 }
 
                 if (phonetic_string) {
-                  cb_ext_rst = this.get_four_byte_int(rgb_bytes.slice(current_unique_offset+varable_offset, current_unique_offset+varable_offset+2), byte_order);
+                  cb_ext_rst = Static_File_Analyzer.get_four_byte_int(rgb_bytes.slice(current_unique_offset+varable_offset, current_unique_offset+varable_offset+2), byte_order);
                   varable_offset += 2;
                 }
 
@@ -2961,7 +2999,7 @@ class Static_File_Analyzer {
       // Find Lbl (defined name) records - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d148e898-4504-4841-a793-ee85f3ea9eef
       for (var i=current_byte; i<file_bytes.length; i++) {
         if (file_bytes[i] == 0x18 && file_bytes[i+1] == 0x00) {
-          var record_size = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+          var record_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
           //var prop_bits = this.get_bin_from_int(file_bytes[4]).concat(this.get_bin_from_int(file_bytes[5]));
           var prop_bits = Static_File_Analyzer.get_binary_array([file_bytes[4],file_bytes[5]]);
           var is_hidden = (prop_bits[0] == 1) ? true : false;
@@ -2985,11 +3023,11 @@ class Static_File_Analyzer {
           }
 
           var name_char_count = file_bytes[i+7];
-          var rgce_size = this.get_two_byte_int(file_bytes.slice(i+8,i+10), byte_order);
-          var reserved3 = this.get_two_byte_int(file_bytes.slice(i+10,i+12), byte_order);
+          var rgce_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+8,i+10), byte_order);
+          var reserved3 = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+10,i+12), byte_order);
           if (reserved3 != 0) continue;
 
-          var itab = this.get_two_byte_int(file_bytes.slice(i+12,i+14), byte_order);
+          var itab = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+12,i+14), byte_order);
           var reserved4 = file_bytes[i+14];
           var reserved5 = file_bytes[i+15];
           var reserved6 = file_bytes[i+16];
@@ -3024,8 +3062,8 @@ class Static_File_Analyzer {
                 current_rgce_byte += 2;
               } else if (formula_type == 0x3A) {
                 // PtgRef3d - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1ca817be-8df3-4b80-8d35-46b5eb753577
-                var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+5), byte_order);
-                var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+5,current_rgce_byte+7), byte_order);
+                var loc_row = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+5), byte_order);
+                var col_rel = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+5,current_rgce_byte+7), byte_order);
                 var col_rel_bits = this.get_bin_from_int(col_rel);
                 var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
                 var cell_ref = this.convert_xls_column(loc_col) + (loc_row+1);
@@ -3097,9 +3135,9 @@ class Static_File_Analyzer {
           //console.log(cell_data_obj.sheet_name + " " + cell_data_obj.cell_name + " - " + cell_data_obj.cell_data.value);
         } else if (cell_records[i].record_type == "MulBlank") {
           var blank_cell_name;
-          var row = this.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
-          var col_first = this.get_two_byte_int(cell_records[i].record_bytes.slice(2, 4), byte_order);
-          var col_last = this.get_two_byte_int(cell_records[i].record_bytes.slice(-2), byte_order);
+          var row = Static_File_Analyzer.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
+          var col_first = Static_File_Analyzer.get_two_byte_int(cell_records[i].record_bytes.slice(2, 4), byte_order);
+          var col_last = Static_File_Analyzer.get_two_byte_int(cell_records[i].record_bytes.slice(-2), byte_order);
 
           for (var bcell_index=col_first; bcell_index <= col_last; bcell_index++) {
             blank_cell_name = this.convert_xls_column(bcell_index) + row;
@@ -3118,7 +3156,7 @@ class Static_File_Analyzer {
         } else if (cell_records[i].record_type == "String") {
           // If the last record was a formula this string is the precal value, fill cell with this value.
           if (formula_cell_name != "") {
-            var string_size = this.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
+            var string_size = Static_File_Analyzer.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
             var byte_option_bits = this.get_bin_from_int(cell_records[i].record_bytes[2]);
             var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
             var string_end = (double_byte_chars) ? 3 + (string_size * 2) : 3 + string_size;
@@ -3161,7 +3199,7 @@ class Static_File_Analyzer {
 
         if (cell_records[i].record_type == "String") {
           // String value of a formula.
-          var string_size = this.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
+          var string_size = Static_File_Analyzer.get_two_byte_int(cell_records[i].record_bytes.slice(0, 2), byte_order);
           var byte_option_bits = this.get_bin_from_int(cell_records[i].record_bytes[2]);
           var double_byte_chars = (byte_option_bits[0] == 1) ? true : false;
           var string_end = (double_byte_chars) ? 3 + (string_size * 2) : 3 + string_size;
@@ -3238,19 +3276,19 @@ class Static_File_Analyzer {
         var index_start = value.file_pos;
 
         if (file_bytes[index_start] == 0x0b && file_bytes[index_start+1] == 0x02) {
-          var index_record_size = this.get_two_byte_int(file_bytes.slice(index_start+2,index_start+4), byte_order);
+          var index_record_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(index_start+2,index_start+4), byte_order);
 
           //Skip over reserved 4 bytes
           var reserved_bytes = file_bytes.slice(index_start+4,index_start+8);
 
           // The first row that has at least one cell with data in current sheet; zero-based index.
-          var rw_mic = this.get_four_byte_int(file_bytes.slice(index_start+8,index_start+12), byte_order);
+          var rw_mic = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(index_start+8,index_start+12), byte_order);
 
           // The last row that has at least one cell with data in the sheet, MUST be 0 if there are no rows with data.
-          var rw_mac = this.get_four_byte_int(file_bytes.slice(index_start+12,index_start+16), byte_order);
+          var rw_mac = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(index_start+12,index_start+16), byte_order);
 
           // Specifies the file position of the DefColWidth record, but we don't use this.
-          var ib_xf = this.get_four_byte_int(file_bytes.slice(index_start+16,index_start+20), byte_order);
+          var ib_xf = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(index_start+16,index_start+20), byte_order);
 
           if (rw_mac > 0) {
             // Read bytes for DBCell file pointers.
@@ -3259,10 +3297,10 @@ class Static_File_Analyzer {
             if (rgib_rw_bytes.length > 0) {
               // These bytes are an array of FilePointers giving the file position of each referenced DBCell record as specified in [MS-OSHARED] section 2.2.1.5.
               for (var ai=0; ai<rgib_rw_bytes.length;) {
-                var file_pointer = this.get_four_byte_int(rgib_rw_bytes.slice(ai,ai+4), byte_order);
+                var file_pointer = Static_File_Analyzer.get_four_byte_int(rgib_rw_bytes.slice(ai,ai+4), byte_order);
                 //console.log(file_pointer); // debug
 
-                var first_row_record = this.get_four_byte_int(file_bytes.slice(file_pointer, file_pointer+4), byte_order);
+                var first_row_record = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(file_pointer, file_pointer+4), byte_order);
                 var first_row_pos = file_pointer + first_row_record;
 
                 var row_block_count = ((rw_mac - rw_mic) % 32 == 0) ? Math.ceil((rw_mac - rw_mic) / 32) : Math.ceil((rw_mac - rw_mic) / 32 + 1);
@@ -3272,7 +3310,7 @@ class Static_File_Analyzer {
                 //The MS doc says it has to be less than 32.
                 for (var b=0; b<=row_block_count;) {
                   // Specifies the file offset in bytes to the first record that specifies a CELL in each row that is a part of this row block.
-                  var rgdb = this.get_two_byte_int(file_bytes.slice(file_pointer+(b*2)+4, file_pointer+(b*2)+6), byte_order);
+                  var rgdb = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(file_pointer+(b*2)+4, file_pointer+(b*2)+6), byte_order);
                   var row_start = first_row_pos + rgdb;
 
 
@@ -3635,7 +3673,7 @@ class Static_File_Analyzer {
                 var option_bits = this.get_bin_from_int(current_record_bytes[0]);
                 var current_byte2 = 1;
 
-                var string_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
+                var string_size = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                 var string_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+string_size));
                 var string_text = Static_File_Analyzer.get_string_from_array(string_bytes.filter(i => i !== 0));
                 current_byte2 = current_byte2 + 4 + string_size;
@@ -3741,7 +3779,7 @@ class Static_File_Analyzer {
               // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
               if (current_record_info.record_number == 35) {
                 // BrtFRTBegin
-                var product_version = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                var product_version = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
               } else if (current_record_info.record_number == 36) {
                 // BrtFRTEnd
               } else if (current_record_info.record_number == 37) {
@@ -3771,13 +3809,13 @@ class Static_File_Analyzer {
                 // BrtFileRecover
               } else if (current_record_info.record_number == 156) {
                 // BrtBundleSh - Sheet information
-                var sheet_state_val = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                var sheet_state_val = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
                 var sheet_state = (sheet_state_val == 1) ? "hidden" : ((sheet_state_val == 1) ? "very hidden": "visible");
 
-                var sheet_id = this.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
-                var sheet_type_size = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
+                var sheet_id = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
+                var sheet_type_size = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                 var sheet_type_bytes = (current_record_bytes.slice(12,12+sheet_type_size));
-                var sheet_name_size = this.get_four_byte_int(current_record_bytes.slice(sheet_type_size+12,sheet_type_size+16), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
+                var sheet_name_size = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(sheet_type_size+12,sheet_type_size+16), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                 var sheet_name_bytes = (current_record_bytes.slice(sheet_type_size+16,sheet_type_size+16+sheet_name_size));
 
                 var sheet_type = Static_File_Analyzer.get_string_from_array(sheet_type_bytes.filter(i => i !== 0));
@@ -3912,13 +3950,13 @@ class Static_File_Analyzer {
                   // See: https://interoperability.blob.core.windows.net/files/MS-XLSB/%5BMS-XLSB%5D.pdf - PAGE 204
                   if (current_record_info.record_number == 0) {
                     // BrtRowHdr
-                    current_row = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN) + 1;
+                    current_row = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN) + 1;
                   } else if (current_record_info.record_number == 1) {
                     // BrtCellBlank - Blank cell
                   } else if (current_record_info.record_number == 7) {
                     // BrtCellIsst - A cell record that contains a string.
-                    var col = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var sst_index = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var col = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var sst_index = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
                     var cell_value = string_constants[sst_index];
 
                     if (current_row > -1) {
@@ -3955,11 +3993,11 @@ class Static_File_Analyzer {
                     // BrtWsDim - specifies the used range of the sheet.
                   } else if (current_record_info.record_number == 152) {
                     // BrtSel
-                    var pane = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var row = this.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var col = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var rfx_index = this.get_four_byte_int(current_record_bytes.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var rfx_count = this.get_four_byte_int(current_record_bytes.slice(16,20), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var pane = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var row = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var col = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var rfx_index = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var rfx_count = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(16,20), Static_File_Analyzer.LITTLE_ENDIAN);
                     var rgrfx_bytes = current_record_bytes.slice(20,20+rfx_count);
                   } else if (current_record_info.record_number == 390) {
                     // BrtBeginColInfos
@@ -3973,27 +4011,27 @@ class Static_File_Analyzer {
                     // BrtWsFmtInfo
                   } else if (current_record_info.record_number == 494) {
                     // BrtHLink - specifies a hyperlink that applies to a range of cells.
-                    var row_start = this.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var row_end = this.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var col_start = this.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
-                    var col_end = this.get_four_byte_int(current_record_bytes.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var row_start = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var row_end = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(4,8), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var col_start = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(8,12), Static_File_Analyzer.LITTLE_ENDIAN);
+                    var col_end = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
 
-                    var rid_size = this.get_four_byte_int(current_record_bytes.slice(16,20), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
+                    var rid_size = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(16,20), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var rid_bytes = (current_record_bytes.slice(20, 20+rid_size));
                     var rid = Static_File_Analyzer.get_string_from_array(rid_bytes.filter(i => i !== 0));
                     var current_byte2 = 20+rid_size;
 
-                    var location_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
+                    var location_size = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var location_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+location_size));
                     var location = Static_File_Analyzer.get_string_from_array(location_bytes.filter(i => i !== 0));
                     current_byte2 = current_byte2 + 4 + location_size;
 
-                    var tool_tip_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
+                    var tool_tip_size = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var tool_tip_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+tool_tip_size));
                     var tool_tip = Static_File_Analyzer.get_string_from_array(tool_tip_bytes.filter(i => i !== 0));
                     current_byte2 = current_byte2 + 4 + tool_tip_size;
 
-                    var display_size = this.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
+                    var display_size = Static_File_Analyzer.get_four_byte_int(current_record_bytes.slice(current_byte2, current_byte2+4), Static_File_Analyzer.LITTLE_ENDIAN) * 2;
                     var display_bytes = (current_record_bytes.slice(current_byte2+4, current_byte2+4+display_size));
                     var display = Static_File_Analyzer.get_string_from_array(display_bytes.filter(i => i !== 0));
                     current_byte2 = current_byte2 + 4 + display_size;
@@ -5591,8 +5629,8 @@ class Static_File_Analyzer {
    * @return {String} The timestamp converted from the four byte array.
    */
   get_ecma_timestamp(bytes) {
-    var type_and_timezone = this.get_two_byte_int(bytes.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
-    var year = this.get_two_byte_int(bytes.slice(2,4), Static_File_Analyzer.LITTLE_ENDIAN);
+    var type_and_timezone = Static_File_Analyzer.get_two_byte_int(bytes.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
+    var year = Static_File_Analyzer.get_two_byte_int(bytes.slice(2,4), Static_File_Analyzer.LITTLE_ENDIAN);
     year = (year == 0) ? "0000" : year;
 
     var month = (bytes[4] < 10) ? "0"+bytes[4] : bytes[4];
@@ -5761,7 +5799,7 @@ class Static_File_Analyzer {
    * @param {String}   endianness Value indicating how to interperate the bit order of the byte array. Default is BIG_ENDIAN.
    * @return {integer} The integer value of the given bit array.
    */
-  get_four_byte_int(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
+  static get_four_byte_int(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
     var int_bits = "";
 
     if (endianness == Static_File_Analyzer.LITTLE_ENDIAN) {
@@ -5825,7 +5863,7 @@ class Static_File_Analyzer {
    * @param {String}   endianness Value indicating how to interperate the bit order of the byte array. Default is BIG_ENDIAN.
    * @return {integer} The integer value of the given bit array.
    */
-  get_two_byte_int(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
+  static get_two_byte_int(bytes, endianness = Static_File_Analyzer.BIG_ENDIAN) {
     var int_bits = "";
 
     if (endianness == Static_File_Analyzer.LITTLE_ENDIAN) {
@@ -6469,20 +6507,20 @@ class Static_File_Analyzer {
       stream_properties['os_version'] = stream_bytes[4] + "." + stream_bytes[5];
       stream_properties['os'] = (stream_bytes[6] == 2) ? "Windows" : (stream_bytes[6] == 1) ? "MacOS" : "Other OS";
 
-      var section_count = this.get_four_byte_int(stream_bytes.slice(18, 22), cmb_obj.byte_order);
-      var section_ofset = this.get_four_byte_int(stream_bytes.slice(44, 48), cmb_obj.byte_order);
-      var section_length = this.get_four_byte_int(stream_bytes.slice(section_ofset, section_ofset+4), cmb_obj.byte_order);
-      var section_prop_count = this.get_four_byte_int(stream_bytes.slice(section_ofset+4, section_ofset+8), cmb_obj.byte_order);
+      var section_count = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(18, 22), cmb_obj.byte_order);
+      var section_ofset = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(44, 48), cmb_obj.byte_order);
+      var section_length = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_ofset, section_ofset+4), cmb_obj.byte_order);
+      var section_prop_count = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_ofset+4, section_ofset+8), cmb_obj.byte_order);
 
       var section_prop_info = [];
       var current_offset = section_ofset+8;
       for (var pi=0; pi<section_prop_count; pi++) {
         current_offset += 8;
-        var prop_offset = this.get_four_byte_int(stream_bytes.slice(current_offset+4, current_offset+8), cmb_obj.byte_order) + 52;
+        var prop_offset = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(current_offset+4, current_offset+8), cmb_obj.byte_order) + 52;
 
         if (prop_offset < stream_bytes.length) {
           section_prop_info.push({
-            'id': this.get_four_byte_int(stream_bytes.slice(current_offset, current_offset+4), cmb_obj.byte_order),
+            'id': Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(current_offset, current_offset+4), cmb_obj.byte_order),
             'offset': prop_offset
           });
         }
@@ -6492,46 +6530,46 @@ class Static_File_Analyzer {
         switch (section_prop_info[pi].id) {
           case 1:
             // Code page (02)
-            stream_properties['code_page'] = this.get_two_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+2), cmb_obj.byte_order);
+            stream_properties['code_page'] = Static_File_Analyzer.get_two_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+2), cmb_obj.byte_order);
             break;
           case 2:
             // Title (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['title'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 3:
             // Subject (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['subject'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 4:
             // Author (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['author'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 5:
             // Keywords (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['keywords'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 6:
             // Comments (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['comments'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 7:
             // Template (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['template'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 8:
             // Last Saved By (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['last_saved_by'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 9:
             // Revision Number (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['revision_number'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 10:
@@ -6556,27 +6594,27 @@ class Static_File_Analyzer {
             break;
           case 14:
             // Number of Pages (03)
-            stream_properties['page_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['page_count'] = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             break;
           case 15:
             // Number of Words (03)
-            stream_properties['word_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['word_count'] = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             break;
           case 16:
             // Number of Characters (03)
-            stream_properties['charater_count'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['charater_count'] = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             break;
           case 17:
             // Thumbnail (47)
             break;
           case 18:
             // Name of Creating Application (1e)
-            var string_len = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            var string_len = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             stream_properties['creating_application'] = Static_File_Analyzer.get_string_from_array(stream_bytes.slice(section_prop_info[pi].offset+4,section_prop_info[pi].offset+4+string_len).filter(i => i !== 0));
             break;
           case 19:
             // Security (03)
-            stream_properties['security'] = this.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
+            stream_properties['security'] = Static_File_Analyzer.get_four_byte_int(stream_bytes.slice(section_prop_info[pi].offset,section_prop_info[pi].offset+4), cmb_obj.byte_order);
             break;
           case 2147483648:
             // Locale ID (13)
@@ -6610,14 +6648,14 @@ class Static_File_Analyzer {
       'valid': false
     };
 
-    descriptor_tag.tag_identifier = this.get_two_byte_int(decr_tag_buffer.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
+    descriptor_tag.tag_identifier = Static_File_Analyzer.get_two_byte_int(decr_tag_buffer.slice(0,2), Static_File_Analyzer.LITTLE_ENDIAN);
     if (tag_identifiers.includes(descriptor_tag.tag_identifier)) {
-      descriptor_tag.descriptor_version = this.get_two_byte_int(decr_tag_buffer.slice(2,4), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_version = Static_File_Analyzer.get_two_byte_int(decr_tag_buffer.slice(2,4), Static_File_Analyzer.LITTLE_ENDIAN);
       descriptor_tag.tag_checksum = decr_tag_buffer[4];
-      descriptor_tag.tag_serial_number = this.get_two_byte_int(decr_tag_buffer.slice(6,8), Static_File_Analyzer.LITTLE_ENDIAN);
-      descriptor_tag.descriptor_crc = this.get_two_byte_int(decr_tag_buffer.slice(8,10), Static_File_Analyzer.LITTLE_ENDIAN);
-      descriptor_tag.descriptor_crc_length = this.get_two_byte_int(decr_tag_buffer.slice(10,12), Static_File_Analyzer.LITTLE_ENDIAN);
-      descriptor_tag.tag_location = this.get_four_byte_int(decr_tag_buffer.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.tag_serial_number = Static_File_Analyzer.get_two_byte_int(decr_tag_buffer.slice(6,8), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_crc = Static_File_Analyzer.get_two_byte_int(decr_tag_buffer.slice(8,10), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.descriptor_crc_length = Static_File_Analyzer.get_two_byte_int(decr_tag_buffer.slice(10,12), Static_File_Analyzer.LITTLE_ENDIAN);
+      descriptor_tag.tag_location = Static_File_Analyzer.get_four_byte_int(decr_tag_buffer.slice(12,16), Static_File_Analyzer.LITTLE_ENDIAN);
     }
 
     // Verify checksum
@@ -6661,7 +6699,7 @@ class Static_File_Analyzer {
     var cell_recalc = false;
     var downloaded_files = [];
 
-    var cell_ixfe = this.get_two_byte_int(file_bytes.slice(4, 6), byte_order);
+    var cell_ixfe = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(4, 6), byte_order);
 
     // FormulaValue - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/39a0757a-c7bb-4e85-b144-3e7837b059d7
     var formula_byte1 = file_bytes[6];
@@ -6670,7 +6708,7 @@ class Static_File_Analyzer {
     var formula_byte4 = file_bytes[9];
     var formula_byte5 = file_bytes[10];
     var formula_byte6 = file_bytes[11];
-    var formula_expr  = this.get_two_byte_int(file_bytes.slice(12, 14), byte_order);
+    var formula_expr  = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(12, 14), byte_order);
 
     if (formula_expr == 65535) {
       /*
@@ -6729,7 +6767,7 @@ class Static_File_Analyzer {
     var cache = file_bytes.slice(16, 20);
 
     // CellParsedFormula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/7dd67f0a-671d-4905-b87b-4cc07295e442
-    var rgce_byte_size = this.get_two_byte_int(file_bytes.slice(20, 22), byte_order);
+    var rgce_byte_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(20, 22), byte_order);
     var rgce_bytes = file_bytes.slice(22, 22+rgce_byte_size);
 
     // Rgce - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6cdf7d38-d08c-4e56-bd2f-6c82b8da752e
@@ -6935,16 +6973,16 @@ class Static_File_Analyzer {
           current_rgce_byte += 3;
         } else if (rgce_bytes[current_rgce_byte] == 0x02) {
           // PtgAttrIf - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d81e5fb4-3004-409a-9a31-1a60662d9e59
-          var offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+          var offset = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
           current_rgce_byte += 3;
         } else if (rgce_bytes[current_rgce_byte] == 0x04) {
           // PtgAttrChoose - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/24fb579c-c65d-4771-94a8-4380cecdc8c8
-          var c_offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order) + 1;
+          var c_offset = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order) + 1;
           var rgOffset_bytes = rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+3+c_offset);
           current_rgce_byte += 3 + c_offset;
         } else if (rgce_bytes[current_rgce_byte] == 0x08) {
           // PtgAttrGoto - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/081e17b9-02a6-4e78-ad28-09538f35a312
-          var offset = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+          var offset = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
           current_rgce_byte += 3;
         } else if (rgce_bytes[current_rgce_byte] == 0x10) {
           // PtgAttrSum - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/79ef57f6-27ab-4fec-b893-7dd727e771d1
@@ -6966,11 +7004,11 @@ class Static_File_Analyzer {
           current_rgce_byte += 3;
         } else if (rgce_bytes[current_rgce_byte] == 0x40) {
           // PtgAttrSpace - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/38a4d7be-040b-4206-b078-62f5aeec72f3
-          var ptg_attr_space_type = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+          var ptg_attr_space_type = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
           current_rgce_byte += 3;
         } else if (rgce_bytes[current_rgce_byte] == 0x41) {
           // PtgAttrSpaceSemi - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5d8c3df5-9be5-46d9-8105-a1a19ceca3d4
-          var type = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+          var type = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
           current_rgce_byte += 3;
         } else {
           // error
@@ -6980,15 +7018,15 @@ class Static_File_Analyzer {
         // Selection - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00131ced-fe32-403b-9be4-d9c234fde7d4
         //TODO this is incomplete.
         var pane_type = rgce_bytes[current_rgce_byte];
-        var ac_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
-        var ac_col = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+5), byte_order);
-        var ref_u_index = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+5,current_rgce_byte+7), byte_order);
-        var cref = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+7,current_rgce_byte+9), byte_order);
+        var ac_row = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+1,current_rgce_byte+3), byte_order);
+        var ac_col = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+3,current_rgce_byte+5), byte_order);
+        var ref_u_index = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+5,current_rgce_byte+7), byte_order);
+        var cref = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+7,current_rgce_byte+9), byte_order);
 
         current_rgce_byte += 9;
       } else if (formula_type == 0x1E) {
         // PtgInt - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/508ecf18-3b81-4628-95b3-7a9d2a295bca
-        var ptg_int_val = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+        var ptg_int_val = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
         formula_calc_stack.push({
           'value': ptg_int_val,
           'type':  "number",
@@ -7022,7 +7060,7 @@ class Static_File_Analyzer {
       } else if (formula_type == 0x23) {
         // PtgName - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5f05c166-dfe3-4bbf-85aa-31c09c0258c0
         // reference to a defined name
-        var var_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
+        var var_index = Static_File_Analyzer.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
 
         if (var_index-1 < document_obj.defined_names.length) {
           var var_name = document_obj.defined_names[var_index-1];
@@ -7067,8 +7105,8 @@ class Static_File_Analyzer {
       } else if (formula_type == 0x24 || formula_type == 0x44) {
         // PtgRef - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc7c380b-d793-4219-a897-e47e13c4e055
         // The PtgRef operand specifies a reference to a single cell in this sheet.
-        var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
-        var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
+        var loc_row = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+        var col_rel = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
         var col_rel_bits = this.get_bin_from_int(col_rel);
         var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
         var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
@@ -7158,7 +7196,7 @@ class Static_File_Analyzer {
       } else if (formula_type == 0x41 || formula_type == 0x21) {
         // PtgFunc - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/87ce512d-273a-4da0-a9f8-26cf1d93508d
         var ptg_bits = this.get_bin_from_int(rgce_bytes[current_rgce_byte-1]);
-        var iftab = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+        var iftab = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
 
         // Execute a function - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00b5dd7d-51ca-4938-b7b7-483fe0e5933b
         if (iftab == 0x0000) {
@@ -7537,7 +7575,7 @@ class Static_File_Analyzer {
 
         // PtgDataType - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/80d504ba-eb5d-4a0f-a5da-3dcc792dd78e
         var data_type_int = this.get_int_from_bin(ptg_bits.slice(5,7));
-        var name_index = this.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
+        var name_index = Static_File_Analyzer.get_four_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+4), byte_order);
 
         if (name_index <= document_obj.defined_names.length) {
           var ref_var_name = document_obj.defined_names[name_index-1];
@@ -7569,9 +7607,9 @@ class Static_File_Analyzer {
       } else if (formula_type == 0x5A) {
         // PtgRef3d - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1ca817be-8df3-4b80-8d35-46b5eb753577
         // The PtgRef3d operand specifies a reference to a single cell on one or more sheets.
-        var ixti = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
-        var loc_row = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
-        var col_rel = this.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+4,current_rgce_byte+6), byte_order);
+        var ixti = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte,current_rgce_byte+2), byte_order);
+        var loc_row = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+2,current_rgce_byte+4), byte_order);
+        var col_rel = Static_File_Analyzer.get_two_byte_int(rgce_bytes.slice(current_rgce_byte+4,current_rgce_byte+6), byte_order);
         var col_rel_bits = this.get_bin_from_int(col_rel);
         var loc_col = this.get_int_from_bin(col_rel_bits.slice(0,13));
         var is_col_relative = (col_rel_bits[14] == 1) ? true : false;
@@ -7736,7 +7774,7 @@ class Static_File_Analyzer {
                 var next_formula = ref_cell_raw.record_bytes[22];
 
                 if (next_formula == 0x41 || next_formula== 0x21) {
-                  var iftab = this.get_two_byte_int(ref_cell_raw.record_bytes.slice(23,24), byte_order);
+                  var iftab = Static_File_Analyzer.get_two_byte_int(ref_cell_raw.record_bytes.slice(23,24), byte_order);
                   // TODO: This won't work if there is an IF inside of a loop.
 
                   if (iftab == 0x00AE) {
@@ -7820,13 +7858,13 @@ class Static_File_Analyzer {
   parse_xls_label_set_record(cell_record_obj, string_constants, byte_order=Static_File_Analyzer.LITTLE_ENDIAN) {
     var bytes = cell_record_obj.record_bytes;
 
-    var cell_row  = this.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
-    var cell_col  = this.get_two_byte_int(bytes.slice(2, 4), byte_order);
+    var cell_row  = Static_File_Analyzer.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
+    var cell_col  = Static_File_Analyzer.get_two_byte_int(bytes.slice(2, 4), byte_order);
     var cell_ref  = this.convert_xls_column(cell_col) + cell_row;
 
-    var cell_ixfe = this.get_two_byte_int(bytes.slice(4, 6), byte_order);
+    var cell_ixfe = Static_File_Analyzer.get_two_byte_int(bytes.slice(4, 6), byte_order);
 
-    var isst = this.get_four_byte_int(bytes.slice(6, 10), byte_order);
+    var isst = Static_File_Analyzer.get_four_byte_int(bytes.slice(6, 10), byte_order);
     var cell_value = string_constants[isst];
 
     return {
@@ -7852,11 +7890,11 @@ class Static_File_Analyzer {
   parse_xls_rk_record(cell_record_obj, byte_order=Static_File_Analyzer.LITTLE_ENDIAN) {
     var bytes = cell_record_obj.record_bytes;
 
-    var cell_row  = this.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
-    var cell_col  = this.get_two_byte_int(bytes.slice(2, 4), byte_order);
+    var cell_row  = Static_File_Analyzer.get_two_byte_int(bytes.slice(0, 2), byte_order) + 1;
+    var cell_col  = Static_File_Analyzer.get_two_byte_int(bytes.slice(2, 4), byte_order);
     var cell_ref  = this.convert_xls_column(cell_col) + cell_row;
 
-    var cell_ixfe = this.get_two_byte_int(bytes.slice(4, 6), byte_order);
+    var cell_ixfe = Static_File_Analyzer.get_two_byte_int(bytes.slice(4, 6), byte_order);
     var rk_number_bits = Static_File_Analyzer.get_binary_array(bytes.slice(6, 10), byte_order);
     var cell_value = 0;
     var rk_bits = this.get_bin_from_int(bytes[6]);
@@ -7968,8 +8006,8 @@ class Static_File_Analyzer {
 
     for (var i=512; i<file_bytes.length; i++) {
       if (file_bytes[i] == 0xD7 && file_bytes[i+1] == 0x00 && file_bytes[i+3] == 0x00) {
-        var record_size1 = this.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
-        var first_row_record = this.get_four_byte_int(file_bytes.slice(i+4, i+8), byte_order);
+        var record_size1 = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+2,i+4), byte_order);
+        var first_row_record = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(i+4, i+8), byte_order);
         var cell_record_pos = i - first_row_record; // DEBUG - double check this
         //i += (record_size>0) ? record_size1 -1 : 1;
 
@@ -7992,7 +8030,7 @@ class Static_File_Analyzer {
             var record_type_bytes = file_bytes.slice(cell_record_pos, cell_record_pos+2);
             cell_record_pos += 2;
 
-            var record_size = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order);
+            var record_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order);
             cell_record_pos += 2;
 
             var record_bytes = file_bytes.slice(cell_record_pos, cell_record_pos+record_size);
@@ -8007,8 +8045,8 @@ class Static_File_Analyzer {
             } else if (record_type_bytes[0] == 0xFD && record_type_bytes[1] == 0x00) {
               // Label Set - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3f52609d-816f-44a7-aad1-e0fe2abccebd
               record_type_str = "LabelSst";
-              cell_row = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
-              cell_col = this.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
+              cell_row = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+              cell_col = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
               cell_record_pos += record_size;
             } else if (record_type_bytes[0] == 0x07 && record_type_bytes[1] == 0x02) {
               // String - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/504b6cfc-d57b-4296-92f4-ceefc0a2ca9b
@@ -8018,15 +8056,15 @@ class Static_File_Analyzer {
             } else if (record_type_bytes[0] == 0x06 && record_type_bytes[1] == 0x00) {
               // Cell Formula - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8e3c6978-6c9f-4915-a826-07613204b244
               record_type_str = "Formula";
-              cell_row = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
-              cell_col = this.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
+              cell_row = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+              cell_col = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
               cell_record_pos += record_size;
             } else if (record_type_bytes[0] == 0x7E && record_type_bytes[1] == 0x02) {
               // RK - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/656e0e79-8b9d-4854-803f-23ec62080678
               // The RK record specifies the numeric data contained in a single cell.
               record_type_str = "RK";
-              cell_row = this.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
-              cell_col = this.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
+              cell_row = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(cell_record_pos, cell_record_pos+2), byte_order) + 1;
+              cell_col = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(cell_record_pos+2, cell_record_pos+4), byte_order);
               cell_record_pos += record_size;
             } else if (record_type_bytes[0] == 0xBE && record_type_bytes[1] == 0x00) {
               // MulBlank - https://docs.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a9ab7fa1-183a-487c-a506-6b4a19e770be
@@ -8035,7 +8073,7 @@ class Static_File_Analyzer {
               cell_record_pos += record_size;
             } else {
               // Unknown record
-              var u_rec_int = this.get_two_byte_int([record_type_bytes[0],record_type_bytes[1]], byte_order);
+              var u_rec_int = Static_File_Analyzer.get_two_byte_int([record_type_bytes[0],record_type_bytes[1]], byte_order);
               //console.log("Unknown record: " + u_rec_int + " - " + record_type_bytes[0] + " " + record_type_bytes[1]);
               cell_record_pos += record_size;
             }
@@ -10303,6 +10341,7 @@ class Tiff_Tools {
 
   /**
    * Creates the header and tags for a TIFF file given the specific options.
+   * This is used to extract TIFF images from a PDF file.
    *
    * @param {array}  options - Options used to creat header.
    * @return {array} An array with int values of 0 to 255, representing the bit values of the created TIFF header.
@@ -10395,6 +10434,35 @@ class Tiff_Tools {
     tiff_file_bytes = tiff_file_bytes.concat([0,0,0,0]);
 
     return tiff_file_bytes;
+  }
+
+  /**
+   * Parses data from an Image File Directory (IDF)
+   *
+   * @param {array}   file_bytes - Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {integer} ifd_offset - The offset / start of the IFD
+   * @param {String}  byte_order - the Byte order of the file: LITTLE_ENDIAN or BIG_ENDIAN.
+   * @return {object} The parsed IFD
+   *
+   * @see https://dev.exiv2.org/projects/exiv2/wiki/The_Metadata_in_TIFF_files
+   */
+  static parse_ifd(file_bytes, ifd_offset, byte_order) {
+    let ifd_object = {
+      'field_type': "UNKNOWN"
+    };
+
+    let ifd_types = ["UNKNOWN","BYTE","ASCII","SHORT","LONG","RATIONAL","SBYTE","UNDEFINED","SSHORT","SLONG","SRATIONAL","FLOAT","DOUBLE"];
+
+    let id_tag = file_bytes[ifd_offset];
+    let field_type_val = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(1,3), byte_order);
+    let value_count = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(4,8), byte_order);
+    let value_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(9,12), byte_order);
+
+    if (field_type_val < ifd_types.length) {
+      ifd_object.field_type = ifd_types[field_type_val];
+    }
+
+    return ifd_object;
   }
 }
 
