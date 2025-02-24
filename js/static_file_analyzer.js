@@ -758,19 +758,58 @@ class Static_File_Analyzer {
     file_info.file_format_ver = "JFIF Version " + jfif_ver_str;
 
     // Check for RDF Metadata
-    if (file_text == "") {
-      //let u16_file_bytes = new Uint8Array(file_bytes);
-      //let text_decoder = new TextDecoder('utf-8');
-      file_text = Static_File_Analyzer.get_ascii(file_bytes);
-    }
-
+    if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
     let metadata = this.extract_rdf_metadata(file_bytes, file_text);
+
     if (metadata.found) {
       file_info.metadata.title = metadata.title;
       file_info.metadata.description = metadata.description;
       file_info.metadata.author = metadata.author;
       file_info.metadata.creation_date = metadata.creation_date;
       file_info.metadata.creation_application = metadata.creation_application;
+    }
+
+    var exif_header = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00];
+    var byte_order = "LITTLE_ENDIAN";
+
+    // Find EXIF data
+    for (let i=2; i<file_bytes.length; i+=2) {
+      let byte_code = file_bytes.slice(i, i+2);
+
+      // Look for Application Segment 1
+      if (byte_code[0] == 0xFF && byte_code[1] == 0xE1) {
+        let data_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+2, i+4));
+        let data_bytes = file_bytes.slice(i+4, i+(data_size-1));
+        let header_check_bytes = data_bytes.slice(0, 6);
+        if (Static_File_Analyzer.array_equals(header_check_bytes, [0x45, 0x78, 0x69, 0x66, 0x00, 0x00])) {
+          // Header check passed.
+          let tiff_data = data_bytes.slice(6);
+          let tiff_header_check_bytes = data_bytes.slice(6, 14);
+
+          // Get Byte Order
+          if (tiff_header_check_bytes[0] == 0x49) {
+            byte_order = "LITTLE_ENDIAN";
+          } else if (tiff_header_check_bytes[0] == 0x4d) {
+            byte_order = "BIG_ENDIAN";
+          }
+
+          let first_ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(16, 20), byte_order) + 12;
+
+          let exif_tags = Tiff_Tools.read_exif_tags(file_bytes, first_ifd_offset, byte_order);
+
+          if (tags.hasOwnProperty("ExifIFDPointer")) {
+
+          }
+
+          let debug = "234";
+        }
+      }
+
+      // Look for Application Segment 2
+      if (byte_code[0] == 0xFF && byte_code[1] == 0xE2) {
+        let data_size = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(i+2, i+3));
+        let data_bytes = file_bytes.slice(i+4, i+(data_size-2));
+      }
     }
 
     return file_info;
@@ -2281,7 +2320,7 @@ class Static_File_Analyzer {
     // Get Byte Order
     if (file_bytes[0] == 0x49) {
       byte_order = "LITTLE_ENDIAN";
-    } else if (file_bytes[0] == 0x49) {
+    } else if (file_bytes[0] == 0x4d) {
       byte_order = "BIG_ENDIAN";
     } else {
       // Error / Unknown
@@ -10339,6 +10378,42 @@ class RAR_Parser {
 
 class Tiff_Tools {
 
+  static tiff_tags = {
+      0x0100 : "ImageWidth",
+      0x0101 : "ImageHeight",
+      0x8769 : "ExifIFDPointer",
+      0x8825 : "GPSInfoIFDPointer",
+      0xA005 : "InteroperabilityIFDPointer",
+      0x0102 : "BitsPerSample",
+      0x0103 : "Compression",
+      0x0106 : "PhotometricInterpretation",
+      0x0112 : "Orientation",
+      0x0115 : "SamplesPerPixel",
+      0x011C : "PlanarConfiguration",
+      0x0212 : "YCbCrSubSampling",
+      0x0213 : "YCbCrPositioning",
+      0x011A : "XResolution",
+      0x011B : "YResolution",
+      0x0128 : "ResolutionUnit",
+      0x0111 : "StripOffsets",
+      0x0116 : "RowsPerStrip",
+      0x0117 : "StripByteCounts",
+      0x0201 : "JPEGInterchangeFormat",
+      0x0202 : "JPEGInterchangeFormatLength",
+      0x012D : "TransferFunction",
+      0x013E : "WhitePoint",
+      0x013F : "PrimaryChromaticities",
+      0x0211 : "YCbCrCoefficients",
+      0x0214 : "ReferenceBlackWhite",
+      0x0132 : "DateTime",
+      0x010E : "ImageDescription",
+      0x010F : "Make",
+      0x0110 : "Model",
+      0x0131 : "Software",
+      0x013B : "Artist",
+      0x8298 : "Copyright"
+  };
+
   /**
    * Creates the header and tags for a TIFF file given the specific options.
    * This is used to extract TIFF images from a PDF file.
@@ -10448,21 +10523,154 @@ class Tiff_Tools {
    */
   static parse_ifd(file_bytes, ifd_offset, byte_order) {
     let ifd_object = {
-      'field_type': "UNKNOWN"
+      'field_type':   "UNKNOWN",
+      'value_count':  0,
+      'value_offset': 0
     };
 
     let ifd_types = ["UNKNOWN","BYTE","ASCII","SHORT","LONG","RATIONAL","SBYTE","UNDEFINED","SSHORT","SLONG","SRATIONAL","FLOAT","DOUBLE"];
 
-    let id_tag = file_bytes[ifd_offset];
-    let field_type_val = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(1,3), byte_order);
-    let value_count = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(4,8), byte_order);
-    let value_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(9,12), byte_order);
-
-    if (field_type_val < ifd_types.length) {
-      ifd_object.field_type = ifd_types[field_type_val];
-    }
+    let ifd_bytes = file_bytes.slice(ifd_offset);
 
     return ifd_object;
+  }
+
+  /**
+   * Parses EXIF data in the image file.
+   *
+   * @param {array}   file_bytes - Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {integer} ifd_offset - The offset / start of the IFD
+   * @param {String}  byte_order - the Byte order of the file: LITTLE_ENDIAN or BIG_ENDIAN.
+   * @return {object} The parsed IFD
+   *
+   * @see https://dev.exiv2.org/projects/exiv2/wiki/The_Metadata_in_TIFF_files
+   */
+  static read_exif_tags(file_bytes, ifd_offset, byte_order) {
+    let tags = {};
+    let entries = file_bytes[ifd_offset];
+
+    for (let i=0; i<entries; i++) {
+      let entry_offset = ifd_offset + i*12 + 2;
+      let tag_int = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(entry_offset, entry_offset+2), byte_order);
+      let tag_name = Tiff_Tools.tiff_tags[tag_int];
+      let tag_value = Tiff_Tools.read_tag_value(file_bytes, entry_offset, 12, byte_order);
+
+      tags[tag_name] = tag_value;
+    }
+
+    return tags;
+  }
+
+  /**
+   * Parses tag value
+   *
+   * @param {array}   file_bytes - Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {integer} entry_offset - The offset / start of the IFD
+   * @param {String}  byte_order - the Byte order of the file: LITTLE_ENDIAN or BIG_ENDIAN.
+   * @return {object} The parsed IFD
+  */
+  static read_tag_value(file_bytes, entry_offset, tiff_start, byte_order) {
+    let type = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(entry_offset+2, entry_offset+4), byte_order);
+    let value_count = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(entry_offset+4, entry_offset+8), byte_order);
+    let value_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(entry_offset+8, entry_offset+12), byte_order) + tiff_start;
+
+    switch (type) {
+      case 1: // Unknown
+      case 7: // UNDEFINED
+        if (value_count == 1) {
+          return file_bytes[entry_offset+8];
+        } else {
+          let val_offset = value_count > 4 ? value_offset : (entry_offset + 8);
+          let values = [];
+
+          for (let i=0; i<value_count; i++) {
+            values[i] = file_bytes[val_offset+1];
+          }
+
+          return values;
+        }
+      case 2: // ASCII
+        let val_offset = value_count > 4 ? value_offset : (entry_offset + 8);
+        let ascii_bytes = file_bytes.slice(val_offset, val_offset + value_count-1);
+        let ascii_text = Static_File_Analyzer.get_ascii(ascii_bytes);
+        return ascii_text;
+      case 3: // SHORT - 16 bit
+        if (value_count == 1) {
+          return Static_File_Analyzer.get_two_byte_int(file_bytes.slice(entry_offset+8, entry_offset+10), byte_order);
+        } else {
+          let val_offset = value_count > 2 ? value_offset : (entry_offset + 8);
+          let values = [];
+
+          for (let i=0; i<value_count; i++) {
+            values[i] = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(val_offset+(2*i), val_offset+(2*i)+2), byte_order);
+          }
+
+          return values;
+        }
+      case 4: // LONG - 32 bit
+        if (value_count == 1) {
+          return Static_File_Analyzer.get_four_byte_int(file_bytes.slice(entry_offset+8, entry_offset+12), byte_order);
+        } else {
+          let val_offset = value_count > 2 ? value_offset : (entry_offset + 8);
+          let values = [];
+
+          for (let i=0; i<value_count; i++) {
+            values[i] = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(val_offset+(4*i), val_offset+(4*i)+4), byte_order);
+          }
+
+          return values;
+        }
+      case 5: // RATIONAL - Two 32 bit values
+        if (value_count == 1) {
+          let numerator = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(value_offset, value_offset+4), byte_order);
+          let denominator = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(value_offset+4, value_offset+8), byte_order);
+
+          if (denominator > 0) {
+            return new Number(numerator / denominator)
+          } else {
+            return 0;
+          }
+        } else {
+          let values = [];
+          for (let i=0; i<value_count; i++) {
+            let numerator = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(value_offset+(8*i), value_offset+(8*i)+4), byte_order);
+            let denominator = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(value_offset+(8*i)+4, value_offset+(8*i)+8), byte_order);
+
+            if (denominator > 0) {
+              return new Number(numerator / denominator)
+            } else {
+              return 0;
+            }
+          }
+        }
+      case 6: // SBYTE
+        if (value_count == 1) {
+          return file_bytes[entry_offset+8];
+        } else {
+
+        }
+        break;
+      case 8: // SSHORT
+        break;
+      case 9: // SLONG - 32 bit - Signed
+        if (value_count == 1) {
+          return file_bytes[entry_offset+8];
+        } else {
+
+        }
+        break;
+      case 10: // SRATIONAL - Two SLONG - first val is numerator, second val is denominator
+        if (value_count == 1) {
+          return file_bytes[entry_offset+8];
+        } else {
+
+        }
+        break;
+      case 11: // FLOAT
+        break;
+      case 12: // DOUBLE
+        break;
+    }
   }
 }
 
