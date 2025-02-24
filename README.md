@@ -20,7 +20,7 @@ See the table below for a list of supported file types and types of data extract
 | GZ             | X            | X               |                 |          |                               |
 |[ISO - ISO 9660](https://github.com/alecdhuse/Lantern-Shark/wiki/ISO-9660)| X | X | X | X |                   |
 |[ISO - UDF](https://github.com/alecdhuse/Lantern-Shark/wiki/Universal-Disk-Format)| X | X | X | X |           |
-| JPEG           | X            | X               |                 |          |                               |
+| JPEG           | X            | X               |                 | X        |                               |
 | LNK            | X            | X               |                 | X        | X                             |
 | MSG            | X            | X               | X               | X        |                               |        
 | PDF            | X            | X               | Partial         | X        | X                             |    
