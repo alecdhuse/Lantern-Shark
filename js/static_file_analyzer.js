@@ -785,6 +785,7 @@ class Static_File_Analyzer {
           // Header check passed.
           let tiff_data = data_bytes.slice(6);
           let tiff_header_check_bytes = data_bytes.slice(6, 14);
+          let tiff_start = i+10;
 
           // Get Byte Order
           if (tiff_header_check_bytes[0] == 0x49) {
@@ -793,15 +794,68 @@ class Static_File_Analyzer {
             byte_order = "BIG_ENDIAN";
           }
 
-          let first_ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(16, 20), byte_order) + 12;
+          let first_ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(tiff_start+4, tiff_start+8), byte_order) + tiff_start;
 
-          let exif_tags = Tiff_Tools.read_exif_tags(file_bytes, first_ifd_offset, byte_order);
+          let tiff_tags = Tiff_Tools.read_tiff_tags(file_bytes, first_ifd_offset, tiff_start, byte_order);
+          let exif_data = {};
+          let gps_data = {};
 
-          if (tags.hasOwnProperty("ExifIFDPointer")) {
-
+          if (tiff_tags.hasOwnProperty("ExifIFDPointer")) {
+            exif_data = Tiff_Tools.read_tiff_tags(file_bytes, tiff_start+tiff_tags.ExifIFDPointer, tiff_start, byte_order);
           }
 
-          let debug = "234";
+          if (tiff_tags.hasOwnProperty("GPSInfoIFDPointer")) {
+            gps_data = Tiff_Tools.read_tiff_tags(file_bytes, tiff_start+tiff_tags.GPSInfoIFDPointer, tiff_start, byte_order);
+
+            if (gps_data.hasOwnProperty("GPSLatitude")) {
+              gps_data.GPSLatitude = gps_data.GPSLatitude[0] + (gps_data.GPSLatitude[1]/60) + (gps_data.GPSLatitude[2]/3600);
+              if (gps_data.hasOwnProperty("GPSLatitudeRef")) {
+                if (gps_data.GPSLatitudeRef.toUpperCase() == "S") gps_data.GPSLatitude *= -1;
+              }
+            }
+
+            if (gps_data.hasOwnProperty("GPSLongitude")) {
+              gps_data.GPSLongitude = gps_data.GPSLongitude[0] + (gps_data.GPSLongitude[1]/60) + (gps_data.GPSLongitude[2]/3600);
+              if (gps_data.hasOwnProperty("GPSLongitudeRef")) {
+                if (gps_data.GPSLongitudeRef.toUpperCase() == "W") gps_data.GPSLongitude *= -1;
+              }
+            }
+          }
+
+          let parsed_tags = {
+            'tiff': tiff_tags,
+            'exif': exif_data,
+            'gps':  gps_data
+          }
+
+          file_info.parsed = JSON.stringify(parsed_tags,null,2);
+
+          // Extract meta data
+          if (tiff_tags.hasOwnProperty("Software")) {
+            file_info.metadata.creation_application = tiff_tags['Software'];
+          } else {
+            if (tiff_tags.hasOwnProperty("Make")) {
+              file_info.metadata.creation_application = tiff_tags['Make'];
+
+              if (tiff_tags.hasOwnProperty("Model")) {
+                file_info.metadata.creation_application += " " + tiff_tags['Model'];
+              }
+            } else {
+              if (tiff_tags.hasOwnProperty("Model")) {
+                file_info.metadata.creation_application = tiff_tags['Model'];
+              }
+            }
+          }
+
+          if (tiff_tags.hasOwnProperty("DateTime")) {
+            file_info.metadata.creation_date = tiff_tags['DateTime'];
+            file_info.metadata.last_modified_date = tiff_tags['DateTime'];
+          }
+
+          if (tiff_tags.hasOwnProperty("ImageDescription")) {
+            file_info.metadata.description = tiff_tags['ImageDescription'];
+          }
+
         }
       }
 
@@ -10377,10 +10431,59 @@ class RAR_Parser {
 }
 
 class Tiff_Tools {
-
+  // see: https://exiftool.org/TagNames/EXIF.html
   static tiff_tags = {
+      0x0000 : "GPSVersionID",
+      0x0001 : "GPSLatitudeRef",
+      0x0002 : "GPSLatitude",
+      0x0003 : "GPSLongitudeRef",
+      0x0004 : "GPSLongitude",
+      0x0005 : "GPSAltitudeRef",
+      0x0006 : "GPSAltitude",
+      0x0007 : "GPSTimeStamp",
+      0x0008 : "GPSSatellites",
+      0x0009 : "GPSStatus",
+      0x000A : "GPSMeasureMode",
+      0x000B : "GPSDOP",
+      0x000C : "GPSSpeedRef",
+      0x000D : "GPSSpeed",
+      0x000E : "GPSTrackRef",
+      0x000F : "GPSTrack",
+      0x0010 : "GPSImgDirectionRef",
+      0x0011 : "GPSImgDirection",
+      0x0012 : "GPSMapDatum",
+      0x0013 : "GPSDestLatitudeRef",
+      0x0014 : "GPSDestLatitude",
+      0x0015 : "GPSDestLongitudeRef",
+      0x0016 : "GPSDestLongitude",
+      0x0017 : "GPSDestBearingRef",
+      0x0018 : "GPSDestBearing",
+      0x0019 : "GPSDestDistanceRef",
+      0x001A : "GPSDestDistance",
+      0x001B : "GPSProcessingMethod",
+      0x001C : "GPSAreaInformation",
+      0x001D : "GPSDateStamp",
+      0x001E : "GPSDifferential",
       0x0100 : "ImageWidth",
       0x0101 : "ImageHeight",
+      0x0102: "BitsPerSample",
+      0x0103: "Compression",
+      0x0106: "PhotometricInterpretation",
+      0x0111: "StripOffsets",
+      0x0112: "Orientation",
+      0x0115: "SamplesPerPixel",
+      0x0116: "RowsPerStrip",
+      0x0117: "StripByteCounts",
+      0x011A: "XResolution",
+      0x011B: "YResolution",
+      0x011C: "PlanarConfiguration",
+      0x0128: "ResolutionUnit",
+      0x0201: "JpegIFOffset",
+      0x0202: "JpegIFByteCount",
+      0x0211: "YCbCrCoefficients",
+      0x0212: "YCbCrSubSampling",
+      0x0213: "YCbCrPositioning",
+      0x0214: "ReferenceBlackWhite",
       0x8769 : "ExifIFDPointer",
       0x8825 : "GPSInfoIFDPointer",
       0xA005 : "InteroperabilityIFDPointer",
@@ -10411,7 +10514,78 @@ class Tiff_Tools {
       0x0110 : "Model",
       0x0131 : "Software",
       0x013B : "Artist",
-      0x8298 : "Copyright"
+      0x8298 : "Copyright",
+      0x829A : "ExposureTime",
+      0x829D : "FNumber",
+      0x8822 : "ExposureProgram",
+      0x8824 : "SpectralSensitivity",
+      0x8827 : "ISOSpeedRatings",
+      0x8828 : "OECF",
+      0x9000 : "ExifVersion",
+      0x9003 : "DateTimeOriginal",
+      0x9004 : "DateTimeDigitized",
+      0x9101 : "ComponentsConfiguration",
+      0x9102 : "CompressedBitsPerPixel",
+      0x9201 : "ShutterSpeedValue",
+      0x9202 : "ApertureValue",
+      0x9203 : "BrightnessValue",
+      0x9204 : "ExposureBias",
+      0x9205 : "MaxApertureValue",
+      0x9206 : "SubjectDistance",
+      0x9207 : "MeteringMode",
+      0x9208 : "LightSource",
+      0x9209 : "Flash",
+      0x9211 : "ImageNumber",
+      0x9212 : "SecurityClassification",
+      0x9214 : "SubjectArea",
+      0x920A : "FocalLength",
+      0x927C : "MakerNote",
+      0x9286 : "UserComment",
+      0x9290 : "SubsecTime",
+      0x9291 : "SubsecTimeOriginal",
+      0x9292 : "SubsecTimeDigitized",
+      0x935c : "ImageSourceData",
+      0x9400 : "AmbientTemperature",
+      0x9401 : "Humidity",
+      0x9402 : "Pressure",
+      0x9403 : "WaterDepth",
+      0x9404 : "Acceleration",
+      0x9405 : "CameraElevationAngle",
+      0x9C9D : "XPTitle",
+      0x9C9D : "XPAuthor",
+      0x9C9E : "XPKeywords",
+      0x9C9F : "XPSubject",
+      0xA000 : "FlashpixVersion",
+      0xA001 : "ColorSpace",
+      0xA002 : "PixelXDimension",
+      0xA003 : "PixelYDimension",
+      0xA004 : "RelatedSoundFile",
+      0xA005 : "InteroperabilityIFDPointer",
+      0xA20B : "FlashEnergy",
+      0xA20C : "SpatialFrequencyResponse",
+      0xA20E : "FocalPlaneXResolution",
+      0xA20F : "FocalPlaneYResolution",
+      0xA210 : "FocalPlaneResolutionUnit",
+      0xA214 : "SubjectLocation",
+      0xA215 : "ExposureIndex",
+      0xA217 : "SensingMethod",
+      0xA300 : "FileSource",
+      0xA301 : "SceneType",
+      0xA302 : "CFAPattern",
+      0xA401 : "CustomRendered",
+      0xA402 : "ExposureMode",
+      0xA403 : "WhiteBalance",
+      0xA404 : "DigitalZoomRation",
+      0xA405 : "FocalLengthIn35mmFilm",
+      0xA406 : "SceneCaptureType",
+      0xA407 : "GainControl",
+      0xA408 : "Contrast",
+      0xA409 : "Saturation",
+      0xA40A : "Sharpness",
+      0xA40B : "DeviceSettingDescription",
+      0xA40C : "SubjectDistanceRange",
+      0xA420 : "ImageUniqueID",
+      0xC4A5 : "PrintIM"
   };
 
   /**
@@ -10540,22 +10714,40 @@ class Tiff_Tools {
    *
    * @param {array}   file_bytes - Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @param {integer} ifd_offset - The offset / start of the IFD
+   * @param {integer} tiff_start - The start of the TIFF data.
    * @param {String}  byte_order - the Byte order of the file: LITTLE_ENDIAN or BIG_ENDIAN.
    * @return {object} The parsed IFD
    *
    * @see https://dev.exiv2.org/projects/exiv2/wiki/The_Metadata_in_TIFF_files
    */
-  static read_exif_tags(file_bytes, ifd_offset, byte_order) {
+  static read_tiff_tags(file_bytes, ifd_offset, tiff_start, byte_order) {
     let tags = {};
     let entries = file_bytes[ifd_offset];
+    let tag_name;
 
     for (let i=0; i<entries; i++) {
       let entry_offset = ifd_offset + i*12 + 2;
       let tag_int = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(entry_offset, entry_offset+2), byte_order);
-      let tag_name = Tiff_Tools.tiff_tags[tag_int];
-      let tag_value = Tiff_Tools.read_tag_value(file_bytes, entry_offset, 12, byte_order);
 
-      tags[tag_name] = tag_value;
+      if (Tiff_Tools.tiff_tags.hasOwnProperty(tag_int)) {
+        tag_name = Tiff_Tools.tiff_tags[tag_int];
+      } else {
+        tag_name = tag_int;
+      }
+
+      let tag_value = Tiff_Tools.read_tag_value(file_bytes, entry_offset, tiff_start, byte_order);
+
+      let string_convert_tags_ascii = ["PrintIM"];
+      let string_convert_tags_unicode = ["XPAuthor"];
+
+      if (string_convert_tags_ascii.includes(tag_name)) {
+        tags[tag_name] = Static_File_Analyzer.get_ascii(tag_value);
+      } else if (string_convert_tags_unicode.includes(tag_name)) {
+        tags[tag_name] = Static_File_Analyzer.get_string_from_array(tag_value.filter(i => i !== 0));
+      } else {
+        tags[tag_name] = tag_value;
+      }
+
     }
 
     return tags;
@@ -10566,6 +10758,7 @@ class Tiff_Tools {
    *
    * @param {array}   file_bytes - Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @param {integer} entry_offset - The offset / start of the IFD
+   * @param {integer} tiff_start - The start of the TIFF data.
    * @param {String}  byte_order - the Byte order of the file: LITTLE_ENDIAN or BIG_ENDIAN.
    * @return {object} The parsed IFD
   */
@@ -10584,7 +10777,9 @@ class Tiff_Tools {
           let values = [];
 
           for (let i=0; i<value_count; i++) {
-            values[i] = file_bytes[val_offset+1];
+            if (val_offset+i < file_bytes.length) {
+              values[i] = file_bytes[val_offset+i];
+            }
           }
 
           return values;
@@ -10626,22 +10821,22 @@ class Tiff_Tools {
           let denominator = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(value_offset+4, value_offset+8), byte_order);
 
           if (denominator > 0) {
-            return new Number(numerator / denominator)
+            return (numerator / denominator)
           } else {
             return 0;
           }
         } else {
-          let values = [];
+          let values = Array(value_count).fill(0);
           for (let i=0; i<value_count; i++) {
             let numerator = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(value_offset+(8*i), value_offset+(8*i)+4), byte_order);
             let denominator = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(value_offset+(8*i)+4, value_offset+(8*i)+8), byte_order);
 
             if (denominator > 0) {
-              return new Number(numerator / denominator)
-            } else {
-              return 0;
+              values[i] = (numerator / denominator);
             }
           }
+
+          return values;
         }
       case 6: // SBYTE
         if (value_count == 1) {
