@@ -213,7 +213,7 @@ function display_file_summary(file_analyzer_results) {
   $("#summary_detected_script").html(escape_string(file_analyzer_results.scripts.script_type));
   $("#summary_metadata_title").html(escape_string(file_analyzer_results.metadata.title));
   $("#summary_metadata_author").html(escape_string(file_analyzer_results.metadata.author));
-  $("#summary_metadata_description").html((file_analyzer_results.metadata.description));
+  $("#summary_metadata_description").html(escape_string(file_analyzer_results.metadata.description));
   $("#summary_metadata_creation_application").html(escape_string(file_analyzer_results.metadata.creation_application));
   $("#summary_metadata_creation_os").html(escape_string(file_analyzer_results.metadata.creation_os));
   $("#summary_metadata_creation_date").html(escape_string(file_analyzer_results.metadata.creation_date));
