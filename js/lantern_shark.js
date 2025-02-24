@@ -210,16 +210,16 @@ function display_file_summary(file_analyzer_results) {
     file_password = null;
   }
 
-  $("#summary_detected_script").html(file_analyzer_results.scripts.script_type);
-  $("#summary_metadata_title").html(file_analyzer_results.metadata.title);
-  $("#summary_metadata_author").html(file_analyzer_results.metadata.author);
-  $("#summary_metadata_description").html(file_analyzer_results.metadata.description);
-  $("#summary_metadata_creation_application").html(file_analyzer_results.metadata.creation_application);
-  $("#summary_metadata_creation_os").html(file_analyzer_results.metadata.creation_os);
-  $("#summary_metadata_creation_date").html(file_analyzer_results.metadata.creation_date);
-  $("#summary_metadata_last_modified_date").html(file_analyzer_results.metadata.last_modified_date);
-  $("#summary_metadata_last_saved_location").html(file_analyzer_results.metadata.last_saved_location);
-  $("#summary_metadata_sha256").html(file_analyzer_results.file_hashes.sha256);
+  $("#summary_detected_script").html(escape_string(file_analyzer_results.scripts.script_type));
+  $("#summary_metadata_title").html(escape_string(file_analyzer_results.metadata.title));
+  $("#summary_metadata_author").html(escape_string(file_analyzer_results.metadata.author));
+  $("#summary_metadata_description").html((file_analyzer_results.metadata.description));
+  $("#summary_metadata_creation_application").html(escape_string(file_analyzer_results.metadata.creation_application));
+  $("#summary_metadata_creation_os").html(escape_string(file_analyzer_results.metadata.creation_os));
+  $("#summary_metadata_creation_date").html(escape_string(file_analyzer_results.metadata.creation_date));
+  $("#summary_metadata_last_modified_date").html(escape_string(file_analyzer_results.metadata.last_modified_date));
+  $("#summary_metadata_last_saved_location").html(escape_string(file_analyzer_results.metadata.last_saved_location));
+  $("#summary_metadata_sha256").html(escape_string(file_analyzer_results.file_hashes.sha256));
 
   $("#script_code").val(file_analyzer_results.scripts.extracted_script);
   $("#extracted_iocs").val(file_analyzer_results.iocs.join("\n"));
@@ -242,6 +242,22 @@ function enable_save_file_toolbar_button(to_enable) {
     $("#toolbar_save_svg").css("fill", "#999");
     $("#toolbar_save_caption").css("color", "#999");
   }
+}
+
+/**
+ * Returns a string that is HTML escaped.
+ *
+ * @param {String}  input_string The string to escape.
+ * @return {String} The escaped stirng.
+ */
+function escape_string(input_string) {
+  let return_string = input_string;
+
+  return_string = return_string.replaceAll("&", "&amp;");
+  return_string = return_string.replaceAll("<", "&lt;");
+  return_string = return_string.replaceAll(">", "&gt;");
+
+  return return_string;
 }
 
 /**
