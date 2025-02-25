@@ -1875,23 +1875,27 @@ class Static_File_Analyzer {
     }
 
     // Look for embedded scripts
-    var script_regex = /\/(S|JavaScript|JS)\s*\(/gmi;
+    var script_regex = /\/(S|JavaScript|JS)\s*\([^\uFFF0-\uFFFF]/gmi;
     var script_matches = script_regex.exec(file_text);
 
     while (script_matches != null) {
       var script_start = script_matches.index + script_matches[0].length;
+      var next_object_start = file_text.indexOf("<<", script_start);
       var script_end = file_text.indexOf(">>", script_start);
-      var script_text = file_text.substring(script_start, script_end).trim();
-      var script_type = "unknown";
 
-      if (script_text.slice(-1) == ")") {
-        script_text = script_text.slice(0,-1);
-      }
+      if (next_object_start < 0 || next_object_start > script_end) {
+        var script_text = file_text.substring(script_start, script_end).trim();
+        var script_type = "unknown";
 
-      this.add_extracted_script("JavaScript", script_text, file_info);
+        if (script_text.slice(-1) == ")") {
+          script_text = script_text.slice(0,-1);
+        }
 
-      if (script_matches[1].toLowerCase() == "js" || script_matches[1].toLowerCase() == "javascript") {
-        file_info.scripts.script_type = "JavaScript";
+        this.add_extracted_script("JavaScript", script_text, file_info);
+
+        if (script_matches[1].toLowerCase() == "js" || script_matches[1].toLowerCase() == "javascript") {
+          file_info.scripts.script_type = "JavaScript";
+        }
       }
 
       script_matches = script_regex.exec(file_text);
@@ -10181,6 +10185,11 @@ class PDF_Parser {
       let object_dictionary = {};
       let object_start_index = match.index + match[0].length;
       let object_end_index = file_text.indexOf("endobj", match.index) - 1;
+
+      if (object_end_index < 0) {
+        object_end_index = file_text.indexOf(">>", match.index);
+      }
+
       let object_text = file_text.substring(object_start_index, object_end_index) + "\n";
       let object_bytes = file_bytes.slice(object_start_index, object_end_index);
 
