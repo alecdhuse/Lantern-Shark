@@ -10252,16 +10252,20 @@ class PDF_Parser {
 
                   object_dictionary[match2[1]] = sub_dictionary;
                 } else {
-                  // Single value
-                  let dictionary_val = match2[2].trim();
-                  dictionary_val = (dictionary_val.endsWith(">>")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
-                  dictionary_val = (dictionary_val.endsWith("\n")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
+                  let dictionary_val = "";
+
+                  if (match2[2] !== null && match2[2] !== undefined) {
+                    // Single value
+                    dictionary_val = match2[2].trim();
+                    dictionary_val = (dictionary_val.endsWith(">>")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
+                    dictionary_val = (dictionary_val.endsWith("\n")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
+                  }
 
                   object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? dictionary_val : "";
                 }
               }
             } catch(err) {
-              console.log("Error extracting PDF object dictionary (1): " + object_number + "Error: " + err);
+              console.log("Error extracting PDF object dictionary (1): " + object_number + " Error: " + err);
               break;
             }
           }
