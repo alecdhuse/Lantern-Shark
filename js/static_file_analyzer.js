@@ -10167,6 +10167,119 @@ class PDF_Parser {
   }
 
   /**
+   * Parses dictionary keys and values.
+   *
+   * @param {String}  dictionary_text - The unicode dictionary     text.
+   * @return {array}  An array containing the dictionary keys and values.
+   */
+  static async get_object_dictionary_values(dictionary_text) {
+    let object_dictionary = {};
+    let dictionary_pair_regex = /\/([^\s<\/\[]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
+    let match2;
+
+    while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
+      try {
+        if (match2[1].toLowerCase() == "f" ||
+            match2[1].toLowerCase() == "filter" ||
+            match2[1].toLowerCase() == "name" ||
+            match2[1].toLowerCase() == "s" ||
+            match2[1].toLowerCase() == "subtype" ||
+            match2[1].toLowerCase() == "type") {
+
+          // Use next key as value
+          let dict_key = match2[1];
+          let dict_val = match2[2];
+          match2 = dictionary_pair_regex.exec(dictionary_text);
+
+          if (match2 !== null && match2 !== undefined) {
+            object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
+            if (object_dictionary[dict_key].endsWith(")")) {
+              let val_index = dictionary_text.indexOf(object_dictionary[dict_key]);
+              let check = dictionary_text.substring(val_index-1, val_index);
+              object_dictionary[dict_key] = (check == "/") ? "/" + object_dictionary[dict_key] : object_dictionary[dict_key];
+            }
+          } else {
+            if (dict_val !== null && dict_val !== undefined) {
+              object_dictionary[dict_key] = dict_val;
+            } else {
+              object_dictionary[dict_key] = "";
+            }
+
+            break;
+          }
+        } else {
+          if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
+            // Sub dictionary
+            let sub_dict_start = match2.index + match2[1].length + 1;
+            let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
+            let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
+
+            let sub_dictionary = {};
+            let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
+            let match3;
+
+            while (match3 = sub_dictionary_regex.exec(match2[2])) {
+              if (match3[2] !== null && match3[2] !== undefined) {
+                if (match3[2].trim().endsWith(">>")) {
+                  sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
+                } else {
+                  sub_dictionary[match3[1]] = match3[2].trim();
+                }
+              } else {
+                sub_dictionary[match3[1]] = "";
+              }
+
+              // Check for embedded URIs
+              if (/\/URI/gmi.test(match3[1])) {
+                file_info = Static_File_Analyzer.search_for_iocs(match3[1], file_info);
+              }
+            }
+
+            object_dictionary[match2[1]] = sub_dictionary;
+          } else {
+            let dictionary_val = "";
+
+            if (match2[2] !== null && match2[2] !== undefined) {
+              dictionary_val = match2[2].trim();
+
+              let sub_array_regex = /\[([^\]]+)\]/gm;
+              let match_arr = [];
+
+              if (match_arr = sub_array_regex.exec(dictionary_val)) {
+                // Array value
+                let array_vals = [];
+                let current_array_val = "";
+                let array_val_regex = /(\<[0-9a-fA-F]+\>)/gm;
+
+                while (current_array_val = array_val_regex.exec(match_arr[1])) {
+                  array_vals.push(current_array_val[1]);
+                }
+
+                if (array_vals.length == 0) {
+                  array_vals = match_arr[1].trim().split(" ");
+                }
+
+                dictionary_val = array_vals;
+              } else {
+                // Single value
+                dictionary_val = (dictionary_val.endsWith(">>")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
+                dictionary_val = (dictionary_val.endsWith("\n")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
+              }
+            }
+
+            object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? dictionary_val : "";
+          }
+        }
+      } catch(err) {
+        console.log("Error extracting PDF object dictionary Error: " + err);
+        break;
+      }
+    }
+
+    return object_dictionary;
+  }
+
+  /**
    * Retrieves embedded object within the PDF.
    *
    * @param {Object}  file_info - The file_info object used file file parsing results.
@@ -10197,95 +10310,39 @@ class PDF_Parser {
       try {
         let cur_obj_index = 0;
         let end_obj_index = 0;
+        let dict_start_index = -1;
         let dictionary_text = "";
+
         cur_obj_index = object_text.indexOf("<<", cur_obj_index) + 2;
+        end_obj_index = object_text.indexOf(">>", cur_obj_index);
+        dict_start_index = object_text.indexOf("<<", cur_obj_index);
 
-        while (cur_obj_index >= 0 && cur_obj_index < object_text.length) {
-          end_obj_index = object_text.indexOf(">>", cur_obj_index);
-          dictionary_text = object_text.substr(cur_obj_index, end_obj_index-2);
+        if (dict_start_index > 0 && dict_start_index < end_obj_index) {
+          // Sub dictionary
 
-          if (end_obj_index > 0) {
-            cur_obj_index = end_obj_index + 2;
-          } else {
-            break;
-          }
-
-          let dictionary_pair_regex = /\/([^\s<]+)\s*(<<[^>]+>>|[^\/]*)?/gmi;
-          let match2;
-
-          while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
-            try {
-              if (match2[1].toLowerCase() == "f" ||
-                  match2[1].toLowerCase() == "filter" ||
-                  match2[1].toLowerCase() == "name" ||
-                  match2[1].toLowerCase() == "s" ||
-                  match2[1].toLowerCase() == "subtype" ||
-                  match2[1].toLowerCase() == "type") {
-
-                // Use next key as value
-                let dict_key = match2[1];
-                match2 = dictionary_pair_regex.exec(dictionary_text);
-                object_dictionary[dict_key] = (match2[1] !== null && match2[1] !== undefined) ? match2[1].trim() : "";
-                if (object_dictionary[dict_key].endsWith(")")) {
-                  let val_index = dictionary_text.indexOf(object_dictionary[dict_key]);
-                  let check = dictionary_text.substring(val_index-1, val_index);
-                  object_dictionary[dict_key] = (check == "/") ? "/" + object_dictionary[dict_key] : object_dictionary[dict_key];
-                }
-              } else {
-                if (match2[2] !== null && match2[2] !== undefined && match2[2].startsWith("<<")) {
-                  // Sub dictionary
-                  let sub_dict_start = match2.index + match2[1].length + 1;
-                  let sub_dict_end = match2.input.indexOf(">>", sub_dict_start);
-                  let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
-
-                  let sub_dictionary = {};
-                  let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
-                  let match3;
-
-                  while (match3 = sub_dictionary_regex.exec(match2[2])) {
-                    if (match3[2] !== null && match3[2] !== undefined) {
-                      if (match3[2].trim().endsWith(">>")) {
-                        sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
-                      } else {
-                        sub_dictionary[match3[1]] = match3[2].trim();
-                      }
-                    } else {
-                      sub_dictionary[match3[1]] = "";
-                    }
-
-                    // Check for embedded URIs
-                    if (/\/URI/gmi.test(match3[1])) {
-                      file_info = Static_File_Analyzer.search_for_iocs(match3[1], file_info);
-                    }
-                  }
-
-                  object_dictionary[match2[1]] = sub_dictionary;
-                } else {
-                  let dictionary_val = "";
-
-                  if (match2[2] !== null && match2[2] !== undefined) {
-                    // Single value
-                    dictionary_val = match2[2].trim();
-                    dictionary_val = (dictionary_val.endsWith(">>")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
-                    dictionary_val = (dictionary_val.endsWith("\n")) ? dictionary_val.slice(0,-2).trim() : dictionary_val;
-                  }
-
-                  object_dictionary[match2[1]] = (match2[2] !== null && match2[2] !== undefined) ? dictionary_val : "";
-                }
-              }
-            } catch(err) {
-              console.log("Error extracting PDF object dictionary (1): " + object_number + " Error: " + err);
+          // Find dictionary key
+          let sub_dictionary_key = "";
+          for (let ii=dict_start_index-1; ii>0; ii--) {
+            if (object_text.charAt(ii) != "/") {
+              sub_dictionary_key = object_text.charAt(ii) + sub_dictionary_key;
+            } else {
               break;
             }
           }
 
-          if (cur_obj_index > 0) {
-            cur_obj_index = file_text.indexOf("<<", cur_obj_index) + 2;
-          } else {
-            break;
+          if (sub_dictionary_key != "") {
+            let sub_dict_text = object_text.substring(dict_start_index+2, end_obj_index);
+            let sub_dict = await PDF_Parser.get_object_dictionary_values(sub_dict_text);
+            object_dictionary[sub_dictionary_key] = sub_dict;
+            cur_obj_index = end_obj_index + 2;
+            continue;
           }
-
         }
+
+        dictionary_text = object_text.substring(cur_obj_index, end_obj_index);
+        let parsed_object_dict = await PDF_Parser.get_object_dictionary_values(dictionary_text);
+        object_dictionary = Object.assign({}, object_dictionary, parsed_object_dict);
+
       } catch(err) {
         console.log("Error extracting PDF object dictionary (2): " + object_number + "Error: " + err);
       }
@@ -10310,34 +10367,36 @@ class PDF_Parser {
 
       // Check for compressed stream objects, often used to hide links.
       if (object_dictionary.hasOwnProperty("Type")) {
-        if (object_dictionary['Type'].toLowerCase() == "objstm") {
-          // Stream object, it might contain a URI / URL
-          // REF: https://blog.didierstevens.com/2019/03/07/analyzing-a-phishing-pdf-with-objstm/
+        if (object_dictionary.hasOwnProperty("Filter")) {
           if (object_dictionary['Filter'].toLowerCase() == "flatedecode") {
-            if (object_dictionary['Filter'].toLowerCase() == "flatedecode") {
-              // We need to use the pako library to decode the ZLib stream.
-              // Check to see if the pako library is available.
-              if (pako !== null && pako !== undefined) {
-                try {
-                  if (object_dictionary.hasOwnProperty("Length")) {
-                    let byte_len = parseInt(object_dictionary['Length']);
-                    let stream_bytesU8 = [];
-                    stream_bytesU8 = new Uint8Array(stream_bytes);
+            // We need to use the pako library to decode the ZLib stream.
+            // Check to see if the pako library is available.
+            if (pako !== null && pako !== undefined) {
+              try {
+                if (object_dictionary.hasOwnProperty("Length")) {
+                  let byte_len = parseInt(object_dictionary['Length']);
+                  let stream_bytesU8 = [];
+                  stream_bytesU8 = new Uint8Array(stream_bytes);
 
-                    let deflate_bytes = await pako.inflate(stream_bytesU8);
-                    let stream_type = Static_File_Analyzer.is_valid_file(deflate_bytes);
+                  let deflate_bytes = await pako.inflate(stream_bytesU8);
+                  let stream_type = Static_File_Analyzer.is_valid_file(deflate_bytes);
 
-                    let decoder = new TextDecoder("utf-8");
-                    stream_text = decoder.decode(deflate_bytes);
-                    console.log(stream_text); // DEBUG
+                  let decoder = new TextDecoder("utf-8");
+                  stream_text = decoder.decode(deflate_bytes);
+                  //console.log(stream_text); // DEBUG
+
+                  if (object_dictionary['Type'].toLowerCase() == "objstm") {
+                    // Stream object, it might contain a URI / URL
+                    // REF: https://blog.didierstevens.com/2019/03/07/analyzing-a-phishing-pdf-with-objstm/
+
                     // Check for embedded URIs
                     if (/\/URI/gmi.test(stream_text)) {
                       file_info = Static_File_Analyzer.search_for_iocs(stream_text, file_info);
                     }
                   }
-                } catch (err) {
-                  console.log("Error decoding stream object: " + err);
                 }
+              } catch (err) {
+                console.log("Error decoding stream object: " + err);
               }
             }
           }
