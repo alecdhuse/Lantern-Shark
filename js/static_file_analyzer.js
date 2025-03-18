@@ -1802,8 +1802,7 @@ class Static_File_Analyzer {
       if (objects_matches[2] == "endobj" || objects_matches[2] == "trailer") {
         if (metadata_objs.some(v => objects_matches[1].toLowerCase().includes(v))) {
           // Found an object with metadata.
-          metadata_obj_found = true;
-          var metadata_regex = /\/(Author|CreationDate|Creator|ModDate|Producer|Subject|Title)([^\/\n\r]+)/gmi;
+          var metadata_regex = /\/(Author|CreationDate|Creator|ModDate|Producer|Subject|Title)(\([a-zA-Z0-9\:\/\.\?\=\-]+\)|[^\/\n\r]+)/gmi;
           var metadata_matches = metadata_regex.exec(objects_matches[1]);
 
           while (metadata_matches != null) {
@@ -1814,21 +1813,26 @@ class Static_File_Analyzer {
 
             if (metadata_matches[1].toLowerCase() == "author") {
               file_info.metadata.author = meta_value;
+              metadata_obj_found = true;
             } else if (metadata_matches[1].toLowerCase() == "creationdate") {
+              metadata_obj_found = true;
               var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(meta_value);
               if (date_parts != null) {
                   file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
               }
             } else if (metadata_matches[1].toLowerCase() == "creator") {
+              metadata_obj_found = true;
               if (file_info.metadata.author == "unknown") {
                 file_info.metadata.author = meta_value.replaceAll("\\(", "(").replaceAll("\\)", ")");
               }
             } else if (metadata_matches[1].toLowerCase() == "moddate") {
+              metadata_obj_found = true;
               var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(meta_value);
               if (date_parts != null) {
                   file_info.metadata.last_modified_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
               }
             } else if (metadata_matches[1].toLowerCase() == "producer") {
+              metadata_obj_found = true;
               var creation_os_match = meta_value.match(/(\w+\s+\w+\s+\d+\.\d+\.\d+\s+(?:Build\s[0-9-a-zA-Z]+)?)/gm);
               if (creation_os_match != null) {
                 file_info.metadata.creation_os = creation_os_match[0];
@@ -1837,8 +1841,10 @@ class Static_File_Analyzer {
                 file_info.metadata.creation_application = meta_value;
               }
             } else if (metadata_matches[1].toLowerCase() == "subject") {
+              metadata_obj_found = true;
               file_info.metadata.description = meta_value;
             } else if (metadata_matches[1].toLowerCase() == "title") {
+              metadata_obj_found = true;
               file_info.metadata.title = meta_value;
             }
 
@@ -1930,7 +1936,6 @@ class Static_File_Analyzer {
 
     }
 
-
     // Look for URIs
     var uri_regex = /\/URI\s*\((\s*[\"\']{0,1}(?:http|https)\:\/\/[A-Za-z0-9\$\-\_\.\+\!\*\)\/\&\?\%]+[\"\']{0,1}\s*)\)/gmi;
     var uri_matches = uri_regex.exec(file_text);
@@ -1940,82 +1945,100 @@ class Static_File_Analyzer {
       uri_matches = uri_regex.exec(file_text);
     }
 
-    if (metadata_obj_found == false) {
-      // Backup method to extract meta data, this need refining.
+    // Backup method to extract meta data, this need refining.
 
-      // RDF Metadata
-      file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "xmp:CreatorTool", 0);
-      if (file_info.metadata.creation_application == "unknown") {
-        file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "pdf:Producer", 0);
-      }
+    // RDF Metadata
+    file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "xmp:CreatorTool", 0);
+    if (file_info.metadata.creation_application == "unknown") {
+      file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "pdf:Producer", 0);
+    }
 
+    if (file_info.metadata.creation_date == "0000-00-00 00:00:00") {
       file_info.metadata.creation_date = this.get_xml_tag_content(file_text, "xmp:CreateDate", 0);
-      file_info.metadata.last_modified_date = this.get_xml_tag_content(file_text, "xmp:ModifyDate", 0);
-      file_info.metadata.author = this.get_xml_tag_content(file_text, "dc:creator", 0);
-      file_info.metadata.author = file_info.metadata.author.replace(/\<\/?\w+\:?\w+\>/gm, "").trim(); //Remove XML tags from author string
-      file_info.metadata.title = this.get_xml_tag_content(file_text, "dc:title", 0);
+    }
 
-      if (file_info.metadata.title.indexOf("rdf:li")) {
-        file_info.metadata.title = this.get_xml_tag_content(file_info.metadata.title, "rdf:li", 0);
+    if (file_info.metadata.last_modified_date  == "0000-00-00 00:00:00") {
+      file_info.metadata.last_modified_date = this.get_xml_tag_content(file_text, "xmp:ModifyDate", 0);
+    }
+
+    file_info.metadata.author = this.get_xml_tag_content(file_text, "dc:creator", 0);
+    file_info.metadata.author = file_info.metadata.author.replace(/\<\/?\w+\:?\w+\>/gm, "").trim(); //Remove XML tags from author string
+    file_info.metadata.title = this.get_xml_tag_content(file_text, "dc:title", 0);
+
+    if (file_info.metadata.title.indexOf("rdf:li")) {
+      file_info.metadata.title = this.get_xml_tag_content(file_info.metadata.title, "rdf:li", 0);
+    }
+
+    // Meta data tags
+    var tag_matches = /\<\<\s*\/(?:[Cc]reator|[Cc]reationDate|[Pp]roducer|[Mm]od[Dd]ate)/gm.exec(file_text);
+
+    if (tag_matches != null) {
+      var meta_tag_start = tag_matches.index;
+      var meta_tag_end = file_text.indexOf(">>", meta_tag_start);
+      var meta_tag_text = file_text.substring(meta_tag_start, meta_tag_end+2);
+
+      let producer_tag_text = "";
+      let producer_regex = /\<*\s*\/Producer(\([a-zA-Z0-9\:\/\.\?\=\-]+\)|[^\/\n\r]+)/gmi;
+      let producer_matches = producer_regex.exec(meta_tag_text);
+      if (producer_matches != null) {
+        producer_tag_text = producer_matches[1].trim();
+
+        if (file_info.metadata.creation_application == "unknown") {
+          file_info.metadata.creation_application = producer_tag_text;
+        }
       }
 
-      // Meta data tags
-      var tag_matches = /\<\<\s*\/(?:[Cc]reator|[Cc]reationDate|[Pp]roducer|[Mm]od[Dd]ate)/gm.exec(file_text);
+      var creation_os_match = producer_tag_text.match(/(\w+\s+\w+\s+\d+\.\d+\.\d+\s+(?:Build\s[0-9-a-zA-Z]+)?)/gm);
+      if (creation_os_match != null) {
+        file_info.metadata.creation_os = creation_os_match[0];
+        file_info.metadata.creation_application = producer_tag_text.split("/")[0].trim();
+      }
 
-      if (tag_matches != null) {
-        var meta_tag_start = tag_matches.index;
-        var meta_tag_end = file_text.indexOf(">>", meta_tag_start);
-        var meta_tag_text = file_text.substring(meta_tag_start, meta_tag_end+2);
-
-        var producer_tag_start = meta_tag_text.indexOf("/Producer");
-        var producer_tag_end = meta_tag_text.indexOf("/", producer_tag_start+9);
-        if (producer_tag_end < 0) producer_tag_end = meta_tag_text.indexOf(">>", producer_tag_start);
-        var producer_tag_text = meta_tag_text.substring(producer_tag_start+9, producer_tag_end);
-        producer_tag_text = producer_tag_text.replace(/(?:\\\(|\\\))/gm, "").trim();
-
-        var creation_os_match = producer_tag_text.match(/(\w+\s+\w+\s+\d+\.\d+\.\d+\s+(?:Build\s[0-9-a-zA-Z]+)?)/gm);
-        if (creation_os_match != null) {
-          file_info.metadata.creation_os = creation_os_match[0];
-          file_info.metadata.creation_application = producer_tag_text.split("/")[0].trim();
-        }
-
-        var creator_tag_matches = /\/[Cc]reator(.+)\n?\/(?:[Pp]roducer|[Cc]reation[Dd]ate|[Mm]odDate|\>\>)/gm.exec(meta_tag_text);
-        if (creator_tag_matches != null) {
+      var creator_tag_matches = /\/[Cc]reator(.+)\n?\/(?:[Pp]roducer|[Cc]reation[Dd]ate|[Mm]odDate|\>\>)/gm.exec(meta_tag_text);
+      if (creator_tag_matches != null) {
+        if (file_info.metadata.author == "unknown") {
           file_info.metadata.author = creator_tag_matches[1].trim();
-
-          // Check to see if any other tags were included
-           var extra_tag_matches = /\/(?:[Pp]roducer|[Cc]reation[Dd]ate|[Mm]od[Dd]ate)/gm.exec(file_info.metadata.author);
-           if (extra_tag_matches != null) {
-             file_info.metadata.author = file_info.metadata.author.substring(0,extra_tag_matches.index);
-           }
-        } else {
-          var creator_tag_start = meta_tag_text.indexOf("/Creator");
-          var creator_tag_end = meta_tag_text.indexOf("/", creator_tag_start+8);
-          if (creator_tag_end < 0) creator_tag_end = meta_tag_text.indexOf(">>", creator_tag_start);
-          var creator_tag_text = meta_tag_text.substring(creator_tag_start+8, creator_tag_end);
-          file_info.metadata.author = creator_tag_text.trim();
         }
 
-        file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\(/gm, "(");
-        file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\)/gm, ")");
+        // Check to see if any other tags were included
+         var extra_tag_matches = /\/(?:[Pp]roducer|[Cc]reation[Dd]ate|[Mm]od[Dd]ate)/gm.exec(file_info.metadata.author);
+         if (extra_tag_matches != null) {
+           file_info.metadata.author = file_info.metadata.author.substring(0,extra_tag_matches.index);
+         }
+      } else {
+        let producer_tag_text = "";
+        let producer_regex = /\<*\s*\/Creator(\([a-zA-Z0-9\:\/\.\?\=\-]+\)|[^\/\n\r]+)/gmi;
+        let producer_matches = producer_regex.exec(meta_tag_text);
 
-        var creation_date_tag_start = meta_tag_text.indexOf("/CreationDate");
-        var creation_date_tag_end = meta_tag_text.indexOf("/", creation_date_tag_start+13);
-        if (creation_date_tag_end < 0) creation_date_tag_end = meta_tag_text.indexOf(">>", creation_date_tag_start);
-        var creation_date_tag_text = meta_tag_text.substring(creation_date_tag_start+13, creation_date_tag_end);
-        var date_parts = /\([Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(creation_date_tag_text);
+        if (producer_matches != null) {
+          producer_tag_text = producer_matches[1].trim();
 
-        if (date_parts != null) {
-            file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
+          if (file_info.metadata.author == "unknown") {
+            file_info.metadata.author = producer_tag_text;
+          }
         }
+      }
 
-        if (file_info.metadata.creation_os != "unknown") {
-          var os_start = file_info.metadata.creation_application.indexOf(file_info.metadata.creation_os);
-          file_info.metadata.creation_application = file_info.metadata.creation_application.substring(os_start + file_info.metadata.creation_os.length).trim();
-          file_info.metadata.creation_application = file_info.metadata.creation_application.replace(/\)$/gm, "");
-        }
+      file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\(/gm, "(");
+      file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\)/gm, ")");
+
+      var creation_date_tag_start = meta_tag_text.indexOf("/CreationDate");
+      var creation_date_tag_end = meta_tag_text.indexOf("/", creation_date_tag_start+13);
+      if (creation_date_tag_end < 0) creation_date_tag_end = meta_tag_text.indexOf(">>", creation_date_tag_start);
+      var creation_date_tag_text = meta_tag_text.substring(creation_date_tag_start+13, creation_date_tag_end);
+      var date_parts = /\([Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(creation_date_tag_text);
+
+      if (date_parts != null) {
+          file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
+      }
+
+      if (file_info.metadata.creation_os != "unknown") {
+        var os_start = file_info.metadata.creation_application.indexOf(file_info.metadata.creation_os);
+        file_info.metadata.creation_application = file_info.metadata.creation_application.substring(os_start + file_info.metadata.creation_os.length).trim();
+        file_info.metadata.creation_application = file_info.metadata.creation_application.replace(/\)$/gm, "");
       }
     }
+
 
     // Extract more meta data from what we have already collected.
     if (file_info.metadata.creation_application.indexOf("Macintosh") > 0 || file_info.metadata.author.indexOf("Macintosh") > 0 ) {
