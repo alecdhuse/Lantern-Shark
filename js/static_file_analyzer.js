@@ -4040,10 +4040,17 @@ class Static_File_Analyzer {
           var meta_data_xml = Static_File_Analyzer.get_string_from_array(meta_data_xml_bytes);
 
           file_info.metadata.author = this.get_xml_tag_content(meta_data_xml, "dc:creator", 0);
-          file_info.metadata.creation_date = this.get_xml_tag_content(meta_data_xml, "dcterms:created", 0);
+          if (file_info.metadata.author == "") file_info.metadata.author = this.get_xml_tag_content(meta_data_xml, "cp:lastModifiedBy", 0);
+          if (file_info.metadata.author == "") file_info.metadata.author = "unknown";
+
           file_info.metadata.description = this.get_xml_tag_content(meta_data_xml, "dc:subject", 0);
-          file_info.metadata.last_modified_date = this.get_xml_tag_content(meta_data_xml, "dcterms:modified", 0);
+          if (file_info.metadata.description == "") file_info.metadata.description = "unknown";
+
           file_info.metadata.title = this.get_xml_tag_content(meta_data_xml, "dc:title", 0);
+          if (file_info.metadata.title == "") file_info.metadata.title = "unknown";
+
+          file_info.metadata.creation_date = this.get_xml_tag_content(meta_data_xml, "dcterms:created", 0);
+          file_info.metadata.last_modified_date = this.get_xml_tag_content(meta_data_xml, "dcterms:modified", 0);
         }
       }
 
