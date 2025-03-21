@@ -1793,7 +1793,7 @@ class Static_File_Analyzer {
     file_info.file_components.concat(file_info.file_components);
 
     // Identify Objects and Streams
-    var metadata_objs = ["/author", "/creationdate", "/creator", "/moddate", "/producer", "/title"];
+    var metadata_objs = ["/author", "/Author", "/creationdate", "/CreationDate", "/creator", "/moddate", "/ModDate", "/producer", "/Producer", "/title", "/Title"];
     var metadata_obj_found = false;
     var objects_regex = /\d+\s+\d+\s+obj\s+\<\<\s*([^\>]*)\>\>\s*(endobj|stream|trailer|\>\>)/gmi;
     var objects_matches = objects_regex.exec(file_text);
@@ -1816,7 +1816,7 @@ class Static_File_Analyzer {
               metadata_obj_found = true;
             } else if (metadata_matches[1].toLowerCase() == "creationdate") {
               metadata_obj_found = true;
-              var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(meta_value);
+              var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
               if (date_parts != null) {
                   file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
               }
@@ -1827,7 +1827,7 @@ class Static_File_Analyzer {
               }
             } else if (metadata_matches[1].toLowerCase() == "moddate") {
               metadata_obj_found = true;
-              var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(meta_value);
+              var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
               if (date_parts != null) {
                   file_info.metadata.last_modified_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
               }
@@ -1948,7 +1948,10 @@ class Static_File_Analyzer {
     // Backup method to extract meta data, this need refining.
 
     // RDF Metadata
-    file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "xmp:CreatorTool", 0);
+    if (file_info.metadata.creation_application == "unknown") {
+      file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "xmp:CreatorTool", 0);
+    }
+
     if (file_info.metadata.creation_application == "unknown") {
       file_info.metadata.creation_application = this.get_xml_tag_content(file_text, "pdf:Producer", 0);
     }
@@ -1961,11 +1964,16 @@ class Static_File_Analyzer {
       file_info.metadata.last_modified_date = this.get_xml_tag_content(file_text, "xmp:ModifyDate", 0);
     }
 
-    file_info.metadata.author = this.get_xml_tag_content(file_text, "dc:creator", 0);
-    file_info.metadata.author = file_info.metadata.author.replace(/\<\/?\w+\:?\w+\>/gm, "").trim(); //Remove XML tags from author string
-    file_info.metadata.title = this.get_xml_tag_content(file_text, "dc:title", 0);
+    if (file_info.metadata.author == "unknown") {
+      file_info.metadata.author = this.get_xml_tag_content(file_text, "dc:creator", 0);
+      file_info.metadata.author = file_info.metadata.author.replace(/\<\/?\w+\:?\w+\>/gm, "").trim(); //Remove XML tags from author string
+    }
 
-    if (file_info.metadata.title.indexOf("rdf:li")) {
+    if (file_info.metadata.title == "unknown") {
+      file_info.metadata.title = this.get_xml_tag_content(file_text, "dc:title", 0);
+    }
+
+    if (file_info.metadata.title.indexOf("rdf:li") >= 0) {
       file_info.metadata.title = this.get_xml_tag_content(file_info.metadata.title, "rdf:li", 0);
     }
 
