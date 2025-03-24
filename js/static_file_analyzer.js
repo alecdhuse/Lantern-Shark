@@ -3518,11 +3518,31 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  analyze_xml(file_bytes) {
-    var file_info = Static_File_Analyzer.get_default_file_json();
+  analyze_xml(file_bytes, file_text="") {
+    let file_info = Static_File_Analyzer.get_default_file_json();
+
+    if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
 
     file_info.file_format = "xml";
     file_info.file_generic_type = "Document";
+
+    // Check if this is an SVG file
+    if (file_text.indexOf("<svg", 0) >=0) {
+      file_info.file_format = "svg";
+      file_info.file_generic_type = "Image";
+      file_info.file_encrypted = "false";
+      file_info.file_encryption_type = "none";
+    }
+
+    // Check for JavaScript
+    let script_regex = /\<script\>([a-zA-Z0-9\<\>\?\"\'\!\[\]\=\$\_\@\.\;\/\*\(\)\{\,\}\^\%\s\n\r]+)\<\/script\>/gmi;
+    let script_matches = script_regex.exec(file_text);
+
+    while (script_matches != null) {
+      this.add_extracted_script("JavaScript", script_matches[1], file_info);
+      file_info.analytic_findings.push("SUSPICIOUS - JavaScript Detected in SVG Image File");
+      script_matches = script_regex.exec(file_text);
+    }
 
     return file_info;
   }
