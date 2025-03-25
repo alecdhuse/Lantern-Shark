@@ -28,6 +28,7 @@ See the table below for a list of supported file types and types of data extract
 | PPTX           | X            | X               | X               | X        |                               |
 | RAR            | X            | X               |                 |          |                               |
 | RTF            | X            | X               |                 | X        |                               |
+| SVG            | X            |                 |                 |          | X
 | TIFF           | X            |                 |                 |          |                               |
 | XLS            | X            | X               |                 | X        | X                             |
 | XLSB           | X            | X               | X               | X        | X                             |
