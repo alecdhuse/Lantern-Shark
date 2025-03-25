@@ -84,7 +84,7 @@ class Static_File_Analyzer {
       file_info = this.analyze_tnef(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0,1,0,0,0])) {
       file_info = this.analyze_ttf(file_bytes); // TTF True Type Font
-    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108]) || Static_File_Analyzer.array_equals(file_bytes.slice(0,9), [0x3c,0x00,0x3F,0x00,0x78,0x00,0x6d,0x00,0x6c])) {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
       file_info = await this.analyze_zip(file_bytes, file_password);
@@ -3522,6 +3522,14 @@ class Static_File_Analyzer {
     let file_info = Static_File_Analyzer.get_default_file_json();
 
     if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
+
+    // Remove any null charaters from the file
+    let no_nulls = file_text.replace(/\0/g, '');
+
+    if (no_nulls != file_text) {
+      file_text = no_nulls;
+      file_info.analytic_findings.push("SUSPICIOUS - Null Characters Found in XML");
+    }
 
     file_info.file_format = "xml";
     file_info.file_generic_type = "Document";
@@ -9085,7 +9093,7 @@ class HTML_Parser {
       let arg2 = function_search_matches[3]; // Encoded Script
 
       // Get the dictionary string
-      let dictionary_search_regex = new RegExp(arg1 + "\\s*\\=\\s*[\\\"\']([0-9a-fA-F]+)[\\\"\']\\;?", "gm");
+      let dictionary_search_regex = new RegExp(arg1 + "\\s*\\=[\\s*\\n*\\r*][\\\"\']([0-9a-fA-F]+)[\\\"\']\\;?", "gm");
       let dictionary_search_matches = dictionary_search_regex.exec(str);
 
       if (dictionary_search_matches !== null) {
