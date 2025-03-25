@@ -3534,14 +3534,20 @@ class Static_File_Analyzer {
       file_info.file_encryption_type = "none";
     }
 
-    // Check for JavaScript
-    let script_regex = /\<script\>([a-zA-Z0-9\<\>\?\"\'\!\[\]\=\$\_\@\.\;\/\*\(\)\{\,\}\^\%\s\n\r]+)\<\/script\>/gmi;
-    let script_matches = script_regex.exec(file_text);
+    let extracted_scripts = HTML_Parser.extract_embedded_scripts(file_text);
 
-    while (script_matches != null) {
-      this.add_extracted_script("JavaScript", script_matches[1], file_info);
+    for (let i=0; i<extracted_scripts.length; i++) {
+      file_info = Static_File_Analyzer.search_for_iocs(extracted_scripts[i].script_code, file_info);
+      this.add_extracted_script(extracted_scripts[i].script_type, extracted_scripts[i].script_code, file_info);
       file_info.analytic_findings.push("SUSPICIOUS - JavaScript Detected in SVG Image File");
-      script_matches = script_regex.exec(file_text);
+
+      // Check for various script packers
+      let decoded_result = HTML_Parser.decode_poetry_packer(file_text);
+      if (decoded_result.packer_found === true) {
+        file_info.analytic_findings.push("MALICIOUS - JavaScript Poetry Packer Detected");
+        this.add_extracted_script(extracted_scripts[i].script_type, decoded_result.decoded_script, file_info);
+        file_info = Static_File_Analyzer.search_for_iocs(decoded_result.decoded_script, file_info);
+      }
     }
 
     return file_info;
@@ -9054,6 +9060,96 @@ class HTML_Parser {
   }
 
   /**
+   * Attempts to decode Javascript encodeed with Poetry Packer.
+   *
+   * @see https://threatcodex.com/?search=Poetry%20Packer
+   *
+   * @param  {String}   str       The Base64 encoded string.
+   * @param  {String}   encoding  [Optional] The string encoding type.
+   * @return {String}   The decoded string.
+   */
+  static decode_poetry_packer(str, encoding="utf-8") {
+    let return_obj = {
+        'packer_found': false,
+        'original_script': str,
+        'decoded_script': ""
+    };
+
+    // Find initial function call
+    let function_search_regex = /[\n\r]([a-zA-Z]+)\s*\(\s*([a-zA-Z]+)\s*\,\s*([a-zA-Z]+)\s*\)/gm;
+    let function_search_matches = function_search_regex.exec(str);
+
+    if (function_search_matches !== null) {
+      let function_name = function_search_matches[1];
+      let arg1 = function_search_matches[2]; // Dictionary
+      let arg2 = function_search_matches[3]; // Encoded Script
+
+      // Get the dictionary string
+      let dictionary_search_regex = new RegExp(arg1 + "\\s*\\=\\s*[\\\"\']([0-9a-fA-F]+)[\\\"\']\\;?", "gm");
+      let dictionary_search_matches = dictionary_search_regex.exec(str);
+
+      if (dictionary_search_matches !== null) {
+        let dictionary_str = dictionary_search_matches[1];
+
+        // Get Encoded script
+        let script_search_regex = new RegExp(arg2 + "\\s*\\=\\s*[\\\"\']([0-9a-fA-F]+)[\\\"\']\\;?", "gm");
+        let script_search_matches = script_search_regex.exec(str);
+
+        if (script_search_matches !== null) {
+          return_obj.packer_found = true;
+          let encoded_script = script_search_matches[1];
+
+          const decode_dictionary = decode_arg =>
+            decode_arg.match(/.{1,2}/g)
+               .map(SaUoyr => String.fromCharCode(parseInt(SaUoyr, 16)))
+               .join('');
+
+          let text1 = decode_dictionary(encoded_script);
+
+          const decode_dictionary2 = (dd_arg1, dd_arg2) =>
+            dd_arg1.split('')
+                .map((bdWLvW, HbGJLN) =>
+                  String.fromCharCode(bdWLvW.charCodeAt(0) ^ dd_arg2.charCodeAt(HbGJLN % dd_arg2.length))
+                )
+                .join('');
+
+          let text2 = decode_dictionary2(text1, dictionary_str);
+
+          // Remove concatenation
+          let concat_regex = new RegExp("[\\'\\`\\\"]\\s*\\+[\\'\\`\\\"]","gm");
+          text2 = text2.replace(concat_regex, "");
+
+          // Decode Base64
+          let base64_regex = new RegExp("atob\\s*\\([\\`\\'\\\"]([a-z0-9\\+\\/\\=]{16,})[\\`\\'\\\"]\\s*\\)","gmi");
+          let base64_matches = base64_regex.exec(text2);
+
+          if (base64_matches !== null) {
+            let decoded_base64 = atob(base64_matches[1]);
+            text2 = text2.replace(base64_matches[0], ("\"" + decoded_base64 + "\""));
+          }
+
+          // Check for phishing target
+          let target_regex = new RegExp("([a-zA-Z]+)\\s*\\=\\s*[\\\"\\'\\`](\\$?[a-zA-Z0-9_.±]+@[a-zA-Z0-9-]+.[a-zA-Z0-9-.]+)[\\\"\\'\\`]","gm");
+          let target_matches = target_regex.exec(str);
+
+          if (target_matches !== null) {
+            text2 = text2.replace(target_matches[1], ("\"" + target_matches[2] + "\""));
+
+            // Remove concatenation
+            let concat_regex = new RegExp("[\\'\\`\\\"]\\s*\\+[\\'\\`\\\"]","gm");
+            text2 = text2.replace(concat_regex, "");
+          }
+
+          return_obj.decoded_script = text2;
+        }
+      }
+
+    }
+
+    return return_obj;
+  }
+
+  /**
    * Attempts to find and extract any smuggled / encoded file within the document.
    *
    * @param {Uint8Array} file_bytes Array with int values 0-255 representing the bytes of the file to be analyzed.
@@ -9162,12 +9258,18 @@ class HTML_Parser {
    */
   static extract_embedded_scripts(file_text) {
     let extracted_scripts = [];
-    let script_regex = /\<\s*script\s+(?:type|language)\s*\=\s*[\"\'](?:text\s*\/\s*)?([^\"\']+)[\"\']\s*\>\s*([\s\S]+)\<\s*\/script\s*>/gmi;
+    let script_regex = /\<\s*script(?:\s+(?:type|language)\s*\=\s*[\"\'](?:text\s*\/\s*)?([^\"\']+)[\"\']\s*)?\>\s*([\s\S]+)\<\s*\/script\s*>/gmi;
     let script_matches = script_regex.exec(file_text);
 
     while (script_matches != null) {
+      let script_type = "JavaScript";
+
+      if (script_matches[1] !== undefined && script_matches[1] !== null) {
+        script_type = script_matches[1];
+      }
+
       extracted_scripts.push({
-        'script_type': script_matches[1],
+        'script_type': script_type,
         'script_code': script_matches[2]
       });
 
