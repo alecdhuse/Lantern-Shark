@@ -3550,7 +3550,20 @@ class Static_File_Analyzer {
     file_info.file_generic_type = "Document";
 
     // Check if this is an SVG file
-    if (file_text.indexOf("<svg", 0) >=0) {
+    if (file_text.indexOf("<office:document", 0) >=0 && file_text.indexOf("xmlns:ooo", 0) >=0) {
+      // This needs to be before SVG because fodt documents can contain SVG files.
+      file_info.file_format = "fodt";
+      file_info.file_generic_type = "Document";
+      file_info.file_encrypted = "false";
+      file_info.file_encryption_type = "none";
+
+      let version_regex = /office:version\s*=\s*[\"\']([0-9\.a-f]+)[\"\']/gmi;
+      let version_matches = version_regex.exec(file_text);
+
+      if (version_matches != null) {
+        file_info.file_format_ver = version_matches[1];
+      }
+    } else if (file_text.indexOf("<svg", 0) >=0) {
       file_info.file_format = "svg";
       file_info.file_generic_type = "Image";
       file_info.file_encrypted = "false";
