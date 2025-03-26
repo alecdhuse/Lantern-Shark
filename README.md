@@ -43,6 +43,7 @@ Lantern Shark should be able to detect the following CVEs:
 - MSG
   - CVE-2023-23397
 - PDF
+  - CVE-2024-4367
   - CVE-2019-7089
   - CVE-2018-4993
 - RTF

@@ -1907,9 +1907,24 @@ class Static_File_Analyzer {
       script_matches = script_regex.exec(file_text);
     }
 
-    // Look for various items in objects
+    // Look for various suspicious items in objects
     for (let eoi=0; eoi<embedded_objs.length; eoi++) {
-      if (embedded_objs[eoi].object_dictionary.hasOwnProperty("OpenAction")) {
+      if (embedded_objs[eoi].object_dictionary.hasOwnProperty("FontMatrix")) {
+        if (embedded_objs[eoi].object_dictionary.FontMatrix.length > 5) {
+          // See: https://codeanlabs.com/blog/research/exploiting-libreoffice-cve-2024-12425-and-cve-2024-12426/
+          for (let fmi=5; fmi<embedded_objs[eoi].object_dictionary.FontMatrix.length; fmi++) {
+            for (let jci=0; jci<HTML_Parser.suspicious_javascript_code.length; jci++) {
+              if (embedded_objs[eoi].object_dictionary.FontMatrix[fmi].match(HTML_Parser.suspicious_javascript_code[jci])) {
+                file_info.analytic_findings.push("MALICIOUS - CVE-2024-4367 Exploit Found");
+                let script_text = embedded_objs[eoi].object_dictionary.FontMatrix.slice(5).join();
+                this.add_extracted_script("JavaScript", script_text, file_info);
+                file_info = Static_File_Analyzer.search_for_iocs(script_text, file_info);
+                break;
+              }
+            }
+          }
+        }
+      } else if (embedded_objs[eoi].object_dictionary.hasOwnProperty("OpenAction")) {
         let open_action_val = embedded_objs[eoi].object_dictionary['OpenAction'];
 
         if (/^\d+\s+\d+\s+\w+/.test(open_action_val)) {
@@ -8989,6 +9004,11 @@ class Hash_Tools {
 }
 
 class HTML_Parser {
+  static suspicious_javascript_code = [
+    /alert\s*\\?\(/gmi,
+    /window.location.href\s*\=/gmi
+  ];
+
   /**
    * Call to initiate the parsing of an HTML file.
    *
