@@ -3563,6 +3563,14 @@ class Static_File_Analyzer {
       if (version_matches != null) {
         file_info.file_format_ver = version_matches[1];
       }
+
+      // Check for CVE-2024-12425
+      let cve_regex = /\<\s*style\s*\:\s*font\-face\s*style\s*\:\s*name\s*\s*\=\s*[\"\'\`][^\"\'\`]+[\"\'\`]\s*svg\s*\:\s*font\-family\s*\=\s*[\"\'\`][^\"\'\`]*\.\.\//gmi;
+      let cve_matches = cve_regex.exec(file_text);
+
+      if (cve_matches != null) {
+        file_info.analytic_findings.push("MALICIOUS - CVE-2024-12425 Exploit Found");
+      }
     } else if (file_text.indexOf("<svg", 0) >=0) {
       file_info.file_format = "svg";
       file_info.file_generic_type = "Image";
