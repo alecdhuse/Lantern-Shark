@@ -227,7 +227,8 @@ function display_file_summary(file_analyzer_results) {
   let combined_scripts = "";
   let combined_script_types = "";
   for (let i=0; i<file_analyzer_results.scripts.extracted_scripts.length; i++) {
-    combined_scripts += file_analyzer_results.scripts.extracted_scripts[i].script_text;
+    combined_scripts += file_analyzer_results.scripts.extracted_scripts[i].script_text + "\n\n";
+    
     if (!combined_script_types.includes(file_analyzer_results.scripts.extracted_scripts[i].script_type)) {
       if (i > 0) {
         combined_script_types += ", ", file_analyzer_results.scripts.extracted_scripts[i].script_type;
