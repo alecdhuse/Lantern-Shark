@@ -1557,7 +1557,31 @@ class Static_File_Analyzer {
       return str_part1 + " && " + str_part2;
     });
 
+    // Remove concatenation
+    let concat_regex = new RegExp("[\\'\\`\\\"]\\s*\\+[\\'\\`\\\"]","gm");
+    cmd_shell = cmd_shell.replace(concat_regex, "");
+
+    this.add_extracted_script_obj({
+      'script_type':  "Windows Command Shell",
+      'script_text':  cmd_shell,
+      'deobfuscated': true,
+      'file_info':    file_info
+    });
+
     file_info = Static_File_Analyzer.search_for_iocs(cmd_shell, file_info);
+
+    // Search for suspicious items in the cmd shell
+    let schtasks_regex = /schtasks/gmi;
+    let schtasks_match = schtasks_regex.exec(cmd_shell);
+    if (schtasks_match !== null) {
+      file_info.analytic_findings.push("SUSPICIOUS - Schtasks Execution from LNK File.");
+    }
+
+    let curl_regex = /curl\.exe/gmi;
+    let curl_match = curl_regex.exec(cmd_shell);
+    if (curl_match !== null) {
+      file_info.analytic_findings.push("SUSPICIOUS - CURL Execution from LNK File.");
+    }
 
     // Extract more meta data from what we have already collected.
     if (/[a-zA-Z]\:\\/gm.test(file_info.metadata.last_saved_location)) {
