@@ -3625,8 +3625,14 @@ class Static_File_Analyzer {
       let decoded_result = HTML_Parser.decode_poetry_packer(file_text);
       if (decoded_result.packer_found === true) {
         file_info.analytic_findings.push("MALICIOUS - JavaScript Poetry Packer Detected");
-        this.add_extracted_script(extracted_scripts[i].script_type, decoded_result.decoded_script, file_info);
         file_info = Static_File_Analyzer.search_for_iocs(decoded_result.decoded_script, file_info);
+
+        this.add_extracted_script_obj({
+          'script_type':  extracted_scripts[i].script_type,
+          'script_text':  decoded_result.decoded_script,
+          'deobfuscated': true,
+          'file_info':    file_info
+        });
       }
     }
 
