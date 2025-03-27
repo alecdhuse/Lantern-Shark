@@ -2178,7 +2178,7 @@ class Static_File_Analyzer {
         } else if (chunk_keyword.toLowerCase() == "creation time") {
           file_info.metadata.creation_date = chunk_text_val;
         } else if (chunk_keyword.toLowerCase() == "description") {
-          file_info.description = chunk_text_val;
+          file_info.metadata.description = chunk_text_val;
         } else if (chunk_keyword.toLowerCase() == "disclaimer") {
           // not implemented
           var disclaimer = chunk_text_val;
@@ -3609,6 +3609,34 @@ class Static_File_Analyzer {
     file_info.file_format = "xml";
     file_info.file_generic_type = "Document";
 
+    // Check for Inkscape app creation
+    if (file_info.metadata.creation_application == "unknown") {
+      let inkscape_regex = /xmlns\:inkscape/gmi;
+      let inkscape_matches = inkscape_regex.exec(file_text);
+
+      if (inkscape_matches !== null) {
+        file_info.metadata.creation_application = "Inkscape";
+      }
+    }
+
+    // RDF Metadata
+    if (file_info.metadata.creation_date == "0000-00-00 00:00:00") {
+      file_info.metadata.creation_date = this.get_xml_tag_content(file_text, "dc:date", 0);
+    }
+
+    if (file_info.metadata.title == "unknown") {
+      file_info.metadata.title = this.get_xml_tag_content(file_text, "dc:title", 0);
+    }
+
+    if (file_info.metadata.description == "unknown") {
+      file_info.metadata.description = this.get_xml_tag_content(file_text, "dc:description", 0);
+    }
+
+    if (file_info.metadata.author == "unknown") {
+      file_info.metadata.author = this.get_xml_tag_content(file_text, "dc:creator", 0);
+      file_info.metadata.author = file_info.metadata.author.replace(/\<\/?\w+\:?\w+\>/gm, "").trim(); //Remove XML tags from author string
+    }
+
     // Check if this is an SVG file
     if (file_text.indexOf("<office:document", 0) >=0 && file_text.indexOf("xmlns:ooo", 0) >=0) {
       // This needs to be before SVG because fodt documents can contain SVG files.
@@ -3636,6 +3664,12 @@ class Static_File_Analyzer {
       file_info.file_generic_type = "Image";
       file_info.file_encrypted = "false";
       file_info.file_encryption_type = "none";
+
+      let version_regex = /(?<!xml)(?:\s+version\s*\=\s*[\"\']([0-9\.a-f]+)[\"\'])/gmi;
+      let version_matches = version_regex.exec(file_text);
+      if (version_matches !== null) {
+        file_info.file_format_ver =version_matches[1];
+      }      
     }
 
     let extracted_scripts = HTML_Parser.extract_embedded_scripts(file_text);
