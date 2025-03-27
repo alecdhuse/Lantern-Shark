@@ -201,11 +201,47 @@ class Static_File_Analyzer {
    * @return {undefined}
    */
   add_extracted_script(script_type, script_text, file_info) {
-    file_info.scripts.script_type = script_type;
+    this.add_extracted_script_obj({
+      'script_type':  script_type,
+      'script_text':  script_text,
+      'deobfuscated': false,
+      'file_info':    file_info
+    });
+  }
 
-    if (!file_info.scripts.extracted_script.includes(script_text)) {
-      file_info.scripts.extracted_script += script_text;
-      file_info.scripts.extracted_script += (script_type == "Excel 4.0 Macro") ? "\n" : "\n\n";
+  /**
+   * Add found extracted script to output.
+   *
+   * @param  {String}    script_type Name of the script type to add.
+   * @param  {String}    script_text The actual script text.
+   * @param  {object}    file_info   The file_info object to add the script to.
+   * @return {undefined}
+   */
+  add_extracted_script_obj(script_obj) {
+    if (!script_obj.hasOwnProperty("script_type")) {
+      script_obj.script_type = "unknown";
+    }
+
+    if (!script_obj.hasOwnProperty("deobfuscated")) {
+      script_obj.deobfuscated = false;
+    }
+
+    if (script_obj.hasOwnProperty("script_text")) {
+      if (script_obj.file_info.scripts.extracted_scripts.length == 0) {
+        script_obj.file_info.scripts.extracted_scripts.push(script_obj);
+      } else {
+        let script_exists = false;
+        for (let i=0; i<script_obj.file_info.scripts.extracted_scripts.length; i++) {
+          if (script_obj.file_info.scripts.extracted_scripts[i].script_text.includes(script_obj.script_text)) {
+            script_exists = true;
+            break;
+          }
+        }
+
+        if (script_exists === false) {
+          script_obj.file_info.scripts.extracted_scripts.push(script_obj);
+        }
+      }
     }
   }
 
@@ -5815,8 +5851,7 @@ class Static_File_Analyzer {
         title: "unknown",
       },
       scripts: {
-        script_type: "none",
-        extracted_script: "",
+        extracted_scripts: [],
       },
       parsed: "Parsed File Not Available",
       analytic_findings: [],

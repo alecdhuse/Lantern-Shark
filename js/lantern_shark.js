@@ -210,7 +210,6 @@ function display_file_summary(file_analyzer_results) {
     file_password = null;
   }
 
-  $("#summary_detected_script").html(escape_string(file_analyzer_results.scripts.script_type));
   $("#summary_metadata_title").html(escape_string(file_analyzer_results.metadata.title));
   $("#summary_metadata_author").html(escape_string(file_analyzer_results.metadata.author));
   $("#summary_metadata_description").html(escape_string(file_analyzer_results.metadata.description));
@@ -221,9 +220,24 @@ function display_file_summary(file_analyzer_results) {
   $("#summary_metadata_last_saved_location").html(escape_string(file_analyzer_results.metadata.last_saved_location));
   $("#summary_metadata_sha256").html(escape_string(file_analyzer_results.file_hashes.sha256));
 
-  $("#script_code").val(file_analyzer_results.scripts.extracted_script);
   $("#extracted_iocs").val(file_analyzer_results.iocs.join("\n"));
   $("#analytic_findings").val(file_analyzer_results.analytic_findings.join("\n"));
+
+  // Add all extracted scripts
+  let combined_scripts = "";
+  let combined_script_types = "";
+  for (let i=0; i<file_analyzer_results.scripts.extracted_scripts.length; i++) {
+    combined_scripts += file_analyzer_results.scripts.extracted_scripts[i].script_text;
+    if (!combined_script_types.includes(file_analyzer_results.scripts.extracted_scripts[i].script_type)) {
+      if (i > 0) {
+        combined_script_types += ", ", file_analyzer_results.scripts.extracted_scripts[i].script_type;
+      } else {
+        combined_script_types += file_analyzer_results.scripts.extracted_scripts[i].script_type;
+      }
+    }
+  }
+  $("#script_code").val(combined_scripts);
+  $("#summary_detected_script").html(escape_string(combined_script_types));
 }
 
 /**
