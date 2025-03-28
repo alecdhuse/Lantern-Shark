@@ -124,7 +124,7 @@ function change_tab(e) {
   } else if (tab_id == "tab_text") {
     $("#tab_body_text").show();
     $("#tab_text").addClass("tab_selected");
-  } else if (tab_id == "tab_parsed") {
+  } else if (tab_id == "tab_parsed" || tab_id == "additional_metadata_div") {
     $("#tab_parsed_file").show();
     $("#tab_parsed").addClass("tab_selected");
   }
@@ -220,25 +220,40 @@ function display_file_summary(file_analyzer_results) {
   $("#summary_metadata_last_saved_location").html(escape_string(file_analyzer_results.metadata.last_saved_location));
   $("#summary_metadata_sha256").html(escape_string(file_analyzer_results.file_hashes.sha256));
 
+  if (file_analyzer_results.metadata.additional_metadata.type != "none") {
+    let metadata_html = "<div id='additional_metadata_div' class='faux_link'>" + file_analyzer_results.metadata.additional_metadata.type + "</div>";
+    $("#summary_metadata_additional").html(metadata_html);
+
+    document.getElementById("additional_metadata_div").addEventListener('click', change_tab, false);
+  } else {
+    $("#summary_metadata_additional").html("None");
+  }
+
   $("#extracted_iocs").val(file_analyzer_results.iocs.join("\n"));
   $("#analytic_findings").val(file_analyzer_results.analytic_findings.join("\n"));
 
   // Add all extracted scripts
-  let combined_scripts = "";
-  let combined_script_types = "";
-  for (let i=0; i<file_analyzer_results.scripts.extracted_scripts.length; i++) {
-    combined_scripts += file_analyzer_results.scripts.extracted_scripts[i].script_text + "\n\n";
-    
-    if (!combined_script_types.includes(file_analyzer_results.scripts.extracted_scripts[i].script_type)) {
-      if (i > 0) {
-        combined_script_types += ", ", file_analyzer_results.scripts.extracted_scripts[i].script_type;
-      } else {
-        combined_script_types += file_analyzer_results.scripts.extracted_scripts[i].script_type;
+  if (file_analyzer_results.scripts.extracted_scripts.length > 0) {
+    let combined_scripts = "";
+    let combined_script_types = "";
+    for (let i=0; i<file_analyzer_results.scripts.extracted_scripts.length; i++) {
+      combined_scripts += file_analyzer_results.scripts.extracted_scripts[i].script_text + "\n\n";
+
+      if (!combined_script_types.includes(file_analyzer_results.scripts.extracted_scripts[i].script_type)) {
+        if (i > 0) {
+          combined_script_types += ", ", file_analyzer_results.scripts.extracted_scripts[i].script_type;
+        } else {
+          combined_script_types += file_analyzer_results.scripts.extracted_scripts[i].script_type;
+        }
       }
     }
+    $("#script_code").val(combined_scripts);
+    $("#summary_detected_script").html(escape_string(combined_script_types));
+  } else {
+    $("#summary_detected_script").html("None");
+    $("#summary_detected_script").html("");
   }
-  $("#script_code").val(combined_scripts);
-  $("#summary_detected_script").html(escape_string(combined_script_types));
+
 }
 
 /**

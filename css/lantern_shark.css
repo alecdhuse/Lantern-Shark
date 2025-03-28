@@ -9,6 +9,11 @@ body {
   text-transform: capitalize;
 }
 
+.faux_link {
+  color: #4285f4;
+  text-decoration: underline;
+}
+
 .field_invalid {
   border-color: #ff4343;
 }
