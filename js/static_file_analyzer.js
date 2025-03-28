@@ -6562,6 +6562,23 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Converts an integer to an array with two int values 0-255.
+   *
+   * @param {integer} int_val An integer to covert.
+   * @return {array}  An array with int values 0-255 representing the value of the given integer.
+   */
+  static get_word_bytes_from_int(int_val, endianness = "BIG_ENDIAN") {
+    let is_litte_endian = (endianness == "BIG_ENDIAN") ? false : true;
+    let return_arr = new ArrayBuffer(4); // Allocate 4 bytes
+    let data_view = new DataView(return_arr);
+
+    data_view.setUint32(0, int_val, is_litte_endian); // byteOffset = 0
+    let return_array = Array.from(new Uint8Array(return_arr));
+    return_array = return_array.slice(2,4);
+    return return_array;
+  }
+
+  /**
    * Gets the content of the XML tag from a given start index.
    *
    * @param {string}  source_text String representing an XML file.
@@ -10315,6 +10332,7 @@ class PDF_Parser {
               *  References:
               *    - https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-decoding-ccitt-data/
               *    - https://blog.idrsolutions.com/ccitt-encoding-in-pdf-files-converting-pdf-ccitt-data-into-a-tiff/
+              *    - https://docs.fileformat.com/image/tiff/
               */
 
               // We need to use the pako library to decode the ZLib stream.
@@ -10394,43 +10412,27 @@ class PDF_Parser {
                   // Write the CCITT image data at the end of the array
                   //tiff_file_bytes = tiff_file_bytes.concat(Array.from(deflate_bytes));
 
-                  let image_file_bytes = [];
-
                   /*
+                  let image_file_bytes = Tiff_Tools.create_tiff_header({
+                    'k': k,
+                    'is_black': is_black,
+                    'columns': columns,
+                    'rows': rows,
+                    'img_height': img_height,
+                    'img_width': img_width,
+                    'img_byte_len': img_byte_len,
+                    'bits_per_sample': bits_per_sample
+                  });
+
+                  image_file_bytes = image_file_bytes.concat(Array.from(deflate_bytes));
+
                   file_components.push({
                     'name': "Image_" + object_array[i].object_number + ".tif",
-                    'type': "txt",
+                    'type': "tif",
                     'directory': false,
                     'file_bytes': image_file_bytes
                   });
                   */
-
-                  // Image decode is not working at the moment, just return the file as a zlib file.
-                  /*
-                  file_components.push({
-                    'name': "Image_" + object_array[i].object_number + ".zlib",
-                    'type': "zlib",
-                    'directory': false,
-                    'file_bytes': object_array[i].stream_bytes
-                  });
-                  */
-
-                  // Search for name in object dictionary.
-                  let obj_name = "Compressed Stream";
-                  if (object_array[i].object_dictionary.hasOwnProperty("Name")) {
-                    obj_name = object_array[i].object_dictionary["Name"];
-                  }
-
-                  let valid_results = Static_File_Analyzer.is_valid_file(deflate_bytes);
-
-                  if (valid_results.is_valid) {
-                    file_components.push({
-                      'name': obj_name,
-                      'type': is_valid.type,
-                      'directory': false,
-                      'file_bytes': deflate_bytes
-                    });
-                  }
                 } catch (err) {
                   console.log("Can't deflate PDF stream.");
                 }
@@ -11038,12 +11040,7 @@ class Tiff_Tools {
     *  The reference I am using uses big-endian, so we will use that.
     */
     let tiff_file_bytes = [];
-    let tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x08];
-
-    // Indicate the number of Image File Directory (IFD) entries.
-    let ifd_entry_count = 8;
-    let strip_offset = 8 + 2 + (ifd_entry_count * 12); // Header + idf count field + idf count times 12 byte length.
-    tiff_file_bytes = tif_header.concat([0, ifd_entry_count]);
+    let tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x12];
 
     /*
     *  IFD format is:
@@ -11062,16 +11059,26 @@ class Tiff_Tools {
     *  Note: The entries in an IFD must be sorted in ascending order by Tag.
     *
     *  Reference: https://docs.fileformat.com/image/tiff/
+    *  Reference: https://github.com/corkami/pics/blob/master/binary/TIFF_BE.png
     */
 
+    // Image data
+    tiff_file_bytes = tif_header.concat([0xFF,0x00, 0,0, 0xFF,0,0,0, 0xFF,0]);
+
+    // Indicate the number of Image File Directory (IFD) entries.
+    let ifd_entry_count = 7;
+    let strip_offset = 8 + 2 + (ifd_entry_count * 12); // Header + idf count field + idf count times 12 byte length.
+    tiff_file_bytes = tiff_file_bytes.concat(Static_File_Analyzer.get_word_bytes_from_int(ifd_entry_count));
+
+
     // ImageWidth - 256 - 0x0100
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x00, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(columns, "BIG_ENDIAN")));
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x00, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_width, "BIG_ENDIAN")));
 
     // ImageLength - 257 - 0x0101
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x01, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
 
     // BitsPerSample - 258 - 0x0102
-    //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample, "BIG_ENDIAN")));
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample, "BIG_ENDIAN")));
 
     // Compression - 259 0x0103
     if (k==0) {
@@ -11082,6 +11089,9 @@ class Tiff_Tools {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x03, 0,3, 0,0,0,1, 0,1,0,0]);
     }
 
+    // StripOffsets - 273 0x0111
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x11, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(strip_offset, "BIG_ENDIAN")));
+
     // PhotometricInterpretation - 262 0x0106 (0 = WhiteIsZero, 1 = BlackIsZero)
     if (is_black) {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,1,0,0]);
@@ -11089,17 +11099,14 @@ class Tiff_Tools {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,0,0,0]);
     }
 
-    // StripOffsets - 273 0x0111
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x11, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(strip_offset, "BIG_ENDIAN")));
-
     // SamplesPerPixel - 277 0x115
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x15, 0,3, 0,0,0,1, 0,3,0,0]);
 
     // RowsPerStrip - 278 0x0116 (Use image height)
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x16, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
+    //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x16, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
 
     // StripByteCounts - 279 0x0117 (Use Image byte length, for a single strip)
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x17, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_byte_len, "BIG_ENDIAN")));
+    //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x17, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_byte_len, "BIG_ENDIAN")));
 
     // Write next IOD offset zero as no other table
     tiff_file_bytes = tiff_file_bytes.concat([0,0,0,0]);
