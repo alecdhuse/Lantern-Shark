@@ -226,20 +226,22 @@ class Static_File_Analyzer {
       script_obj.deobfuscated = false;
     }
 
-    if (script_obj.hasOwnProperty("script_text")) {
-      if (script_obj.file_info.scripts.extracted_scripts.length == 0) {
-        script_obj.file_info.scripts.extracted_scripts.push(script_obj);
-      } else {
-        let script_exists = false;
-        for (let i=0; i<script_obj.file_info.scripts.extracted_scripts.length; i++) {
-          if (script_obj.file_info.scripts.extracted_scripts[i].script_text.includes(script_obj.script_text)) {
-            script_exists = true;
-            break;
-          }
-        }
-
-        if (script_exists === false) {
+    if (script_obj.script_text !== undefined && script_obj.script_text !== null) {
+      if (script_obj.hasOwnProperty("script_text")) {
+        if (script_obj.file_info.scripts.extracted_scripts.length == 0) {
           script_obj.file_info.scripts.extracted_scripts.push(script_obj);
+        } else {
+          let script_exists = false;
+          for (let i=0; i<script_obj.file_info.scripts.extracted_scripts.length; i++) {
+            if (script_obj.file_info.scripts.extracted_scripts[i].script_text.includes(script_obj.script_text)) {
+              script_exists = true;
+              break;
+            }
+          }
+
+          if (script_exists === false) {
+            script_obj.file_info.scripts.extracted_scripts.push(script_obj);
+          }
         }
       }
     }
@@ -865,6 +867,10 @@ class Static_File_Analyzer {
           }
 
           file_info.parsed = JSON.stringify(parsed_tags,null,2);
+          file_info.metadata.additional_metadata = {
+            'type': "EXIF",
+            'data': file_info.parsed
+          }
 
           // Extract meta data
           if (tiff_tags.hasOwnProperty("Software")) {
@@ -1898,6 +1904,8 @@ class Static_File_Analyzer {
                 file_info.metadata.creation_os = creation_os_match[0];
                 file_info.metadata.creation_application = meta_value.split("/")[0].trim();
               } else {
+                meta_value = meta_value.replaceAll("\\)", ")");
+                meta_value = meta_value.replaceAll("\\(", "(");
                 file_info.metadata.creation_application = meta_value;
               }
             } else if (metadata_matches[1].toLowerCase() == "subject") {
@@ -3669,7 +3677,7 @@ class Static_File_Analyzer {
       let version_matches = version_regex.exec(file_text);
       if (version_matches !== null) {
         file_info.file_format_ver =version_matches[1];
-      }      
+      }
     }
 
     let extracted_scripts = HTML_Parser.extract_embedded_scripts(file_text);
@@ -5913,6 +5921,7 @@ class Static_File_Analyzer {
         last_modified_date: "0000-00-00 00:00:00",
         last_saved_location: "unknown",
         title: "unknown",
+        additional_metadata: {type: "none", data: {}}
       },
       scripts: {
         extracted_scripts: [],
@@ -10405,6 +10414,23 @@ class PDF_Parser {
                     'file_bytes': object_array[i].stream_bytes
                   });
                   */
+
+                  // Search for name in object dictionary.
+                  let obj_name = "Compressed Stream";
+                  if (object_array[i].object_dictionary.hasOwnProperty("Name")) {
+                    obj_name = object_array[i].object_dictionary["Name"];
+                  }
+
+                  let valid_results = Static_File_Analyzer.is_valid_file(deflate_bytes);
+
+                  if (valid_results.is_valid) {
+                    file_components.push({
+                      'name': obj_name,
+                      'type': is_valid.type,
+                      'directory': false,
+                      'file_bytes': deflate_bytes
+                    });
+                  }
                 } catch (err) {
                   console.log("Can't deflate PDF stream.");
                 }
