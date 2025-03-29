@@ -10352,6 +10352,7 @@ class PDF_Parser {
                   let img_width = 0;
                   let img_byte_len = 0;
                   let bits_per_sample = 8;
+                  let color_space_str = "";
 
                   /*
                   *
@@ -10409,10 +10410,51 @@ class PDF_Parser {
                     bits_per_sample = parseInt(object_array[i].object_dictionary['BitsPerComponent']);
                   }
 
-                  // Write the CCITT image data at the end of the array
-                  //tiff_file_bytes = tiff_file_bytes.concat(Array.from(deflate_bytes));
+                  // Image Color Space
+                  if (object_array[i].object_dictionary.hasOwnProperty("ColorSpace")) {
+                    color_space_str = (object_array[i].object_dictionary['ColorSpace']);
 
-                  /*
+                    if (color_space_str.endsWith(" r") || color_space_str.endsWith(" R")) {
+                      let color_space_arr = color_space_str.split(" ");
+                      let object_number = color_space_arr[0];
+                      let gen_number = color_space_arr[1];
+
+                      for (let i2=0; i2<object_array.length; i2++) {
+                        if (object_array[i2].object_number == object_number && object_array[i2].generation_number == gen_number) {
+                          let color_space_str2 = object_array[i2].object_text.trim();
+
+                          if (color_space_str2.startsWith("[") && color_space_str2.endsWith("]")) {
+                            color_space_str2 = color_space_str2.slice(1, -1).trim();
+                            let color_space_arr2 = color_space_str2.split(" ");
+
+                            if (color_space_arr2[3] == "R" || color_space_arr2[3] == "r") {
+                              let object_number2 = color_space_arr2[1];
+                              let gen_number2 = color_space_arr2[2];
+
+                              for (let i3=0; i3<object_array.length; i3++) {
+                                if (object_array[i3].object_number == object_number2 && object_array[i3].generation_number == gen_number2) {
+                                  let color_space_str3 = object_array[i3].object_text.trim();
+                                  let end_color_space_obj_index = color_space_str3.indexOf(">>") + 2;
+                                  let color_space_obj_str = color_space_str3.substr(0,end_color_space_obj_index);
+                                  let color_space_obj_dict = await PDF_Parser.get_object_dictionary_values(color_space_obj_str);
+
+                                  // TODO get stream text
+                                  break;
+                                }
+                              }
+                            }
+
+                            break;
+                          }
+
+
+                        }
+                      }
+                    } else {
+                      // Not a reference
+                    }
+                  }
+
                   let image_file_bytes = Tiff_Tools.create_tiff_header({
                     'k': k,
                     'is_black': is_black,
@@ -10424,6 +10466,7 @@ class PDF_Parser {
                     'bits_per_sample': bits_per_sample
                   });
 
+                  // Write uncompressed data to the end of the header
                   image_file_bytes = image_file_bytes.concat(Array.from(deflate_bytes));
 
                   file_components.push({
@@ -10432,7 +10475,7 @@ class PDF_Parser {
                     'directory': false,
                     'file_bytes': image_file_bytes
                   });
-                  */
+
                 } catch (err) {
                   console.log("Can't deflate PDF stream.");
                 }
@@ -11025,8 +11068,8 @@ class Tiff_Tools {
     let is_black = options.hasOwnProperty("is_black") ? options["is_black"] : false;
     let columns = options.hasOwnProperty("columns") ? options["columns"] : 1728;
     let rows = options.hasOwnProperty("rows") ? options["rows"] : 0;
-    let img_height = options.hasOwnProperty("height") ? options["height"] : 0;
-    let img_width = options.hasOwnProperty("width") ? options["width"] : 0;
+    let img_height = options.hasOwnProperty("img_height") ? options["img_height"] : 0;
+    let img_width = options.hasOwnProperty("img_width") ? options["img_width"] : 0;
     let img_byte_len = options.hasOwnProperty("byte_len") ? options["byte_len"] : 0;
     let bits_per_sample = options.hasOwnProperty("bits_per_sample") ? options["bits_per_sample"] : 8;
 
@@ -11040,7 +11083,7 @@ class Tiff_Tools {
     *  The reference I am using uses big-endian, so we will use that.
     */
     let tiff_file_bytes = [];
-    let tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x12];
+    let tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x14];
 
     /*
     *  IFD format is:
@@ -11063,7 +11106,7 @@ class Tiff_Tools {
     */
 
     // Image data
-    tiff_file_bytes = tif_header.concat([0xFF,0x00, 0,0, 0xFF,0,0,0, 0xFF,0]);
+    tiff_file_bytes = tif_header.concat([0xFF,0x00, 0,0, 0xFF,0,0,0, 0xFF,0, 0,0]);
 
     // Indicate the number of Image File Directory (IFD) entries.
     let ifd_entry_count = 7;
