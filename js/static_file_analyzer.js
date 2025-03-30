@@ -10608,7 +10608,8 @@ class PDF_Parser {
 
     while (match2 = dictionary_pair_regex.exec(dictionary_text)) {
       try {
-        if (match2[1].toLowerCase() == "f" ||
+        if (match2[1].toLowerCase() == "alternate" ||
+            match2[1].toLowerCase() == "f" ||
             match2[1].toLowerCase() == "filter" ||
             match2[1].toLowerCase() == "name" ||
             match2[1].toLowerCase() == "s" ||
@@ -11160,10 +11161,10 @@ class Tiff_Tools {
     tiff_file_bytes = tif_header.concat([0xFF,0x00, 0,0, 0xFF,0,0,0, 0xFF,0, 0,0]);
 
     // Indicate the number of Image File Directory (IFD) entries.
-    let ifd_entry_count = 7;
-    let strip_offset = 8 + 2 + (ifd_entry_count * 12); // Header + idf count field + idf count times 12 byte length.
+    let ifd_entry_count = 9;
+    let bits_per_sample_offset =  8 + 12 + 2 + 4 + (ifd_entry_count * 12) + 2;
+    let strip_offset = 8 + 12 + 2 + 4 + (ifd_entry_count * 12) + 6 + 2 + 2; // Header + image_Data + idf count field + IOD Null - idf count times 12 byte length + bits_per_sample_offset.
     tiff_file_bytes = tiff_file_bytes.concat(Static_File_Analyzer.get_word_bytes_from_int(ifd_entry_count));
-
 
     // ImageWidth - 256 - 0x0100
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x00, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_width, "BIG_ENDIAN")));
@@ -11172,7 +11173,7 @@ class Tiff_Tools {
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x01, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
 
     // BitsPerSample - 258 - 0x0102
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample, "BIG_ENDIAN")));
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,3, 0,0,0,3].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample_offset, "BIG_ENDIAN")));
 
     // Compression - 259 0x0103
     if (k==0) {
@@ -11197,13 +11198,22 @@ class Tiff_Tools {
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x15, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(samples_per_pixel, "BIG_ENDIAN")));
 
     // RowsPerStrip - 278 0x0116 (Use image height)
-    //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x16, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x16, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
 
     // StripByteCounts - 279 0x0117 (Use Image byte length, for a single strip)
-    //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x17, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_byte_len, "BIG_ENDIAN")));
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x17, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_byte_len, "BIG_ENDIAN")));
+
+    // ResolutionUnit  - 296 0x0128
+    //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x28, 0,3, 0,0,0,1, 0,3,0,0]);
 
     // Write next IOD offset zero as no other table
     tiff_file_bytes = tiff_file_bytes.concat([0,0,0,0]);
+
+    // Write bits_per_sample value
+    tiff_file_bytes = tiff_file_bytes.concat([0x00,0x00, 0x00,0x08,0x00,0x08,0x00,0x08]);
+
+    // Make sure data starts on a word boundry
+    tiff_file_bytes = tiff_file_bytes.concat([0,0]);
 
     return tiff_file_bytes;
   }
