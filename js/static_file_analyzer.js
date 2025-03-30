@@ -10422,11 +10422,13 @@ class PDF_Parser {
                     img_width = rows;
                   }
 
+                  // BitsPerComponent
                   if (object_array[i].object_dictionary.hasOwnProperty("BitsPerComponent")) {
                     bits_per_sample = parseInt(object_array[i].object_dictionary['BitsPerComponent']);
                   }
 
                   // Image Color Space
+                  let color_space_obj_dict = {};
                   if (object_array[i].object_dictionary.hasOwnProperty("ColorSpace")) {
                     color_space_str = (object_array[i].object_dictionary['ColorSpace']);
 
@@ -10452,8 +10454,8 @@ class PDF_Parser {
                                   let color_space_str3 = object_array[i3].object_text.trim();
                                   let end_color_space_obj_index = color_space_str3.indexOf(">>") + 2;
                                   let color_space_obj_str = color_space_str3.substring(0,end_color_space_obj_index);
-                                  let color_space_obj_dict = await PDF_Parser.get_object_dictionary_values(color_space_obj_str);
 
+                                  color_space_obj_dict = await PDF_Parser.get_object_dictionary_values(color_space_obj_str);
                                   color_space_obj_dict[color_space_arr2[0].substring(1)] = "";
 
                                   // Get stream text
@@ -10496,6 +10498,12 @@ class PDF_Parser {
                     }
                   }
 
+                  // samples_per_pixel
+                  let samples_per_pixel = 3;
+                  if (color_space_obj_dict.hasOwnProperty("N")) {
+                    samples_per_pixel = parseInt(color_space_obj_dict['N']);
+                  }
+
                   let image_file_bytes = Tiff_Tools.create_tiff_header({
                     'k': k,
                     'is_black': is_black,
@@ -10504,7 +10512,8 @@ class PDF_Parser {
                     'img_height': img_height,
                     'img_width': img_width,
                     'img_byte_len': img_byte_len,
-                    'bits_per_sample': bits_per_sample
+                    'bits_per_sample': bits_per_sample,
+                    'samples_per_pixel': samples_per_pixel
                   });
 
                   // Write uncompressed data to the end of the header
@@ -11113,6 +11122,7 @@ class Tiff_Tools {
     let img_width = options.hasOwnProperty("img_width") ? options["img_width"] : 0;
     let img_byte_len = options.hasOwnProperty("byte_len") ? options["byte_len"] : 0;
     let bits_per_sample = options.hasOwnProperty("bits_per_sample") ? options["bits_per_sample"] : 8;
+    let samples_per_pixel = options.hasOwnProperty("samples_per_pixel") ? options["samples_per_pixel"] : 3;
 
     /*
     *  Create the TIFF file structure to append the image data stream to.
@@ -11173,9 +11183,6 @@ class Tiff_Tools {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x03, 0,3, 0,0,0,1, 0,1,0,0]);
     }
 
-    // StripOffsets - 273 0x0111
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x11, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(strip_offset, "BIG_ENDIAN")));
-
     // PhotometricInterpretation - 262 0x0106 (0 = WhiteIsZero, 1 = BlackIsZero)
     if (is_black) {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,1,0,0]);
@@ -11183,8 +11190,11 @@ class Tiff_Tools {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,0,0,0]);
     }
 
+    // StripOffsets - 273 0x0111
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x11, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(strip_offset, "BIG_ENDIAN")));
+
     // SamplesPerPixel - 277 0x115
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x15, 0,3, 0,0,0,1, 0,3,0,0]);
+    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x15, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(samples_per_pixel, "BIG_ENDIAN")));
 
     // RowsPerStrip - 278 0x0116 (Use image height)
     //tiff_file_bytes = tiff_file_bytes.concat([0x01,0x16, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
