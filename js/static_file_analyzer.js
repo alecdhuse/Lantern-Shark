@@ -5879,6 +5879,22 @@ class Static_File_Analyzer {
   }
 
   /**
+   * Converts an ascii encoded string to a byte array.
+   *
+   * @param {String} ascii_string The string to convert to a binary array.
+   * @return {array}  An array with int values of 0 to 255, representing the byte values of the given string.
+   */
+  static get_bytes_from_ascii(ascii_string) {
+    const result = [];
+
+    for (let i=0; i<ascii_string.length; i++) {
+        result.push(ascii_string.charCodeAt(i));
+    }
+
+    return result;
+  }
+
+  /**
    * Converts an integer to an array with int values 0-255.
    *
    * @param {integer} int_val An integer to covert.
@@ -10435,10 +10451,35 @@ class PDF_Parser {
                                 if (object_array[i3].object_number == object_number2 && object_array[i3].generation_number == gen_number2) {
                                   let color_space_str3 = object_array[i3].object_text.trim();
                                   let end_color_space_obj_index = color_space_str3.indexOf(">>") + 2;
-                                  let color_space_obj_str = color_space_str3.substr(0,end_color_space_obj_index);
+                                  let color_space_obj_str = color_space_str3.substring(0,end_color_space_obj_index);
                                   let color_space_obj_dict = await PDF_Parser.get_object_dictionary_values(color_space_obj_str);
 
-                                  // TODO get stream text
+                                  color_space_obj_dict[color_space_arr2[0].substring(1)] = "";
+
+                                  // Get stream text
+                                  let color_space_stream_start = color_space_str3.toLowerCase().indexOf("stream") + 6;
+                                  let color_space_stream_end = color_space_str3.toLowerCase().indexOf("endstream");
+                                  let color_space_stream = color_space_str3.substring(color_space_stream_start, color_space_stream_end).trim();
+
+                                  if (color_space_obj_dict.hasOwnProperty("Filter") && color_space_obj_dict["Filter"] == "FlateDecode") {
+                                    if (pako !== null && pako !== undefined) {
+                                      try {
+                                        if (color_space_obj_dict.hasOwnProperty("Length")) {
+                                          let byte_len = parseInt(color_space_obj_dict['Length']);
+                                          let stream_bytes = Static_File_Analyzer.get_bytes_from_ascii(color_space_stream);
+                                          let stream_bytesU8 = new Uint8Array(stream_bytes);
+
+                                          let deflate_bytes = await pako.inflate(stream_bytesU8);
+                                          let decoder = new TextDecoder("utf-8");
+                                          color_space_stream = decoder.decode(deflate_bytes);
+                                          let debug123 = 123;
+                                        }
+                                      } catch (err) {
+                                        console.log("Error decoding ColorSpace stream object: " + err);
+                                      }
+                                    }
+                                  }
+
                                   break;
                                 }
                               }
