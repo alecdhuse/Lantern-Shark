@@ -10498,6 +10498,14 @@ class PDF_Parser {
                     }
                   }
 
+                  // Get alternate color space
+                  let color_space = "unknown";
+                  if (color_space_obj_dict.hasOwnProperty("Alternate")) {
+                    if (color_space_obj_dict['Alternate'] == "DeviceRGB") {
+                      color_space = "rgb";
+                    }
+                  }
+
                   // samples_per_pixel
                   let samples_per_pixel = 3;
                   if (color_space_obj_dict.hasOwnProperty("N")) {
@@ -10507,6 +10515,7 @@ class PDF_Parser {
                   let image_file_bytes = Tiff_Tools.create_tiff_header({
                     'k': k,
                     'is_black': is_black,
+                    'color_space': color_space,
                     'columns': columns,
                     'rows': rows,
                     'img_height': img_height,
@@ -11117,6 +11126,7 @@ class Tiff_Tools {
     // Read in options or assign default values.
     let k = options.hasOwnProperty("k") ? options["k"] : 0;
     let is_black = options.hasOwnProperty("is_black") ? options["is_black"] : false;
+    let color_space = options.hasOwnProperty("color_space") ? options["color_space"] : "unknown";
     let columns = options.hasOwnProperty("columns") ? options["columns"] : 1728;
     let rows = options.hasOwnProperty("rows") ? options["rows"] : 0;
     let img_height = options.hasOwnProperty("img_height") ? options["img_height"] : 0;
@@ -11185,11 +11195,16 @@ class Tiff_Tools {
     }
 
     // PhotometricInterpretation - 262 0x0106 (0 = WhiteIsZero, 1 = BlackIsZero)
-    if (is_black) {
-      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,1,0,0]);
+    if (color_space == "rgb") {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,2,0,0]);
     } else {
-      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,0,0,0]);
+      if (is_black) {
+        tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,1,0,0]);
+      } else {
+        tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,0,0,0]);
+      }
     }
+
 
     // StripOffsets - 273 0x0111
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x11, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(strip_offset, "BIG_ENDIAN")));
