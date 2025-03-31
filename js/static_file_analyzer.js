@@ -10784,7 +10784,8 @@ class PDF_Parser {
             let sub_dict = await PDF_Parser.get_object_dictionary_values(sub_dict_text);
             object_dictionary[sub_dictionary_key] = sub_dict;
             cur_obj_index = end_obj_index + 2;
-            continue;
+            end_obj_index = object_text.indexOf(">>", cur_obj_index) +2;
+            //continue;
           }
         }
 
