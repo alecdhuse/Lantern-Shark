@@ -2136,6 +2136,12 @@ class Static_File_Analyzer {
       file_info.metadata.creation_os = "macOS";
     }
 
+    let macos_regex = /(macOS\s*Version\s[0-9\.]+\s*(?:\(Build\s*[0-9a-fA-F]+\s*\))?)/gmi;
+    let macos_matches = macos_regex.exec(file_info.metadata.creation_application);
+    if (macos_matches !== null) {
+      file_info.metadata.creation_os = macos_matches[1];
+    }
+
     // Remove þÿ from creation application.
     if (file_info.metadata.creation_application.startsWith("þÿ")) {
       file_info.metadata.creation_application = file_info.metadata.creation_application.substr(2);
