@@ -10339,6 +10339,10 @@ class PDF_Parser {
                 obj_name = object_array[i].object_dictionary["Name"];
               }
 
+              if (!obj_name.toLowerCase().endsWith(".jpg") && !obj_name.toLowerCase().endsWith(".jpeg")) {
+                obj_name = obj_name + ".jpg";
+              }
+
               file_components.push({
                 'name': obj_name,
                 'type': "jpeg",
