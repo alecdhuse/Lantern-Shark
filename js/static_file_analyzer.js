@@ -11245,7 +11245,7 @@ class Tiff_Tools {
     if (color_space == "rgb") {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,3, 0,0,0,3].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample_offset, "BIG_ENDIAN")));
     } else if (color_space == "grayscale") {
-      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,3, 0,0,0,1, 0,8,0,0]);
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample, "BIG_ENDIAN")));
     }
 
     // Compression - 259 0x0103
