@@ -1849,6 +1849,9 @@ class Static_File_Analyzer {
       file_text = Static_File_Analyzer.get_ascii(file_bytes);
     }
 
+    // Do an initial search for IoCs in the file text.
+    file_info = Static_File_Analyzer.search_for_iocs(file_text, file_info);
+
     // Get an array of the embedded objects
     let embedded_objs = await PDF_Parser.get_objects(file_info, file_bytes, file_text);
 
@@ -2142,10 +2145,10 @@ class Static_File_Analyzer {
       file_info.metadata.creation_os = macos_matches[1];
     }
 
-    // Remove þÿ from creation application.
-    if (file_info.metadata.creation_application.startsWith("þÿ")) {
-      file_info.metadata.creation_application = file_info.metadata.creation_application.substr(2);
-    }
+    // Remove þÿ from author, creation application, and title.
+    if (file_info.metadata.creation_application.startsWith("þÿ")) file_info.metadata.creation_application = file_info.metadata.creation_application.substr(2);
+    if (file_info.metadata.author.startsWith("þÿ")) file_info.metadata.author = file_info.metadata.author.substr(2);
+    if (file_info.metadata.title.startsWith("þÿ")) file_info.metadata.title = file_info.metadata.title.substr(2);
 
     return file_info;
   }
