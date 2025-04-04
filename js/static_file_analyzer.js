@@ -10317,6 +10317,23 @@ class MSG_Tools {
 class PDF_Parser {
 
   /**
+   * Retrieves an object from the object array when given it's object ID and generation number.
+   *
+   * @param {array}  object_array - The array of parsed PDF objects.
+   * @param {integer}   object_id - The object ID
+   * @return {integer}  gen_number - The object's generation number.
+   */
+  static find_object(object_array, object_id, gen_number) {
+    for (let i2=0; i2<object_array.length; i2++) {
+      if (object_array[i2].object_number == object_id && object_array[i2].generation_number == gen_number) {
+        return object_array[i2];
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
    * Retrieves embedded files and components within the PDF.
    *
    * @param {Object}  file_info - The file_info object used file file parsing results.
@@ -10382,6 +10399,7 @@ class PDF_Parser {
                   let img_byte_len = 0;
                   let bits_per_sample = 8;
                   let color_space_str = "";
+                  let color_space = "unknown";
 
                   /*
                   *
@@ -10420,7 +10438,18 @@ class PDF_Parser {
                   }
 
                   if (object_array[i].object_dictionary.hasOwnProperty("Length")) {
-                    img_byte_len = parseInt(object_array[i].object_dictionary['Length']);
+                    if (object_array[i].object_dictionary['Length'].endsWith(" R")) {
+                      let obj_ref_elements = object_array[i].object_dictionary['Length'].split(" ");
+                      let pdf_obj = PDF_Parser.find_object(object_array, obj_ref_elements[0], obj_ref_elements[1]);
+
+                      if (pdf_obj.hasOwnProperty("object_text")) {
+                        img_byte_len = parseInt(pdf_obj.object_text.trim());
+                      } else {
+                        img_byte_len = 0;
+                      }
+                    } else {
+                      img_byte_len = parseInt(object_array[i].object_dictionary['Length']);
+                    }
                   }
 
                   if (object_array[i].object_dictionary.hasOwnProperty("Height")) {
@@ -10511,11 +10540,16 @@ class PDF_Parser {
                     }
                   }
 
+                  if (object_array[i].object_dictionary.hasOwnProperty("DeviceGray")) {
+                    color_space = "grayscale";
+                  }
+
                   // Get alternate color space
-                  let color_space = "unknown";
                   if (color_space_obj_dict.hasOwnProperty("Alternate")) {
                     if (color_space_obj_dict['Alternate'] == "DeviceRGB") {
                       color_space = "rgb";
+                    } else if (color_space_obj_dict['Alternate'] == "DeviceGray") {
+                      color_space = "grayscale";
                     }
                   }
 
@@ -11182,12 +11216,23 @@ class Tiff_Tools {
     */
 
     // Image data
-    tiff_file_bytes = tif_header.concat([0xFF,0x00, 0,0, 0xFF,0,0,0, 0xFF,0, 0,0]);
+    let image_data = [0xFF,0x00, 0,0, 0xFF,0,0,0, 0xFF,0, 0,0];
+    tiff_file_bytes = tif_header.concat(image_data);
 
     // Indicate the number of Image File Directory (IFD) entries.
     let ifd_entry_count = 9;
-    let bits_per_sample_offset =  8 + 12 + 2 + 4 + (ifd_entry_count * 12) + 2;
-    let strip_offset = 8 + 12 + 2 + 4 + (ifd_entry_count * 12) + 6 + 2 + 2; // Header + image_Data + idf count field + IOD Null - idf count times 12 byte length + bits_per_sample_offset.
+    let bits_per_sample_offset = 0;
+    let bits_per_sample_length = 0;
+
+    if (color_space == "rgb") {
+      bits_per_sample_offset = tif_header.length + image_data.length + 2 + 4 + (ifd_entry_count * 12) + 2;
+      bits_per_sample_length = 8;
+    } else if (color_space == "grayscale") {
+      bits_per_sample_offset = 0;
+      bits_per_sample_length = 0;
+    }
+
+    let strip_offset = tif_header.length + image_data.length + 2 + 4 + (ifd_entry_count * 12) + bits_per_sample_length + 2; // Header + image_Data + idf count field + IOD Null - idf count times 12 byte length + bits_per_sample_offset.
     tiff_file_bytes = tiff_file_bytes.concat(Static_File_Analyzer.get_word_bytes_from_int(ifd_entry_count));
 
     // ImageWidth - 256 - 0x0100
@@ -11197,7 +11242,11 @@ class Tiff_Tools {
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x01, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
 
     // BitsPerSample - 258 - 0x0102
-    tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,3, 0,0,0,3].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample_offset, "BIG_ENDIAN")));
+    if (color_space == "rgb") {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,3, 0,0,0,3].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample_offset, "BIG_ENDIAN")));
+    } else if (color_space == "grayscale") {
+      tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,3, 0,0,0,1, 0,8,0,0]);
+    }
 
     // Compression - 259 0x0103
     if (k==0) {
@@ -11219,7 +11268,6 @@ class Tiff_Tools {
       }
     }
 
-
     // StripOffsets - 273 0x0111
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x11, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(strip_offset, "BIG_ENDIAN")));
 
@@ -11238,8 +11286,10 @@ class Tiff_Tools {
     // Write next IOD offset zero as no other table
     tiff_file_bytes = tiff_file_bytes.concat([0,0,0,0]);
 
-    // Write bits_per_sample value
-    tiff_file_bytes = tiff_file_bytes.concat([0x00,0x00, 0x00,0x08,0x00,0x08,0x00,0x08]);
+    if (color_space == "rgb") {
+      // Write bits_per_sample value
+      tiff_file_bytes = tiff_file_bytes.concat([0x00,0x00, 0x00,0x08,0x00,0x08,0x00,0x08]);
+    }
 
     // Make sure data starts on a word boundry
     tiff_file_bytes = tiff_file_bytes.concat([0,0]);
