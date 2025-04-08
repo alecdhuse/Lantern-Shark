@@ -8495,6 +8495,18 @@ class Static_File_Analyzer {
     var url_match = url_regex.exec(search_text);
 
     while (url_match !== null) {
+      // Check for UNC Path
+      if (url_match[1].startsWith("\\")) {
+        let unc_regex = /\\\\[a-zA-Z0-9\.\-_%]{1,}\\/gmi;
+        let unc_match = unc_regex.exec(url_match[1]);
+
+        if (unc_match === null) {
+          // Not a real UNC path
+          url_match = url_regex.exec(search_text);
+          continue;
+        }
+      }
+
       // Check for hex IP
       var hex_ip_match = /(?:\/|\\)(0x[0-9a-f]+)\//gmi.exec(url_match[1]);
       if (hex_ip_match !== null) {
