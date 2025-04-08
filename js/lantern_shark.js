@@ -250,6 +250,7 @@ function display_file_summary(file_analyzer_results) {
     $("#script_code").val(combined_scripts);
     $("#summary_detected_script").html(escape_string(combined_script_types));
   } else {
+    $("#script_code").val("");
     $("#summary_detected_script").html("None");
     $("#summary_detected_script").html("");
   }
