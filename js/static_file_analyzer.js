@@ -10557,6 +10557,8 @@ class PDF_Parser {
                   let samples_per_pixel = 3;
                   if (color_space_obj_dict.hasOwnProperty("N")) {
                     samples_per_pixel = parseInt(color_space_obj_dict['N']);
+                  } else if (color_space == "grayscale") {
+                    samples_per_pixel = 1;
                   }
 
                   let image_file_bytes = Tiff_Tools.create_tiff_header({
@@ -11175,13 +11177,15 @@ class Tiff_Tools {
     let k = options.hasOwnProperty("k") ? options["k"] : 0;
     let is_black = options.hasOwnProperty("is_black") ? options["is_black"] : false;
     let color_space = options.hasOwnProperty("color_space") ? options["color_space"] : "unknown";
-    let columns = options.hasOwnProperty("columns") ? options["columns"] : 1728;
-    let rows = options.hasOwnProperty("rows") ? options["rows"] : 0;
+    //let columns = options.hasOwnProperty("columns") ? options["columns"] : 1728;
+    //let rows = options.hasOwnProperty("rows") ? options["rows"] : 0;
     let img_height = options.hasOwnProperty("img_height") ? options["img_height"] : 0;
     let img_width = options.hasOwnProperty("img_width") ? options["img_width"] : 0;
-    let img_byte_len = options.hasOwnProperty("byte_len") ? options["byte_len"] : 0;
+    let img_byte_len = options.hasOwnProperty("img_byte_len") ? options["img_byte_len"] : 0;
     let bits_per_sample = options.hasOwnProperty("bits_per_sample") ? options["bits_per_sample"] : 8;
     let samples_per_pixel = options.hasOwnProperty("samples_per_pixel") ? options["samples_per_pixel"] : 3;
+
+
 
     /*
     *  Create the TIFF file structure to append the image data stream to.
@@ -11193,7 +11197,13 @@ class Tiff_Tools {
     *  The reference I am using uses big-endian, so we will use that.
     */
     let tiff_file_bytes = [];
-    let tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x14];
+    let tif_header = [];
+
+    if (color_space == "rgb" || color_space == "unknown") {
+      tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x14];
+    } else if (color_space == "grayscale") {
+      tif_header = [0x4d,0x4d,0x00,0x2a,0x00,0x00,0x00,0x08];
+    }
 
     /*
     *  IFD format is:
@@ -11215,8 +11225,14 @@ class Tiff_Tools {
     *  Reference: https://github.com/corkami/pics/blob/master/binary/TIFF_BE.png
     */
 
-    // Image data
-    let image_data = [0xFF,0x00, 0,0, 0xFF,0,0,0, 0xFF,0, 0,0];
+    // Image Data / Color Map
+    let image_data = [];
+    if (color_space == "rgb" || color_space == "unknown") {
+      image_data = [0xFF,0x00,0x00, 0x00,0xFF,0x00, 0x00,0x00,0xFF, 0,0,0];
+    } else if (color_space == "grayscale") {
+      image_data = [];
+    }
+
     tiff_file_bytes = tif_header.concat(image_data);
 
     // Indicate the number of Image File Directory (IFD) entries.
@@ -11224,7 +11240,7 @@ class Tiff_Tools {
     let bits_per_sample_offset = 0;
     let bits_per_sample_length = 0;
 
-    if (color_space == "rgb") {
+    if (color_space == "rgb" || color_space == "unknown") {
       bits_per_sample_offset = tif_header.length + image_data.length + 2 + 4 + (ifd_entry_count * 12) + 2;
       bits_per_sample_length = 8;
     } else if (color_space == "grayscale") {
@@ -11242,7 +11258,7 @@ class Tiff_Tools {
     tiff_file_bytes = tiff_file_bytes.concat([0x01,0x01, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(img_height, "BIG_ENDIAN")));
 
     // BitsPerSample - 258 - 0x0102
-    if (color_space == "rgb") {
+    if (color_space == "rgb" || color_space == "unknown") {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,3, 0,0,0,3].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample_offset, "BIG_ENDIAN")));
     } else if (color_space == "grayscale") {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x02, 0,4, 0,0,0,1].concat(Static_File_Analyzer.get_bytes_from_int(bits_per_sample, "BIG_ENDIAN")));
@@ -11258,7 +11274,7 @@ class Tiff_Tools {
     }
 
     // PhotometricInterpretation - 262 0x0106 (0 = WhiteIsZero, 1 = BlackIsZero)
-    if (color_space == "rgb") {
+    if (color_space == "rgb" || color_space == "unknown") {
       tiff_file_bytes = tiff_file_bytes.concat([0x01,0x06, 0,3, 0,0,0,1, 0,2,0,0]);
     } else {
       if (is_black) {
@@ -11286,9 +11302,11 @@ class Tiff_Tools {
     // Write next IOD offset zero as no other table
     tiff_file_bytes = tiff_file_bytes.concat([0,0,0,0]);
 
-    if (color_space == "rgb") {
-      // Write bits_per_sample value
+    // Write bits_per_sample value
+    if (color_space == "rgb" || color_space == "unknown") {
       tiff_file_bytes = tiff_file_bytes.concat([0x00,0x00, 0x00,0x08,0x00,0x08,0x00,0x08]);
+    } else if (color_space == "grayscale") {
+      //tiff_file_bytes = tiff_file_bytes.concat([0x00,0x00, 0x00,0x08]);
     }
 
     // Make sure data starts on a word boundry
