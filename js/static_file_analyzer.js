@@ -1856,100 +1856,13 @@ class Static_File_Analyzer {
     let embedded_objs = await PDF_Parser.get_objects(file_info, file_bytes, file_text);
 
     // Get any embedded files and components
-    file_info.file_components = await PDF_Parser.get_file_components(embedded_objs);
+    file_info.file_components = await PDF_Parser.get_file_components(file_info, embedded_objs);
 
     // Push streams to file_components
     file_info.file_components.concat(file_info.file_components);
 
-    // Identify Objects and Streams
-    var metadata_objs = ["/author", "/Author", "/creationdate", "/CreationDate", "/creator", "/moddate", "/ModDate", "/producer", "/Producer", "/title", "/Title"];
-    var metadata_obj_found = false;
-    var objects_regex = /\d+\s+\d+\s+obj\s+\<\<\s*([^\>]*)\>\>\s*(endobj|stream|trailer|\>\>)/gmi;
-    var objects_matches = objects_regex.exec(file_text);
-
-    while (objects_matches != null) {
-      if (objects_matches[2] == "endobj" || objects_matches[2] == "trailer") {
-        if (metadata_objs.some(v => objects_matches[1].toLowerCase().includes(v))) {
-          // Found an object with metadata.
-          var metadata_regex = /\/(Author|CreationDate|Creator|ModDate|Producer|Subject|Title)(\([a-zA-Z0-9\:\/\.\?\=\-]+\)|[^\/\n\r]+)/gmi;
-          var metadata_matches = metadata_regex.exec(objects_matches[1]);
-
-          while (metadata_matches != null) {
-            var meta_value = metadata_matches[2].trim();
-            if (meta_value.substring(0,1) == "(" && meta_value.slice(-1) == ")" ) {
-              meta_value = meta_value.slice(1,-1);
-            }
-
-            if (metadata_matches[1].toLowerCase() == "author") {
-              file_info.metadata.author = meta_value;
-              metadata_obj_found = true;
-            } else if (metadata_matches[1].toLowerCase() == "creationdate") {
-              metadata_obj_found = true;
-              var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
-              if (date_parts != null) {
-                  file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
-              }
-            } else if (metadata_matches[1].toLowerCase() == "creator") {
-              metadata_obj_found = true;
-              if (file_info.metadata.author == "unknown") {
-                file_info.metadata.author = meta_value.replaceAll("\\(", "(").replaceAll("\\)", ")");
-              }
-            } else if (metadata_matches[1].toLowerCase() == "moddate") {
-              metadata_obj_found = true;
-              var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
-              if (date_parts != null) {
-                  file_info.metadata.last_modified_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
-              }
-            } else if (metadata_matches[1].toLowerCase() == "producer") {
-              metadata_obj_found = true;
-              var creation_os_match = meta_value.match(/(\w+\s+\w+\s+\d+\.\d+\.\d+\s+(?:Build\s[0-9-a-zA-Z]+)?)/gm);
-              if (creation_os_match != null) {
-                file_info.metadata.creation_os = creation_os_match[0];
-                file_info.metadata.creation_application = meta_value.split("/")[0].trim();
-              } else {
-                meta_value = meta_value.replaceAll("\\)", ")");
-                meta_value = meta_value.replaceAll("\\(", "(");
-                file_info.metadata.creation_application = meta_value;
-              }
-            } else if (metadata_matches[1].toLowerCase() == "subject") {
-              metadata_obj_found = true;
-              file_info.metadata.description = meta_value;
-            } else if (metadata_matches[1].toLowerCase() == "title") {
-              metadata_obj_found = true;
-              file_info.metadata.title = meta_value;
-            }
-
-            metadata_matches = metadata_regex.exec(objects_matches[1]);
-          }
-        }
-      } else if (objects_matches[2] == "stream") {
-        var start_index = objects_matches.index + objects_matches[0].length;
-        var end_index = file_text.indexOf("endstream", start_index);
-        var stream_text = file_text.substring(start_index, end_index);
-
-        // Check for CVE-2019-7089 Ref: https://insert-script.blogspot.com/2019/01/adobe-reader-pdf-callback-via-xslt.html
-        var cve_match = stream_text.match(/\<\?\s*xml\-stylesheet\s*([^\>]+)\?\>/gmi);
-        if (cve_match !== null) {
-          var href_unc_match = /href\s*\=\s*[\"\'](\\\\[^\'\"]+)[\"\']/gmi.exec(cve_match[0]);
-          if (href_unc_match !== null) {
-            file_info.analytic_findings.push("MALICIOUS - CVE-2019-7089 Exploit Found");
-            file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2019-7089 in Adobe Acrobat and Reader.", file_info);
-            file_info.iocs.push(href_unc_match[1]);
-          }
-        }
-      } else if (objects_matches[2] == ">>") {
-        // Nested OBJ
-        // Check for CVE-2018-4993 Ref: https://github.com/deepzec/Bad-Pdf/blob/master/badpdf.py
-        var cve_match = /\/AA\s*\<\<\s*\/O\s*\<\<\s*\/F\s*\(\s*((?:\\{2,4}|https?\:\/\/)(?:[a-zA-Z0-9]+[\.\:]?)+\\*\s*)\s*\)\s*\/D\s*[^\n\r]+\s+\/S\s*\/GoToE/gmi.exec(objects_matches[1]);
-        if (cve_match !== null) {
-          file_info.analytic_findings.push("MALICIOUS - CVE-2018-4993 Exploit Found");
-          file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2018-4993 in Adobe Acrobat and Reader.", file_info);
-          file_info.iocs.push(cve_match[1]);
-        }
-      }
-
-      objects_matches = objects_regex.exec(file_text);
-    }
+    // Look for metadata
+    file_info = PDF_Parser.get_metadate(file_info, file_text);
 
     // Look for embedded scripts
     var script_regex = /\/(S|JavaScript|JS)\s*\([^\uFFF0-\uFFFF]/gmi;
@@ -5787,6 +5700,23 @@ class Static_File_Analyzer {
     }
 
     return ascii_text;
+  }
+
+  /**
+   * Returns the ASCII representation of hex encoded ASCII.
+   * @static
+   *
+   * @param {String}  hex_string A string containing hex numbers.
+   * @return {string} The ASCII representation of the given hex string.
+   */
+  static get_ascii_from_hex_string(hex_string) {
+    let ascii = "";
+    for (let i = 0; i < hex_string.length; i += 2) {
+        let part = hex_string.substr(i, 2);
+        ascii += String.fromCharCode(parseInt(part, 16));
+    }
+
+    return ascii;
   }
 
   /**
@@ -10352,7 +10282,7 @@ class PDF_Parser {
    * @param {array}   object_array - An array containing the embedded objects of the PDF file.
    * @return {array}  An array containing the embedded file components of the PDF file.
    */
-  static async get_file_components(object_array) {
+  static async get_file_components(file_info, object_array) {
     let file_components = [];
 
     for (let i=0; i<object_array.length; i++) {
@@ -10616,7 +10546,8 @@ class PDF_Parser {
             }
           }
         }
-      } else if (object_array[i].object_dictionary.hasOwnProperty("Filter/FlateDecode/Length")) {
+      } else if (object_array[i].object_dictionary.hasOwnProperty("Filter/FlateDecode/Length") ||
+                (object_array[i].object_dictionary.hasOwnProperty("Filter") && object_array[i].object_dictionary['Filter'] == "FlateDecode")) {
         if (pako !== null && pako !== undefined) {
           try {
             let stream_type = Static_File_Analyzer.is_valid_file(object_array[i].stream_bytes);
@@ -10634,14 +10565,22 @@ class PDF_Parser {
                 'file_bytes': deflate_bytes
               });
             } else {
+              let deflate_text = Static_File_Analyzer.get_ascii(deflate_bytes);
+              if (deflate_text.includes("/Title") || deflate_text.includes("/Creator") || deflate_text.includes("/Producer") || deflate_text.includes("/CreationDate") || deflate_text.includes("/ModDate") || deflate_text.includes("/Subject") || deflate_text.includes("/Author")) {
+                // Extract metadata
+                file_info = PDF_Parser.get_metadate(file_info, deflate_text);
+              }
+
               let fc_filename =  "Object_" + object_array[i].object_number + ".txt";
 
+              /*
               file_components.push({
                 'name': fc_filename,
                 'type': "txt",
                 'directory': false,
                 'file_bytes': deflate_bytes
               });
+              */
             }
           } catch (err) {
             console.log("Can't deflate PDF stream.");
@@ -10663,6 +10602,185 @@ class PDF_Parser {
     }
 
     return file_components;
+  }
+
+  /**
+   * Parses metadata from file text.
+   *
+   * @param {Object}  file_info - The file_info object used file file parsing results.
+   * @param {String}  file_text - The ASCII file text
+   * @return {Object} file_info - The file_info object with the updated metadata.
+   */
+  static get_metadate(file_info, file_text) {
+    // Identify Objects and Streams
+    var metadata_objs = ["/author", "/Author", "/creationdate", "/CreationDate", "/creator", "/Creator", "/moddate", "/ModDate", "/producer", "/Producer", "/title", "/Title"];
+    var metadata_obj_found = false;
+    var objects_regex = /\d+\s+\d+\s+obj\s+\<\<\s*([^\>]*)\>\>\s*(endobj|stream|trailer|\>\>)/gmi;
+    var objects_matches = objects_regex.exec(file_text);
+
+    if (metadata_matches != null) {
+      while (objects_matches != null) {
+        if (objects_matches[2] == "endobj" || objects_matches[2] == "trailer") {
+          if (metadata_objs.some(v => objects_matches[1].toLowerCase().includes(v))) {
+            // Found an object with metadata.
+            var metadata_regex = /\/(Author|CreationDate|Creator|ModDate|Producer|Subject|Title)(\([a-zA-Z0-9\:\/\.\?\=\-]+\)|[^\/\n\r]+)/gmi;
+            var metadata_matches = metadata_regex.exec(objects_matches[1]);
+
+            while (metadata_matches != null) {
+              var meta_value = metadata_matches[2].trim();
+              if (meta_value.substring(0,1) == "(" && meta_value.slice(-1) == ")" ) {
+                meta_value = meta_value.slice(1,-1);
+              }
+
+              if (metadata_matches[1].toLowerCase() == "author") {
+                if (file_info.metadata.author == "unknown") {
+                  file_info.metadata.author = meta_value;
+                  metadata_obj_found = true;
+                }
+              } else if (metadata_matches[1].toLowerCase() == "creationdate") {
+                if (file_info.metadata.creation_date == "unknown") {
+                  metadata_obj_found = true;
+                  var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
+                  if (date_parts != null) {
+                      file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
+                  }
+                }
+              } else if (metadata_matches[1].toLowerCase() == "creator") {
+                metadata_obj_found = true;
+                if (file_info.metadata.author == "unknown") {
+                  file_info.metadata.author = meta_value.replaceAll("\\(", "(").replaceAll("\\)", ")");
+                }
+              } else if (metadata_matches[1].toLowerCase() == "moddate") {
+                if (file_info.metadata.last_modified_date == "unknown") {
+                  metadata_obj_found = true;
+                  var date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
+                  if (date_parts != null) {
+                      file_info.metadata.last_modified_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
+                  }
+                }
+              } else if (metadata_matches[1].toLowerCase() == "producer") {
+                metadata_obj_found = true;
+                var creation_os_match = meta_value.match(/(\w+\s+\w+\s+\d+\.\d+\.\d+\s+(?:Build\s[0-9-a-zA-Z]+)?)/gm);
+                if (creation_os_match != null) {
+                  if (file_info.metadata.creation_os == "unknown") {
+                    file_info.metadata.creation_os = creation_os_match[0];
+                  }
+
+                  if (file_info.metadata.creation_application == "unknown") {
+                    file_info.metadata.creation_application = meta_value.split("/")[0].trim();
+                  }
+                } else {
+                  if (file_info.metadata.creation_application == "unknown") {
+                    meta_value = meta_value.replaceAll("\\)", ")");
+                    meta_value = meta_value.replaceAll("\\(", "(");
+                    file_info.metadata.creation_application = meta_value;
+                  }
+                }
+              } else if (metadata_matches[1].toLowerCase() == "subject") {
+                if (file_info.metadata.description == "unknown") {
+                  metadata_obj_found = true;
+                  file_info.metadata.description = meta_value;
+                }
+              } else if (metadata_matches[1].toLowerCase() == "title") {
+                if (file_info.metadata.title == "unknown") {
+                  metadata_obj_found = true;
+                  file_info.metadata.title = meta_value;
+                }
+              }
+
+              metadata_matches = metadata_regex.exec(objects_matches[1]);
+            }
+
+          } else if (objects_matches[2] == "stream") {
+            var start_index = objects_matches.index + objects_matches[0].length;
+            var end_index = file_text.indexOf("endstream", start_index);
+            var stream_text = file_text.substring(start_index, end_index);
+
+            // Check for CVE-2019-7089 Ref: https://insert-script.blogspot.com/2019/01/adobe-reader-pdf-callback-via-xslt.html
+            var cve_match = stream_text.match(/\<\?\s*xml\-stylesheet\s*([^\>]+)\?\>/gmi);
+            if (cve_match !== null) {
+              var href_unc_match = /href\s*\=\s*[\"\'](\\\\[^\'\"]+)[\"\']/gmi.exec(cve_match[0]);
+              if (href_unc_match !== null) {
+                file_info.analytic_findings.push("MALICIOUS - CVE-2019-7089 Exploit Found");
+                file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2019-7089 in Adobe Acrobat and Reader.", file_info);
+                file_info.iocs.push(href_unc_match[1]);
+              }
+            }
+          } else if (objects_matches[2] == ">>") {
+            // Nested OBJ
+            // Check for CVE-2018-4993 Ref: https://github.com/deepzec/Bad-Pdf/blob/master/badpdf.py
+            var cve_match = /\/AA\s*\<\<\s*\/O\s*\<\<\s*\/F\s*\(\s*((?:\\{2,4}|https?\:\/\/)(?:[a-zA-Z0-9]+[\.\:]?)+\\*\s*)\s*\)\s*\/D\s*[^\n\r]+\s+\/S\s*\/GoToE/gmi.exec(objects_matches[1]);
+            if (cve_match !== null) {
+              file_info.analytic_findings.push("MALICIOUS - CVE-2018-4993 Exploit Found");
+              file_info = Static_File_Analyzer.add_ttp("T1203", "Execution", "Exploits CVE-2018-4993 in Adobe Acrobat and Reader.", file_info);
+              file_info.iocs.push(cve_match[1]);
+            }
+          }
+
+          objects_matches = objects_regex.exec(file_text);
+        }
+      }
+    } else {
+      var metadata_regex2 = /(\/Title|\/Creator|\/Producer|\/CreationDate|\/ModDate|\/Subject|\/Author|\/Keywords)(.+\s*(?!\/Title|\/Creator|\/Producer|\/CreationDate|\/ModDate|\/Subject|\/Author\|\/Keywords|\>\>))/gmi;
+      var metadata_matches2 = metadata_regex2.exec(file_text);
+
+      while (metadata_matches2 != null) {
+        let meta_tag = metadata_matches2[1].substring(1).toLowerCase();
+        let meta_value = metadata_matches2[2].trim();
+
+        // Text for hext encoding
+        let hex_regex = /\<([0-9A-F-a-f]+)\>/gmi;
+        let hex_matches = hex_regex.exec(meta_value);
+
+        if (hex_matches != null) {
+          meta_value = Static_File_Analyzer.get_ascii_from_hex_string(hex_matches[1]);
+        }
+
+        // Remove þÿ
+        if (meta_value.startsWith("þÿ")) meta_value = meta_value.substr(2);
+
+        if (meta_tag == "author") {
+          if (file_info.metadata.author == "unknown") {
+            file_info.metadata.author = meta_value;
+          }
+        } else if (meta_tag == "creationdate") {
+          if (file_info.metadata.creation_date == "0000-00-00 00:00:00") {
+            let date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
+            if (date_parts != null) {
+                file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
+            }
+          }
+        } else if (meta_tag == "creator") {
+          if (file_info.metadata.author == "unknown") {
+            file_info.metadata.author = meta_value;
+          }
+        } else if (meta_tag == "moddate") {
+          if (file_info.metadata.last_modified_date == "0000-00-00 00:00:00") {
+            let date_parts = /[Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:Z|\+[0-9\']+)/gmi.exec(meta_value);
+            if (date_parts != null) {
+                file_info.metadata.last_modified_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
+            }
+          }
+        } else if (meta_tag == "producer") {
+          if (file_info.metadata.creation_os == "unknown") {
+            file_info.metadata.creation_os = meta_value;
+          }
+        } else if (meta_tag == "subject") {
+          if (file_info.metadata.description == "unknown") {
+            file_info.metadata.description = meta_value;
+          }
+        } else if (meta_tag == "title") {
+          if (file_info.metadata.title == "unknown") {
+            file_info.metadata.title = meta_value;
+          }
+        }
+
+
+        metadata_matches2 = metadata_regex2.exec(file_text);
+      }
+    }
+
+    return file_info;
   }
 
   /**
