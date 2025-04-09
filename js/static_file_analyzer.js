@@ -10763,7 +10763,7 @@ class PDF_Parser {
           }
         } else if (meta_tag == "producer") {
           if (file_info.metadata.creation_os == "unknown") {
-            file_info.metadata.creation_os = meta_value;
+            //file_info.metadata.creation_os = meta_value;
           }
         } else if (meta_tag == "subject") {
           if (file_info.metadata.description == "unknown") {
