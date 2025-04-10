@@ -94,10 +94,15 @@ class Static_File_Analyzer {
       // Probably a text or mark up/down language
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
 
-      if (/\<(?:html|\!doctype\s+html|script|meta\s+content)/gmi.test(file_text)) {
+      if (Static_File_Analyzer.array_equals(file_bytes.slice(0,13), [0xEF,0xBB,0xBF,0x22, 0x52,0x65,0x63,0x65,0x69,0x76,0x65,0x64,0x3A]) ||
+          Static_File_Analyzer.array_equals(file_bytes.slice(0,9),  [0x52,0x65,0x63,0x65,0x69,0x76,0x65,0x64,0x3A])) {
+
+          file_info = this.analyze_eml(file_bytes, file_text);
+      } else if (/\<(?:html|\!doctype\s+html|script|meta\s+content)/gmi.test(file_text)) {
         file_info = this.analyze_html(file_bytes, file_text);
       } else if (/\<!doctype\s+/gmi.test(file_text)) {
         // generic XML
+        file_info = this.analyze_xml(file_bytes);
       }
     }
 
@@ -136,6 +141,9 @@ class Static_File_Analyzer {
 
     if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
       return_val = {'is_valid': true, 'type': "ace"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,13), [0xEF,0xBB,0xBF,0x22, 0x52,0x65,0x63,0x65,0x69,0x76,0x65,0x64,0x3A]) ||
+               Static_File_Analyzer.array_equals(file_bytes.slice(0,9),  [0x52,0x65,0x63,0x65,0x69,0x76,0x65,0x64,0x3A])) {
+      return_val = {'is_valid': true, 'type': "eml"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
       return_val = {'is_valid': true, 'type': "exe"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x47,0x49,0x46,0x38,0x39])) {
@@ -537,6 +545,24 @@ class Static_File_Analyzer {
       'findings': findings,
       'iocs':     iocs
     };
+  }
+
+  /**
+   * Extracts meta data and other information from EML message files.
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @param {String}      file_text    The text of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_eml(file_bytes, file_text="") {
+    let file_info = Static_File_Analyzer.get_default_file_json();
+
+    file_info.file_format = "eml";
+    file_info.file_generic_type = "Message";
+
+    let parsed_email = Email_Tools.parse_email(file_text);
+
+    return file_info;
   }
 
   /**
@@ -9024,6 +9050,60 @@ class CFB_Parser {
     }
 
     return guid;
+  }
+}
+
+class Email_Tools {
+
+  /**
+   * Encodes a byte array into a Base64 string.
+   *
+   * This code is based off Mozilla Base64 tools.
+   * See: https://developer.mozilla.org/en-US/docs/Glossary/Base64
+   *
+   * @param  {String}   file_text The text of the email file.
+   * @return {Object}   Returns the parsed email.
+   */
+  static parse_email(file_text) {
+    let return_obj = {
+      "header": "",
+      "content": [],
+      "attachments": []
+    };
+
+    file_text = file_text.trim();
+
+    // Extract email header
+    let header_end_index = file_text.indexOf("\n\n");
+    if (header_end_index == -1) header_end_index = file_text.indexOf("\n--");
+
+    return_obj.header = file_text.substring(0,header_end_index);
+
+    // Get email body
+    let email_body = file_text.substring(header_end_index);
+
+    // Get content sections
+    let content_section_regex = /--([0-9a-zA-Z_]+)_/gm;
+    let content_section_matches = content_section_regex.exec(email_body);
+
+    while (content_section_matches !== null) {
+      let content_id = content_section_matches[1];
+      let content_id_end = "--" + content_id + "_--";
+
+      let content_start = content_section_matches.index;
+      let content_end = email_body.indexOf(content_id_end, (content_start + content_id.length))
+
+      let content = email_body.substring((content_start + content_id.length + 2), content_end);
+      let unparsed_text = email_body.substring(content_end + content_id.length + 5);
+
+      content_section_matches = content_section_regex.exec(unparsed_text);
+    }
+
+    // DEBUG
+    console.log(return_obj.header);
+    console.log(email_body);
+
+    return return_obj;
   }
 }
 
