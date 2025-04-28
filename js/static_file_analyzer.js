@@ -562,6 +562,39 @@ class Static_File_Analyzer {
 
     let parsed_email = Email_Tools.parse_email(file_text);
 
+    // Add content
+    let utf8_encode = new TextEncoder(); // Init text encoder
+
+    for (let i=0; i<parsed_email.content.length; i++) {
+      let current_content = parsed_email.content[i];
+
+      if (current_content.content_headers['Content-Transfer-Encoding'] == "quoted-printable") {
+        if (current_content.content_headers.hasOwnProperty("charset")) {
+          current_content.content_text = Email_Tools.decode_utf_quoted_printable(file_info, current_content.content_text, current_content.content_headers.charset);
+        } else {
+          current_content.content_text = Email_Tools.decode_utf_quoted_printable(file_info, current_content.content_text, current_content.content_headers.charset);
+        }
+      }
+
+      if (current_content.content_headers['Content-Type'] == "text/plain") {
+        file_info.file_components.push({
+          'name': ("plain_text_content_" + i + ".txt"),
+          'type': "txt",
+          'directory': false,
+          'file_bytes': utf8_encode.encode(current_content.content_text)
+        });
+      } else if (current_content.content_headers['Content-Type'] == "text/html") {
+        file_info.file_components.push({
+          'name': ("html_content_" + i + ".html"),
+          'type': "html",
+          'directory': false,
+          'file_bytes': utf8_encode.encode(current_content.content_text)
+        });
+      }
+
+
+    }
+
     return file_info;
   }
 
@@ -9056,6 +9089,101 @@ class CFB_Parser {
 class Email_Tools {
 
   /**
+   * Decodes text input encoded in quoted printable.
+   *
+   * @param  {String}   input The quoted printable encoded text to decode.
+   * @return {String}   Thre decoded quoted printable text.
+   */
+  static decode_quoted_printable(input) {
+    if (input.startsWith("=")) {
+      return String.fromCharCode(parseInt(input.substring(1), 16));
+    } else {
+      return input;
+    }
+  }
+
+  /**
+   * Decodes email content encoded in quoted printable.
+   *
+   * @param  {Object}   file_info A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   * @param  {String}   encoded_text The quoted printable encoded text to decode.
+   * @param  {String}   charset The text charset. The default is utf-8.
+   * @return {String}   Thre decoded quoted printable text.
+   */
+  static decode_utf_quoted_printable(file_info, encoded_text, charset="utf-8") {
+    let qp_regex = /(\=[0-9A-F]{2}(?![0-9A-Z]))/gmi;
+    let decoded_text = encoded_text;
+    let current_match;
+
+    while (current_match = qp_regex.exec(encoded_text)) {
+      if (current_match[1] == "=AD") {
+        file_info.analytic_findings.push("SUSPICIOUS - Zero Width Unicode Character Obfuscation");
+        decoded_text = decoded_text.replaceAll(current_match[1], "");
+      } else {
+        let replace_char = "%" + current_match[1].substring(1);
+        decoded_text = decoded_text.replaceAll(current_match[1], replace_char);
+      }
+    }
+
+    try {
+      // Use Javascript decoder, it works better for emoji, etc
+      decoded_text = decodeURI(decoded_text);
+    } catch(err) {
+      // Fallback decode
+      qp_regex = /(\=[0-9A-F]{2}(?![0-9A-Z]))/gmi;
+      decoded_text = encoded_text;
+
+      while (current_match = qp_regex.exec(encoded_text)) {
+        let decoded_char = Email_Tools.decode_quoted_printable(current_match[1]);
+        decoded_text = decoded_text.replace(current_match[1], decoded_char);
+      }
+    }
+
+    decoded_text = decoded_text.replace(/3D\"/gm, ""); // Remove = hex encoding
+    decoded_text = decoded_text.replace(/\?url=3Dhttp/gmi, "?url=http"); // Remove = hex encoding
+
+    return decoded_text;
+  }
+
+  /**
+   * Extract MIME content headers from email content.
+   *
+   * @param  {String}   content_text The message content text that the content headers will be extracted from.
+   * @return {Object}   Returns an object with the content types and values.
+   */
+  static parse_content_headers(content_text) {
+    let content_headers = {};
+
+    let headers_end = content_text.indexOf("\r\n\r\n");
+    let header_text = content_text.substring(0, headers_end);
+    let new_content_text = content_text.substring(headers_end).trim();
+
+    let content_header_regex = /([Cc]ontent-[a-zA-Z\-]+)\s*\:\s*[\"\']{0,1}([^\;\s]+)[\"\']{0,1}(?:\s*(\;)\s*[\r\n]*\S+)*(?:\s*(\;)\s*[\r\n]*\S+)*(?:\s*(\;)\s*[\r\n]*\S+)*(?:\s*(\;)\s*[\r\n]*\S+)*/gm;
+    let content_header_matches = content_header_regex.exec(header_text);
+
+    while (content_header_matches !== null) {
+      content_headers[content_header_matches[1]] = content_header_matches[2];
+
+      if (content_header_matches.length > 3 && content_header_matches[3] == ";") {
+        let sub_header_regex = /([^\'\"\s]+)\s*\=\s*[\"\']([^\'\"]+)[\"\']/gm;
+        let sub_header_matches = sub_header_regex.exec(content_header_matches[0]);
+
+        while (sub_header_matches !== null) {
+          content_headers[sub_header_matches[1]] = sub_header_matches[2];
+          sub_header_matches = sub_header_regex.exec(content_header_matches[0]);
+        }
+      }
+
+      content_header_matches = content_header_regex.exec(header_text);
+    }
+
+    return {
+      'content_headers': content_headers,
+      'content_text':    new_content_text
+    };
+  }
+
+  /**
    * Encodes a byte array into a Base64 string.
    *
    * This code is based off Mozilla Base64 tools.
@@ -9084,24 +9212,49 @@ class Email_Tools {
 
     // Get content sections
     let content_section_regex = /--([0-9a-zA-Z_]+)_/gm;
+    let content_section_regex2 = /--([0-9a-zA-Z_]+)_/gm;
     let content_section_matches = content_section_regex.exec(email_body);
+
+    let content_data = {
+      'content_headers': {},
+      'content_text':    ""
+    };
+
+    let subsection_matching = false;
+    let source_text = email_body;
+    let unparsed_text = "";
+    let content = "";
 
     while (content_section_matches !== null) {
       let content_id = content_section_matches[1];
       let content_id_end = "--" + content_id + "_--";
 
       let content_start = content_section_matches.index;
-      let content_end = email_body.indexOf(content_id_end, (content_start + content_id.length))
+      let content_end = source_text.indexOf(content_id_end, (content_start + content_id.length))
 
-      let content = email_body.substring((content_start + content_id.length + 2), content_end);
-      let unparsed_text = email_body.substring(content_end + content_id.length + 5);
+      if (content_end < 0) {
+        content_end = source_text.length;
+      }
 
-      content_section_matches = content_section_regex.exec(unparsed_text);
+      content = source_text.substring((content_start + content_id.length + 3), content_end).trim();
+      unparsed_text = source_text.substring(content_end + content_id.length + 5);
+
+      // Get content headers and content
+      content_data = Email_Tools.parse_content_headers(content);
+      return_obj.content.push(content_data);
+
+      if (subsection_matching === false) {
+        content_section_matches = content_section_regex.exec(unparsed_text);
+
+        if (content_section_matches === null) {
+          subsection_matching = true;
+          source_text = content_data.content_text;
+          content_section_matches = content_section_regex2.exec(source_text);
+        }
+      } else {
+        content_section_matches = content_section_regex2.exec(source_text);
+      }
     }
-
-    // DEBUG
-    console.log(return_obj.header);
-    console.log(email_body);
 
     return return_obj;
   }
