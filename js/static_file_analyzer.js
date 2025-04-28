@@ -576,6 +576,8 @@ class Static_File_Analyzer {
         }
       }
 
+      let content_type_parts = current_content.content_headers['Content-Type'].split("/");
+
       if (current_content.content_headers['Content-Type'] == "text/plain") {
         file_info.file_components.push({
           'name': ("plain_text_content_" + i + ".txt"),
@@ -590,8 +592,34 @@ class Static_File_Analyzer {
           'directory': false,
           'file_bytes': utf8_encode.encode(current_content.content_text)
         });
-      }
+      } else if (content_type_parts[0].toLowerCase() == "image") {
+        if (current_content.content_headers['Content-Transfer-Encoding'] == "base64") {
+          let content_bytes = Static_File_Analyzer.convert_base64_to_array(current_content.content_text);
+          let filename = "file_" + i + "." + content_type_parts[1];
 
+          if (current_content.content_headers.hasOwnProperty("Content-Description")) {
+            filename = current_content.content_headers['Content-Description'] + "." + content_type_parts[1];
+          }
+
+          file_info.file_components.push({
+            'name': filename,
+            'type': content_type_parts[1],
+            'directory': false,
+            'file_bytes': content_bytes
+          });
+        }
+      } else if (current_content.content_headers.hasOwnProperty("filename")) {
+        if (current_content.content_headers['Content-Transfer-Encoding'] == "base64") {
+          let content_bytes = Static_File_Analyzer.convert_base64_to_array(current_content.content_text);
+
+          file_info.file_components.push({
+            'name': current_content.content_headers.filename,
+            'type': content_type_parts[1],
+            'directory': false,
+            'file_bytes': content_bytes
+          });
+        }
+      }
 
     }
 
@@ -9152,9 +9180,14 @@ class Email_Tools {
    * @return {Object}   Returns an object with the content types and values.
    */
   static parse_content_headers(content_text) {
+    content_text = content_text.replaceAll(/--\s+--/gm, "--");
+
     let content_headers = {};
 
     let headers_end = content_text.indexOf("\r\n\r\n");
+
+    if (headers_end < 0) headers_end = content_text.length;
+
     let header_text = content_text.substring(0, headers_end);
     let new_content_text = content_text.substring(headers_end).trim();
 
@@ -9210,50 +9243,39 @@ class Email_Tools {
     // Get email body
     let email_body = file_text.substring(header_end_index);
 
-    // Get content sections
-    let content_section_regex = /--([0-9a-zA-Z_]+)_/gm;
-    let content_section_regex2 = /--([0-9a-zA-Z_]+)_/gm;
-    let content_section_matches = content_section_regex.exec(email_body);
-
     let content_data = {
       'content_headers': {},
       'content_text':    ""
     };
 
-    let subsection_matching = false;
-    let source_text = email_body;
-    let unparsed_text = "";
-    let content = "";
+    // Get content sections
+    let content_section_regex = /--([0-9a-zA-Z_]+)_(?:--)?/gm;
+    let content_section_matches = content_section_regex.exec(email_body);
+    let content_section_matches2;
 
     while (content_section_matches !== null) {
-      let content_id = content_section_matches[1];
-      let content_id_end = "--" + content_id + "_--";
+      content_section_matches2 = content_section_regex.exec(email_body);
+      let content_start = content_section_matches.index + content_section_matches[0].length;
+      let content_end;
 
-      let content_start = content_section_matches.index;
-      let content_end = source_text.indexOf(content_id_end, (content_start + content_id.length))
-
-      if (content_end < 0) {
-        content_end = source_text.length;
-      }
-
-      content = source_text.substring((content_start + content_id.length + 3), content_end).trim();
-      unparsed_text = source_text.substring(content_end + content_id.length + 5);
-
-      // Get content headers and content
-      content_data = Email_Tools.parse_content_headers(content);
-      return_obj.content.push(content_data);
-
-      if (subsection_matching === false) {
-        content_section_matches = content_section_regex.exec(unparsed_text);
-
-        if (content_section_matches === null) {
-          subsection_matching = true;
-          source_text = content_data.content_text;
-          content_section_matches = content_section_regex2.exec(source_text);
-        }
+      if (content_section_matches2 === null) {
+        content_end = email_body.length;
       } else {
-        content_section_matches = content_section_regex2.exec(source_text);
+        content_end = content_section_matches2.index;
       }
+
+      let content_text = email_body.substring((content_start), content_end).trim();
+
+      if (content_text.length > 0) {
+        // Get content headers and content
+        content_data = Email_Tools.parse_content_headers(content_text);
+
+        if (content_data.content_headers['Content-Type'] != "multipart/related" && content_data.content_headers['Content-Type'] != "multipart/alternative") {
+          return_obj.content.push(content_data);
+        }
+      }
+
+      content_section_matches = content_section_matches2;
     }
 
     return return_obj;
