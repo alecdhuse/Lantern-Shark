@@ -16,7 +16,7 @@ See the table below for a list of supported file types and types of data extract
 | ACE            | X            | X               |                 |          |                               |
 | DLL            | X            |                 |                 |          |                               |
 | DOCX           | X            | X               | X               | X        | X                             |
-| EML            | X            |                 | X               |          |                               |
+| EML            | X            | X               | X               | X        |                               |
 | EXE            | X            | X               |                 |          |                               |
 | FODT           | X            |                 |                 |          | X                             |
 | GZ             | X            | X               |                 |          |                               |

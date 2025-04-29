@@ -562,6 +562,17 @@ class Static_File_Analyzer {
 
     let parsed_email = Email_Tools.parse_email(file_text);
 
+    // Get metadata
+    file_info.metadata.author = parsed_email.header_obj['From'];
+    file_info.metadata.creation_date= parsed_email.header_obj['Date'];
+    file_info.file_encrypted = "false";
+    file_info.metadata.last_modified_date = parsed_email.header_obj['Date'];
+    file_info.metadata.title = parsed_email.header_obj['Subject'];
+
+    if (parsed_email.header_obj.hasOwnProperty('MIME-Version')){
+      file_info.file_format_ver = parsed_email.header_obj['MIME-Version'];
+    }
+
     // Add content
     let utf8_encode = new TextEncoder(); // Init text encoder
 
@@ -9228,6 +9239,7 @@ class Email_Tools {
   static parse_email(file_text) {
     let return_obj = {
       "header": "",
+      "header_obj": {},
       "content": [],
       "attachments": []
     };
@@ -9239,6 +9251,33 @@ class Email_Tools {
     if (header_end_index == -1) header_end_index = file_text.indexOf("\n--");
 
     return_obj.header = file_text.substring(0,header_end_index);
+
+    // Parse Headers
+    let header_lines = return_obj.header.split("\n");
+    let key;
+    let val;
+
+    for (let i=0; i<header_lines.length; i++) {
+      let sep_index = header_lines[i].indexOf(":");
+
+      if (sep_index > 0) {
+        key = header_lines[i].substring(0,sep_index);
+        val = header_lines[i].substring(sep_index+1).trim();
+      } else {
+        key = "";
+        val = header_lines[i].trim();
+      }
+
+      while (i<header_lines.length-1) {
+        if (header_lines[i+1].startsWith(" ")) {
+          val = val + "\n" + header_lines[i+1];
+          i++;
+        } else {
+          return_obj.header_obj[key] = val;
+          break;
+        }
+      }
+    }
 
     // Get email body
     let email_body = file_text.substring(header_end_index);
