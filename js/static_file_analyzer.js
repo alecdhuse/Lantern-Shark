@@ -594,7 +594,7 @@ class Static_File_Analyzer {
         });
       } else if (content_type_parts[0].toLowerCase() == "image") {
         if (current_content.content_headers['Content-Transfer-Encoding'] == "base64") {
-          let content_bytes = Static_File_Analyzer.convert_base64_to_array(current_content.content_text);
+          let content_bytes = HTML_Parser.decode_smuggled_file(current_content.content_text);
           let filename = "file_" + i + "." + content_type_parts[1];
 
           if (current_content.content_headers.hasOwnProperty("Content-Description")) {
@@ -610,7 +610,7 @@ class Static_File_Analyzer {
         }
       } else if (current_content.content_headers.hasOwnProperty("filename")) {
         if (current_content.content_headers['Content-Transfer-Encoding'] == "base64") {
-          let content_bytes = Static_File_Analyzer.convert_base64_to_array(current_content.content_text);
+          let content_bytes = HTML_Parser.decode_smuggled_file(current_content.content_text);
 
           file_info.file_components.push({
             'name': current_content.content_headers.filename,

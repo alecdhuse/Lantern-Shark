@@ -16,8 +16,9 @@ See the table below for a list of supported file types and types of data extract
 | ACE            | X            | X               |                 |          |                               |
 | DLL            | X            |                 |                 |          |                               |
 | DOCX           | X            | X               | X               | X        | X                             |
+| EML            | X            |                 | X               |          |                               |
 | EXE            | X            | X               |                 |          |                               |
-| FODT           | X            |                 |                 |          | X
+| FODT           | X            |                 |                 |          | X                             |
 | GZ             | X            | X               |                 |          |                               |
 |[ISO - ISO 9660](https://github.com/alecdhuse/Lantern-Shark/wiki/ISO-9660)| X | X | X | X |                   |
 |[ISO - UDF](https://github.com/alecdhuse/Lantern-Shark/wiki/Universal-Disk-Format)| X | X | X | X |           |
@@ -29,7 +30,7 @@ See the table below for a list of supported file types and types of data extract
 | PPTX           | X            | X               | X               | X        |                               |
 | RAR            | X            | X               |                 |          |                               |
 | RTF            | X            | X               |                 | X        |                               |
-| SVG            | X            |                 |                 | X        | X
+| SVG            | X            |                 |                 | X        | X                             |
 | TIFF           | X            |                 |                 |          |                               |
 | XLS            | X            | X               |                 | X        | X                             |
 | XLSB           | X            | X               | X               | X        | X                             |
