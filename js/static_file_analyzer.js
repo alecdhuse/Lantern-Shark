@@ -487,6 +487,10 @@ class Static_File_Analyzer {
    * @return {Array}  A string array with rule names for potentialy malicious code.
    */
   analyze_embedded_script(script_text) {
+    if (script_text === undefined || script_text === null) {
+      return;
+    }
+
     var findings = [];
     var iocs = [];
 
@@ -3013,17 +3017,19 @@ class Static_File_Analyzer {
       }
     }
 
-    var analyzed_results = this.analyze_embedded_script(file_info.scripts.extracted_script);
+    for (let s=0; s<file_info.scripts.extracted_scripts.length; s++) {
+      var analyzed_results = this.analyze_embedded_script(file_info.scripts.extracted_scripts[s]);
 
-    for (var f=0; f<analyzed_results.findings.length; f++) {
-      if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
-        file_info.analytic_findings.push(analyzed_results.findings[f]);
+      for (var f=0; f<analyzed_results.findings.length; f++) {
+        if (!file_info.analytic_findings.includes(analyzed_results.findings[f])) {
+          file_info.analytic_findings.push(analyzed_results.findings[f]);
+        }
       }
-    }
 
-    for (var f=0; f<analyzed_results.iocs.length; f++) {
-      if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
-        file_info.iocs.push(analyzed_results.iocs[f]);
+      for (var f=0; f<analyzed_results.iocs.length; f++) {
+        if (!file_info.iocs.includes(analyzed_results.iocs[f])) {
+          file_info.iocs.push(analyzed_results.iocs[f]);
+        }
       }
     }
 
@@ -4463,17 +4469,19 @@ class Static_File_Analyzer {
       }
     }
 
-    var analyzed_results = this.analyze_embedded_script(file_info.scripts.extracted_script);
+    for (let s=0; s<file_info.scripts.extracted_scripts.length; s++) {
+      var analyzed_results = this.analyze_embedded_script(file_info.scripts.extracted_scripts[s]);
 
-    for (var f=0; f<analyzed_results.findings.length; f++) {
-      if (analyzed_results.findings.indexOf(analyzed_results.findings[f]) < 0) {
-        file_info.analytic_findings.push(analyzed_results.findings[f]);
+      for (var f=0; f<analyzed_results.findings.length; f++) {
+        if (analyzed_results.findings.indexOf(analyzed_results.findings[f]) < 0) {
+          file_info.analytic_findings.push(analyzed_results.findings[f]);
+        }
       }
-    }
 
-    for (var f=0; f<analyzed_results.iocs.length; f++) {
-      if (file_info.iocs.indexOf(analyzed_results.iocs[f]) < 0) {
-          file_info.iocs.push(analyzed_results.iocs[f]);
+      for (var f=0; f<analyzed_results.iocs.length; f++) {
+        if (file_info.iocs.indexOf(analyzed_results.iocs[f]) < 0) {
+            file_info.iocs.push(analyzed_results.iocs[f]);
+        }
       }
     }
 
