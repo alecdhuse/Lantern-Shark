@@ -42,6 +42,8 @@ See the table below for a list of supported file types and types of data extract
 # CVE Detection
 Lantern Shark should be able to detect the following CVEs:
 
+- EML
+  - CVE-2024-11182
 - FODT
   - CVE-2024-12425
 - MSG

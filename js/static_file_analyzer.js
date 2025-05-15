@@ -606,6 +606,14 @@ class Static_File_Analyzer {
           'file_bytes': utf8_encode.encode(current_content.content_text)
         });
       } else if (current_content.content_headers['Content-Type'] == "text/html") {
+        // Check for CVEs
+        let cve_regex = /title\s*\=[\"\'][^\"\']*\<\s*\/\s*noembed\s*\>\s*\<\s*img\s+(?:\w+\s*\=\s*[\S]+\s*)+onerror/gmi;
+        let cve_match = cve_regex.exec(current_content.content_text);
+
+        if (cve_match !== null) {
+          file_info.analytic_findings.push("MALICIOUS - CVE-2024-11182 Exploit Found");
+        }
+
         file_info.file_components.push({
           'name': ("html_content_" + i + ".html"),
           'type': "html",
@@ -9258,7 +9266,7 @@ class Email_Tools {
 
                 if (content_headers['filename'].endsWith("'")) {
                   content_headers['filename'] = content_headers['filename'].slice(0, -1);
-                }                
+                }
               }
 
             }
