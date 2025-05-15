@@ -591,7 +591,12 @@ class Static_File_Analyzer {
         }
       }
 
-      let content_type_parts = current_content.content_headers['Content-Type'].split("/");
+      let content_type = "text/plain"; // Default value
+      if (current_content.content_headers.hasOwnProperty('Content-Type')) {
+        content_type = current_content.content_headers['Content-Type'];
+      }
+
+      let content_type_parts = content_type.split("/");
 
       if (current_content.content_headers['Content-Type'] == "text/plain") {
         file_info.file_components.push({
@@ -9210,7 +9215,7 @@ class Email_Tools {
     let header_text = content_text.substring(0, headers_end);
     let new_content_text = content_text.substring(headers_end).trim();
 
-    let content_header_regex = /([Cc]ontent-[a-zA-Z\-]+)\s*\:\s*[\"\']{0,1}([^\;\s]+)[\"\']{0,1}(?:\s*(\;)\s*[\r\n]*\S+)*(?:\s*(\;)\s*[\r\n]*\S+)*(?:\s*(\;)\s*[\r\n]*\S+)*(?:\s*(\;)\s*[\r\n]*\S+)*/gm;
+    let content_header_regex = /([Cc]ontent-[a-zA-Z\-]+)\s*\:\s*[\"\']{0,1}([^\;\s]+)[\"\']{0,1}(?:\s*(\;)\s*[\r\n]*[\S\h]+)*(?:\s*(\;)\s*[\r\n]*[\S\h]+)*(?:\s*(\;)\s*[\r\n]*[\S\h]+)*(?:\s*(\;)\s*[\r\n]*[\S\h]+)*/gm;
     let content_header_matches = content_header_regex.exec(header_text);
 
     while (content_header_matches !== null) {
@@ -9220,9 +9225,44 @@ class Email_Tools {
         let sub_header_regex = /([^\'\"\s]+)\s*\=\s*[\"\']([^\'\"]+)[\"\']/gm;
         let sub_header_matches = sub_header_regex.exec(content_header_matches[0]);
 
-        while (sub_header_matches !== null) {
-          content_headers[sub_header_matches[1]] = sub_header_matches[2];
-          sub_header_matches = sub_header_regex.exec(content_header_matches[0]);
+        if (sub_header_matches !== null) {
+          while (sub_header_matches !== null) {
+            content_headers[sub_header_matches[1]] = sub_header_matches[2];
+            sub_header_matches = sub_header_regex.exec(content_header_matches[0]);
+          }
+        } else {
+          // Alt method for finding filename
+          if (content_header_matches[0].toLowerCase().indexOf("filename") > 0) {
+            let filename_regex = /filename\s*\=\s*(?:[\"\']([\S\h]+)[\"\']|([^\r\n]+))/gmi;
+            let filename_matches = filename_regex.exec(content_header_matches.input);
+
+            if (filename_matches !== null) {
+              if (filename_matches[1] !== undefined && filename_matches[1] !== null) {
+                content_headers['filename'] = filename_matches[1];
+              } else if (filename_matches[2] !== undefined && filename_matches[1] !== null) {
+                content_headers['filename'] = filename_matches[2];
+              }
+
+              if (content_headers.hasOwnProperty('filename')) {
+                if (content_headers['filename'].startsWith("\"")) {
+                  content_headers['filename'] = content_headers['filename'].slice(1);
+                }
+
+                if (content_headers['filename'].startsWith("'")) {
+                  content_headers['filename'] = content_headers['filename'].slice(1);
+                }
+
+                if (content_headers['filename'].endsWith("\"")) {
+                  content_headers['filename'] = content_headers['filename'].slice(0, -1);
+                }
+
+                if (content_headers['filename'].endsWith("'")) {
+                  content_headers['filename'] = content_headers['filename'].slice(0, -1);
+                }                
+              }
+
+            }
+          }
         }
       }
 
@@ -9255,8 +9295,8 @@ class Email_Tools {
     file_text = file_text.trim();
 
     // Extract email header
-    let header_end_index = file_text.indexOf("\n\n");
-    if (header_end_index == -1) header_end_index = file_text.indexOf("\n--");
+    let header_end_index = file_text.indexOf("\n--");
+    if (header_end_index == -1) header_end_index = file_text.indexOf("\n\n");
 
     return_obj.header = file_text.substring(0,header_end_index);
 
@@ -9296,7 +9336,7 @@ class Email_Tools {
     };
 
     // Get content sections
-    let content_section_regex = /--([0-9a-zA-Z_]+)_(?:--)?/gm;
+    let content_section_regex = /--([0-9a-zA-Z_\=]+)_?(?:--)?/gm;
     let content_section_matches = content_section_regex.exec(email_body);
     let content_section_matches2;
 
