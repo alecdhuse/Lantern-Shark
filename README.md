@@ -14,6 +14,7 @@ See the table below for a list of supported file types and types of data extract
 | File Extension | File Type ID | File Attributes | Components List | Metadata | Script Detection & Extraction |
 | -------------- | ------------ | --------------- | --------------- | -------- | ----------------------------- |
 | ACE            | X            | X               |                 |          |                               |
+| BMP            | X            |                 |                 |          |                               | 
 | DLL            | X            |                 |                 |          |                               |
 | DOCX           | X            | X               | X               | X        | X                             |
 | EML            | X            | X               | X               | X        |                               |

@@ -51,6 +51,8 @@ class Static_File_Analyzer {
 
     if (Static_File_Analyzer.array_equals(file_bytes.slice(7,14), [42,42,65,67,69,42,42])) {
       file_info = this.analyze_ace(file_bytes);
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [0x42,0x4d])) {
+      file_info = this.analyze_bmp(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
       file_info = this.analyze_cbf(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
@@ -145,6 +147,8 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,13), [0xEF,0xBB,0xBF,0x22, 0x52,0x65,0x63,0x65,0x69,0x76,0x65,0x64,0x3A]) ||
                Static_File_Analyzer.array_equals(file_bytes.slice(0,9),  [0x52,0x65,0x63,0x65,0x69,0x76,0x65,0x64,0x3A])) {
       return_val = {'is_valid': true, 'type': "eml"};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [0x42,0x4d])) {
+      return_val = {'is_valid': true, 'type': "bmp"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [77,90])) {
       return_val = {'is_valid': true, 'type': "exe"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x47,0x49,0x46,0x38,0x39])) {
@@ -325,6 +329,21 @@ class Static_File_Analyzer {
       file_info.file_encrypted = "false";
       file_info.file_encryption_type = "none";
     }
+
+    return file_info;
+  }
+
+  /**
+   * Extracts meta data and other information from BMP files.
+   *
+   * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
+   */
+  analyze_bmp(file_bytes) {
+    var file_info = Static_File_Analyzer.get_default_file_json();
+
+    file_info.file_format = "bmp";
+    file_info.file_generic_type = "image";
 
     return file_info;
   }
@@ -11686,6 +11705,10 @@ class Tiff_Tools {
 
       // Pixel data (BGR format)
       let offset = header_size;
+
+      for (let i=tiff_header.image_data_offset; i<file_bytes.length; i+=3) {
+
+      }
     } else {
       // File not valid
     }
@@ -11855,7 +11878,8 @@ class Tiff_Tools {
       'width':             0,
       'bits_per_sample':   [],
       'strip_offsets':     0,
-      'samples_per_pixel': 0
+      'samples_per_pixel': 0,
+      'image_data_offset': 0
     };
 
     if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [0x4d,0x4d])) {
@@ -11864,6 +11888,8 @@ class Tiff_Tools {
 
     let ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(4,8), tiff_header.endianness);
     let ifd_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice((ifd_offset), (ifd_offset+2)), tiff_header.endianness);
+
+    tiff_header.image_data_offset = (ifd_offset + 2) + (ifd_count * 12) + 2;
 
     for (let i=0; i<ifd_count; i++) {
       let entry_index = (ifd_offset + 2) + (i*12);
