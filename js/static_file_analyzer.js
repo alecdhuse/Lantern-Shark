@@ -1105,7 +1105,7 @@ class Static_File_Analyzer {
     file_info.file_encryption_type = "none";
 
     var parsed_lnk = {};
-    parsed_lnk['HeaderSize'] = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
+    parsed_lnk['header_size'] = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(0,4), Static_File_Analyzer.LITTLE_ENDIAN);
     parsed_lnk['LinkCLSID'] = this.get_guid(file_bytes.slice(4,20));
 
     var link_flags_arr = [
@@ -11652,9 +11652,12 @@ class Tiff_Tools {
 
   /**
    * Converts a tiff image file to a BMP image file.
+   * This can be used to show a preview on an HTML canvas element.
    *
    * @param {array}  file_bytes - The bytes of the input TIFF file.
    * @return {array} The file bytes of the output BMP file.
+   *
+   * See: https://www.ece.ualberta.ca/~elliott/ee552/studentAppNotes/2003_w/misc/bmp_file_format/bmp_file_format.htm
    */
   static convert_tiff_to_bmp(file_bytes) {
     let bmp_file_bytes = [];
@@ -11666,7 +11669,23 @@ class Tiff_Tools {
       let tiff_header = Tiff_Tools.parse_header(file_bytes);
 
       // Write BMP file header
-      bmp_file_bytes.concat([0x4D, 0x42]);
+      let header_size = 54;
+      let row_size = Math.ceil((24 * tiff_header.width) / 32) * 4;
+      let image_size = row_size * tiff_header.height;
+      let file_size = header_size + image_size;
+
+      bmp_file_bytes.concat([0x4D, 0x42]); // Magic number
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(file_size), "BIG_ENDIAN"); // File size
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(header_size), "BIG_ENDIAN"); // Header size
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(40), "BIG_ENDIAN"); // DIB header size
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(tiff_header.width), "BIG_ENDIAN");
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(tiff_header.height), "BIG_ENDIAN");
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(1), "BIG_ENDIAN"); // planes
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(24), "BIG_ENDIAN"); // Bits per pixel, assume 24
+      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(image_size), "BIG_ENDIAN");
+
+      // Pixel data (BGR format)
+      let offset = header_size;
     } else {
       // File not valid
     }
