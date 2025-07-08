@@ -156,7 +156,7 @@ async function decrypt_file(e) {
           // Analyze the first file that is not a directory.
           var subfile_analyzer_results = await static_analyzer.analyze(analyzer_results.file_components[i].file_bytes);
 
-          display_file_summary(subfile_analyzer_results);
+          display_file_summary(subfile_analyzer_results, analyzer_results.file_components[i].file_bytes);
           select_file_component(null, i);
 
           if (subfile_analyzer_results.file_components.length > 0) {
@@ -187,7 +187,7 @@ async function decrypt_file(e) {
  * @param {object}  file_analyzer_results The results from the Static_File_Analyzer
  * @return {void}
  */
-function display_file_summary(file_analyzer_results) {
+function display_file_summary(file_analyzer_results, file_bytes=[]) {
   // Load summary info
   $("#summary_file_format").html(file_analyzer_results.file_format);
   $("#summary_file_type").html(file_analyzer_results.file_generic_type);
@@ -255,6 +255,47 @@ function display_file_summary(file_analyzer_results) {
     $("#summary_detected_script").html("");
   }
 
+  // Preview
+  const canvas = document.getElementById('file_preview');
+  const ctx = canvas.getContext('2d');
+  ctx.font = '20px Arial';
+
+  if (file_analyzer_results.file_generic_type.toLowerCase() == "image") {
+    let file_identifier;
+    let data_url;
+
+    if (file_analyzer_results.file_format.toLowerCase() == "tiff") {
+      let bmp_file_bytes = Static_File_Analyzer.base64_encode_array(Tiff_Tools.convert_tiff_to_bmp(file_bytes));
+      file_identifier = "image/bmp";
+      data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(bmp_file_bytes);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillText('Not Supported For This File Type', 2, 16);
+    } else if (file_analyzer_results.file_format.toLowerCase() == "bmp"  ||
+               file_analyzer_results.file_format.toLowerCase() == "gif"  ||
+               file_analyzer_results.file_format.toLowerCase() == "jpeg" ||
+               file_analyzer_results.file_format.toLowerCase() == "png"  ||
+               file_analyzer_results.file_format.toLowerCase() == "svg"  ||
+               file_analyzer_results.file_format.toLowerCase() == "webp") {
+
+      file_identifier = "image/" + file_analyzer_results.file_format;
+      data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(file_bytes);
+
+      preview_image = new Image();
+      preview_image.onload = function() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(preview_image, 0, 0);
+      };
+
+      preview_image.src = data_url;
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillText('Not Supported For This File Type', 2, 16);
+    }
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillText('Not Supported For This File Type', 2, 16);
+  }
 }
 
 /**
@@ -377,7 +418,7 @@ function read_file(e) {
         select_file_component(null, 0);
       } else {
         // Load main file summary info
-        display_file_summary(analyzer_results);
+        display_file_summary(analyzer_results, file_byte_array);
       }
 
       $("#file_text").val(get_file_text(array));
@@ -477,6 +518,7 @@ async function select_file_component(e, component_index=null) {
 
   try {
     if (e !== null) {
+      e.stopPropagation();
       var component_id = e.currentTarget.id;
       selected_file_component_id = component_id;
       component_info = component_id.split("_").slice(1);
@@ -529,7 +571,7 @@ async function select_file_component(e, component_index=null) {
       $("#file_text").val(get_file_text(selected_file_component.file_bytes));
       $("#parsed_file_text").val(select_analyzer_results.parsed);
 
-      display_file_summary(select_analyzer_results);
+      display_file_summary(select_analyzer_results, selected_file_component.file_bytes);
 
       if (selected_file_component.hasOwnProperty("file_bytes") && selected_file_component.file_bytes.length > 0) {
         // Enable save toolbar item
@@ -543,8 +585,6 @@ async function select_file_component(e, component_index=null) {
   } catch (err) {
     console.log("Error parsing file component: " + err);
   }
-
-  if (e !== null) e.stopPropagation();
 }
 
 /**
@@ -561,7 +601,7 @@ async function select_top_level_file(e) {
     $(new_id).removeClass("file_tree_item_selected");
   }
 
-  display_file_summary(analyzer_results);
+  display_file_summary(analyzer_results, file_byte_array);
   $("#file_text").val(get_file_text(file_byte_array));
   $("#parsed_file_text").val(analyzer_results.parsed);
 }

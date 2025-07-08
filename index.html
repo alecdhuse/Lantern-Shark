@@ -33,7 +33,7 @@
         </div>
 
         <div id="right_col_div">
-          <div id="tab_row">
+          <div id="tab_row" class="panel_header">
             <div id="tab_summary" class="tab_item tab_selected">Summary</div>
             <div id="tab_text" class="tab_item">Text</div>
             <div id="tab_parsed" class="tab_item">Parsed</div>
@@ -116,34 +116,39 @@
               <div class="table_align">
                 <div class="tab_summary_label">Extracted Script</div>
                 <div class="top_space">
-                  <textarea rows="10" cols="80" id="script_code" class="monospace_text" autocomplete="off"></textarea>
+                  <textarea rows="10" cols="90" id="script_code" class="monospace_text" autocomplete="off"></textarea>
                 </div>
               </div>
 
               <div class="table_align">
                 <div class="tab_summary_label top_space">Possible IoCs</div>
                 <div class="top_space">
-                  <textarea rows="10" cols="80" id="extracted_iocs" class="monospace_text" autocomplete="off"></textarea>
+                  <textarea rows="10" cols="90" id="extracted_iocs" class="monospace_text" autocomplete="off"></textarea>
                 </div>
               </div>
 
               <div class="table_align">
                 <div class="tab_summary_label top_space">Analytic Findings</div>
                 <div class="top_space">
-                  <textarea rows="6" cols="80" id="analytic_findings" class="monospace_text" autocomplete="off"></textarea>
+                  <textarea rows="6" cols="90" id="analytic_findings" class="monospace_text" autocomplete="off"></textarea>
                 </div>
               </div>
 
-            <div>
+            </div>
           </div>
+
+          <div id="tab_body_text">
+            <textarea rows="40" cols="80" id="file_text" class="monospace_text" autocomplete="off"></textarea>
+          </div>
+
+          <div id="tab_parsed_file">
+            <textarea rows="40" cols="80" id="parsed_file_text" class="monospace_text" autocomplete="off"></textarea>
+          </div>          
         </div>
 
-        <div id="tab_body_text">
-          <textarea rows="40" cols="80" id="file_text" class="monospace_text" autocomplete="off"></textarea>
-        </div>
-
-        <div id="tab_parsed_file">
-          <textarea rows="40" cols="80" id="parsed_file_text" class="monospace_text" autocomplete="off"></textarea>
+        <div id="preview_col_div">
+          <div class="panel_header">Preview</div>
+          <canvas id="file_preview"></canvas>
         </div>
       </div>
 

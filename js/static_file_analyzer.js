@@ -78,7 +78,8 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [137,80,78,71])) {
       if (file_text == "") file_text = Static_File_Analyzer.get_ascii(file_bytes);
       file_info = this.analyze_png(file_bytes, file_text);
-    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x49,0x49,0x2A,0x00])) {
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x49,0x49,0x2A,0x00]) ||
+               Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x4d,0x4d,0x00,0x2A])) {
       file_info = this.analyze_tiff(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x78,0x9f,0x3e,0x22])) {
       file_info = this.analyze_tnef(file_bytes);
@@ -170,6 +171,9 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,8), [208,207,17,224,161,177,26,225])) {
       let file_type = CFB_Parser.identify_file_type(file_bytes);
       return_val = {'is_valid': true, 'type': file_type};
+    } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x49,0x49,0x2A,0x00]) ||
+               Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x4d,0x4d,0x00,0x2A])) {
+      return_val = {'is_valid': true, 'type': "tiff"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0x78,0x9f,0x3e,0x22])) {
       return_val = {'is_valid': true, 'type': "tnef"};
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0,1,0,0,0])) {
@@ -11647,6 +11651,30 @@ class Tiff_Tools {
   };
 
   /**
+   * Converts a tiff image file to a BMP image file.
+   *
+   * @param {array}  file_bytes - The bytes of the input TIFF file.
+   * @return {array} The file bytes of the output BMP file.
+   */
+  static convert_tiff_to_bmp(file_bytes) {
+    let bmp_file_bytes = [];
+
+    // Verify file format
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x49,0x49,0x2A,0x00]) ||
+        Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x4d,0x4d,0x00,0x2A])) {
+
+      let tiff_header = Tiff_Tools.parse_header(file_bytes);
+
+      // Write BMP file header
+      bmp_file_bytes.concat([0x4D, 0x42]);
+    } else {
+      // File not valid
+    }
+
+    return bmp_file_bytes;
+  }
+
+  /**
    * Creates the header and tags for a TIFF file given the specific options.
    * This is used to extract TIFF images from a PDF file.
    *
@@ -11665,8 +11693,6 @@ class Tiff_Tools {
     let img_byte_len = options.hasOwnProperty("img_byte_len") ? options["img_byte_len"] : 0;
     let bits_per_sample = options.hasOwnProperty("bits_per_sample") ? options["bits_per_sample"] : 8;
     let samples_per_pixel = options.hasOwnProperty("samples_per_pixel") ? options["samples_per_pixel"] : 3;
-
-
 
     /*
     *  Create the TIFF file structure to append the image data stream to.
@@ -11794,6 +11820,57 @@ class Tiff_Tools {
     tiff_file_bytes = tiff_file_bytes.concat([0,0]);
 
     return tiff_file_bytes;
+  }
+
+  /**
+   * Parses the header for a tiff file.
+   *
+   * @param {array}   file_bytes - Array with int values 0-255 representing the bytes of the file to be analyzed.
+   * @return {object} The parsed header
+   *
+   */
+  static parse_header(file_bytes) {
+    let tiff_header = {
+      'endianness':        "LITTLE_ENDIAN",
+      'height':            0,
+      'width':             0,
+      'bits_per_sample':   [],
+      'strip_offsets':     0,
+      'samples_per_pixel': 0
+    };
+
+    if (Static_File_Analyzer.array_equals(file_bytes.slice(0,2), [0x4d,0x4d])) {
+      tiff_header.endianness = "BIG_ENDIAN";
+    }
+
+    let ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(4,8), tiff_header.endianness);
+    let ifd_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice((ifd_offset), (ifd_offset+2)), tiff_header.endianness);
+
+    for (let i=0; i<ifd_count; i++) {
+      let entry_index = (ifd_offset + 2) + (i*12);
+
+      let tag_val = file_bytes.slice((entry_index), (entry_index+2));
+      let tag_type = Static_File_Analyzer.get_two_byte_int(file_bytes.slice(entry_index+2, entry_index+4), tiff_header.endianness);
+
+      if (Static_File_Analyzer.array_equals(tag_val, [1,0]) || Static_File_Analyzer.array_equals(tag_val, [0,1])) {
+        // Image Width
+        tiff_header.width = Static_File_Analyzer.get_four_byte_int(file_bytes.slice((entry_index+8), (entry_index+12)), tiff_header.endianness);
+      } else if (Static_File_Analyzer.array_equals(tag_val, [1,1])) {
+        // Image Height
+        tiff_header.height = Static_File_Analyzer.get_four_byte_int(file_bytes.slice((entry_index+8), (entry_index+12)), tiff_header.endianness);
+      } else if (Static_File_Analyzer.array_equals(tag_val, [1,2]) || Static_File_Analyzer.array_equals(tag_val, [2,1])) {
+        // bits_per_sample
+        tiff_header.bits_per_sample = Static_File_Analyzer.get_four_byte_int(file_bytes.slice((entry_index+8), (entry_index+12)), tiff_header.endianness);
+      } else if (Static_File_Analyzer.array_equals(tag_val, [1,11]) || Static_File_Analyzer.array_equals(tag_val, [11,1])) {
+        // strip_offsets
+        tiff_header.strip_offsets = Static_File_Analyzer.get_four_byte_int(file_bytes.slice((entry_index+8), (entry_index+12)), tiff_header.endianness);
+      } else if (Static_File_Analyzer.array_equals(tag_val, [1,15]) || Static_File_Analyzer.array_equals(tag_val, [15,1])) {
+        // samples_per_pixel
+        tiff_header.samples_per_pixel = Static_File_Analyzer.get_four_byte_int(file_bytes.slice((entry_index+8), (entry_index+12)), tiff_header.endianness);
+      }
+    }
+
+    return tiff_header;
   }
 
   /**

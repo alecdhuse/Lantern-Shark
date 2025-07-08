@@ -26,6 +26,10 @@ body {
   font-weight: normal;
 }
 
+#file_preview {
+
+}
+
 #file_text {
   height: 96%;
   width: 99%;
@@ -55,10 +59,6 @@ body {
   overflow-y: scroll;
 }
 
-#open_file {
-  visibility: hidden;
-}
-
 #main_div {
   display: flex;
   height: 100%;
@@ -74,8 +74,22 @@ body {
   padding-inline-start: 24px;
 }
 
+#open_file {
+  visibility: hidden;
+}
+
+.panel_header {
+  margin-bottom: 8px;
+}
+
+#preview_col_div {
+  flex: 3;
+  margin-left: 8px;
+}
+
 #right_col_div {
   flex: 2;
+  max-width: 740px;
 }
 
 #summary_file_encrypted {
@@ -112,6 +126,10 @@ body {
   min-width: 500px;
 }
 
+#tab_body {
+  max-width: 740px;
+}
+
 #tab_body_text {
   display: none;
 }
@@ -130,7 +148,7 @@ body {
 }
 
 #tab_row {
-  margin-bottom: 8px;
+
 }
 
 .tab_selected {
