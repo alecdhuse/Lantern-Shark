@@ -11681,39 +11681,61 @@ class Tiff_Tools {
   static convert_tiff_to_bmp(file_bytes) {
     let bmp_file_bytes = [];
 
-    // Verify file format
-    if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x49,0x49,0x2A,0x00]) ||
-        Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x4d,0x4d,0x00,0x2A])) {
+    try {
+      // Verify file format
+      if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x49,0x49,0x2A,0x00]) ||
+          Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x4d,0x4d,0x00,0x2A])) {
 
-      let tiff_header = Tiff_Tools.parse_header(file_bytes);
+        let tiff_header = Tiff_Tools.parse_header(file_bytes);
 
-      // Write BMP file header
-      let header_size = 54;
-      let row_size = Math.ceil((24 * tiff_header.width) / 32) * 4;
-      let image_size = row_size * tiff_header.height;
-      let file_size = header_size + image_size;
+        // Write BMP file header
+        const header_size = 54;
+        const row_size = Math.ceil((24 * tiff_header.width) / 32) * 4;
+        const image_size = row_size * tiff_header.height;
+        const file_size = header_size + image_size;
 
-      bmp_file_bytes.concat([0x4D, 0x42]); // Magic number
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(file_size), "BIG_ENDIAN"); // File size
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(header_size), "BIG_ENDIAN"); // Header size
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(40), "BIG_ENDIAN"); // DIB header size
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(tiff_header.width), "BIG_ENDIAN");
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(tiff_header.height), "BIG_ENDIAN");
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(1), "BIG_ENDIAN"); // planes
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(24), "BIG_ENDIAN"); // Bits per pixel, assume 24
-      bmp_file_bytes.concat(Static_File_Analyzer.get_bytes_from_int(image_size), "BIG_ENDIAN");
+        const buffer = new ArrayBuffer(file_size);
+        const view = new DataView(buffer);
 
-      // Pixel data (BGR format)
-      let offset = header_size;
+        // BMP Header
+        view.setUint16(0, 0x4D42, true); // Magic number 'BM'
+        view.setUint32(2, file_size, true); // File size
+        view.setUint32(6, 0, true); // Reserved
+        view.setUint32(10, header_size, true); // Offset to pixel data
 
-      for (let i=tiff_header.image_data_offset; i<file_bytes.length; i+=3) {
+        // DIB Header
+        view.setUint32(14, 40, true); // DIB header size
+        view.setInt32(18, tiff_header.width, true); // Width
+        view.setInt32(22, -tiff_header.height, true); // Height (negative for top-down)
+        view.setUint16(26, 1, true); // Color planes
+        view.setUint16(28, 24, true); // Bits per pixel
+        view.setUint32(30, 0, true); // Compression (none)
+        view.setUint32(34, image_size, true); // Image size
+        view.setUint32(38, 2835, true); // Horizontal resolution (72 DPI)
+        view.setUint32(42, 2835, true); // Vertical resolution (72 DPI)
+        view.setUint32(46, 256, true); // Colors in color table
+        view.setUint32(50, 0, true); // Important color count
 
+        // Pixel data (BGR format)
+        let offset = header_size;
+
+        for (let i=tiff_header.image_data_offset; i<file_bytes.length; i+=3) {
+          view.setUint8(offset++, file_bytes[i + 2]); // Blue
+          view.setUint8(offset++, file_bytes[i + 1]); // Green
+          view.setUint8(offset++, file_bytes[i]);     // Red
+        }
+
+        return new Uint8Array(buffer);
+      } else {
+        // File not valid
+        return [];
       }
-    } else {
-      // File not valid
+    } catch (error) {
+      console.log("Error converting TIFF to BMP: " + error);
+      return [];
     }
 
-    return bmp_file_bytes;
+    return [];
   }
 
   /**
@@ -11889,7 +11911,7 @@ class Tiff_Tools {
     let ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(4,8), tiff_header.endianness);
     let ifd_count = Static_File_Analyzer.get_two_byte_int(file_bytes.slice((ifd_offset), (ifd_offset+2)), tiff_header.endianness);
 
-    tiff_header.image_data_offset = (ifd_offset + 2) + (ifd_count * 12) + 2;
+    tiff_header.image_data_offset = (ifd_offset + 2) + (ifd_count * 12) + 2 + 12;
 
     for (let i=0; i<ifd_count; i++) {
       let entry_index = (ifd_offset + 2) + (i*12);

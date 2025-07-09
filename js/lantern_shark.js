@@ -265,12 +265,26 @@ function display_file_summary(file_analyzer_results, file_bytes=[]) {
     let data_url;
 
     if (file_analyzer_results.file_format.toLowerCase() == "tiff") {
-      let bmp_file_bytes = Static_File_Analyzer.base64_encode_array(Tiff_Tools.convert_tiff_to_bmp(file_bytes));
-      file_identifier = "image/bmp";
-      data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(bmp_file_bytes);
+      let bmp_file_bytes = Tiff_Tools.convert_tiff_to_bmp(file_bytes);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillText('Not Supported For This File Type', 2, 16);
+      if (bmp_file_bytes.length > 0) {
+        let bmp_file_base64 = Static_File_Analyzer.base64_encode_array(bmp_file_bytes);
+        file_identifier = "image/bmp";
+        data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(bmp_file_bytes);
+
+        preview_image = new Image();
+        preview_image.onload = function() {
+          canvas.width = preview_image.naturalWidth || preview_image.width;
+          canvas.height = preview_image.naturalHeight || preview_image.height;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(preview_image, 0, 0);
+        };
+
+        preview_image.src = data_url;
+      } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillText('Error Loading Preview', 2, 16);
+      }
     } else if (file_analyzer_results.file_format.toLowerCase() == "bmp"  ||
                file_analyzer_results.file_format.toLowerCase() == "gif"  ||
                file_analyzer_results.file_format.toLowerCase() == "jpeg" ||
@@ -278,11 +292,14 @@ function display_file_summary(file_analyzer_results, file_bytes=[]) {
                file_analyzer_results.file_format.toLowerCase() == "svg"  ||
                file_analyzer_results.file_format.toLowerCase() == "webp") {
 
+      // Natively supported by canvas element.
       file_identifier = "image/" + file_analyzer_results.file_format;
       data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(file_bytes);
 
       preview_image = new Image();
       preview_image.onload = function() {
+        canvas.width = preview_image.naturalWidth || preview_image.width;
+        canvas.height = preview_image.naturalHeight || preview_image.height;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(preview_image, 0, 0);
       };
