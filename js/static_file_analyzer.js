@@ -4621,6 +4621,7 @@ class Static_File_Analyzer {
    */
   static async check_for_qr_code(file_info, file_bytes) {
     let data_url;
+    let file_identifier;
 
     // Check if jsQE is available for QR code detection.
     if (typeof jsQR === 'function') {
@@ -4629,7 +4630,7 @@ class Static_File_Analyzer {
       if (file_info.file_format.toLowerCase() == "tiff") {
         // Tiff images are not supported by canvas so we will convert to a BMP file.
         let bmp_file_bytes = Tiff_Tools.convert_tiff_to_bmp(file_bytes);
-        let file_identifier = "image/bmp";
+        file_identifier = "image/bmp";
         data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(bmp_file_bytes);
       } else if (file_info.file_format.toLowerCase() == "bmp"  ||
                  file_info.file_format.toLowerCase() == "gif"  ||
