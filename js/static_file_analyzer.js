@@ -11718,11 +11718,19 @@ class Tiff_Tools {
 
         // Pixel data (BGR format)
         let offset = header_size;
+        const padding = row_size - tiff_header.width * 3;
+        let rgb_bytes = file_bytes.slice(tiff_header.image_data_offset);
 
-        for (let i=tiff_header.image_data_offset; i<file_bytes.length; i+=3) {
-          view.setUint8(offset++, file_bytes[i + 2]); // Blue
-          view.setUint8(offset++, file_bytes[i + 1]); // Green
-          view.setUint8(offset++, file_bytes[i]);     // Red
+        for (let y = 0; y < tiff_header.height; y++) {
+          for (let x = 0; x < tiff_header.width; x++) {
+            const i = (y * tiff_header.width + x) * 3;
+            view.setUint8(offset++, rgb_bytes[i + 2]); // Blue
+            view.setUint8(offset++, rgb_bytes[i + 1]); // Green
+            view.setUint8(offset++, rgb_bytes[i]);     // Red
+          }
+          for (let p = 0; p < padding; p++) {
+            view.setUint8(offset++, 0); // Padding
+          }
         }
 
         return new Uint8Array(buffer);

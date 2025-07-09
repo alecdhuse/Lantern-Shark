@@ -274,8 +274,18 @@ function display_file_summary(file_analyzer_results, file_bytes=[]) {
 
         preview_image = new Image();
         preview_image.onload = function() {
-          canvas.width = preview_image.naturalWidth || preview_image.width;
-          canvas.height = preview_image.naturalHeight || preview_image.height;
+          let preview_image_width = preview_image.naturalWidth || preview_image.width;
+          let preview_image_height = preview_image.naturalHeight || preview_image.height;
+
+          if (preview_image_width < $("#preview_col_div").width()) {
+            canvas.width = preview_image_width;
+            canvas.height = preview_image_height;
+          } else {
+            let scale_factor = $("#preview_col_div").width() / preview_image_width;
+            canvas.width = $("#preview_col_div").width();
+            canvas.height = (preview_image_height * scale_factor);
+          }
+
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(preview_image, 0, 0);
         };
