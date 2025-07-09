@@ -14,7 +14,7 @@ See the table below for a list of supported file types and types of data extract
 | File Extension | File Type ID | File Attributes | Components List | Metadata | Script Detection & Extraction |
 | -------------- | ------------ | --------------- | --------------- | -------- | ----------------------------- |
 | ACE            | X            | X               |                 |          |                               |
-| BMP            | X            |                 |                 |          |                               | 
+| BMP            | X            |                 |                 |          |                               |
 | DLL            | X            |                 |                 |          |                               |
 | DOCX           | X            | X               | X               | X        | X                             |
 | EML            | X            | X               | X               | X        |                               |
@@ -62,6 +62,7 @@ Lantern Shark should be able to detect the following CVEs:
 # Dependencies
 Lantern Shark uses the following libraries:
 - jQuery - Included in this repository but also available from https://jquery.com/download/
+- jsQR - Included in this repository but also available from https://github.com/cozmo/jsQR
 - pako - Included in this repository but also available from https://github.com/nodeca/pako
 - Zip.js - Included in this repository but also available from https://gildas-lormeau.github.io/zip.js/core-api.html
 

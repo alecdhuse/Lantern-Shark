@@ -109,17 +109,23 @@ class Static_File_Analyzer {
       }
     }
 
-    // Look for scripts and IoCs in file_components
-    for (let i=0; i<file_info.file_components.length; i++) {
-      let static_analyzer = new Static_File_Analyzer();
-      let analyzer_results = await static_analyzer.analyze(file_info.file_components[i].file_bytes, "", "");
+    if (file_info.hasOwnProperty("file_components")) {
+      // Look for scripts and IoCs in file_components
+      for (let i=0; i<file_info.file_components.length; i++) {
+        let static_analyzer = new Static_File_Analyzer();
+        let analyzer_results = await static_analyzer.analyze(file_info.file_components[i].file_bytes, "", "");
 
-      if (analyzer_results.scripts.script_type != "none") {
-        this.add_extracted_script(analyzer_results.scripts.script_type, analyzer_results.scripts.extracted_script, file_info);
-      }
+        if (analyzer_results.scripts.script_type != "none") {
+          this.add_extracted_script(analyzer_results.scripts.script_type, analyzer_results.scripts.extracted_script, file_info);
+        }
 
-      for (let i=0; i<analyzer_results.iocs.length; i++) {
-        file_info = Static_File_Analyzer.search_for_iocs(analyzer_results.iocs[i], file_info);
+        for (let i2=0; i2<analyzer_results.iocs.length; i2++) {
+          file_info = Static_File_Analyzer.search_for_iocs(analyzer_results.iocs[i2], file_info);
+        }
+
+        for (let i2=0; i2<analyzer_results.analytic_findings.length; i2++) {
+          file_info.analytic_findings.push(analyzer_results.analytic_findings[i2]);
+        }
       }
     }
 
@@ -2559,8 +2565,7 @@ class Static_File_Analyzer {
       return file_info;
     }
 
-    let first_ifd_offset = Static_File_Analyzer.get_four_byte_int(file_bytes.slice(4,8), byte_order);
-    let first_ifd_object = Tiff_Tools.parse_ifd(file_bytes, first_ifd_offset, byte_order);
+    file_info = Static_File_Analyzer.check_for_qr_code(file_info, file_bytes);
 
     return file_info;
   }
@@ -4562,6 +4567,86 @@ class Static_File_Analyzer {
     }
 
     return sB64Enc.substr(0, sB64Enc.length - 2 + nMod3) + (nMod3 === 2 ? '' : nMod3 === 1 ? '=' : '==');
+  }
+
+  /**
+   * Helper function for check_for_qr_code
+   *
+   * @param  {Object}  file_info The file_info object for the file being analyzed.
+   * @param  {Object}  canvas The logical canvas object.
+   * @param  {Object}  ctx The context for the logical canvas object.
+   * @param  {Object}  data_url A Data url of an image.
+   * @return {Object}  file_info The updated file_info.
+   */
+  static load_image_from_data_url(file_info, canvas, ctx, data_url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        // Size canvas to image.
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+
+        // Draw image.
+        ctx.drawImage(img, 0, 0);
+
+        const image_data = ctx.getImageData(0, 0, canvas.width, canvas.height); // get image data
+        const code = jsQR(image_data.data, image_data.width, image_data.height); // check for QR code
+
+        if (code) {
+          file_info.analytic_findings.push("INFO - QR Code Found");
+          file_info = Static_File_Analyzer.search_for_iocs(code.data, file_info);
+        }
+
+        resolve(img);
+      };
+      img.onerror = reject;
+      img.src = data_url;
+    });
+  }
+
+  /**
+   * Helper function for check_for_qr_code
+   *
+   * @param  {Object}  file_info  The file_info object for the file being analyzed.
+   * @param  {Array}   file_bytes An array of the bytes of the files to be analyzed.
+   * @return {Object}  file_info The updated file_info.
+   */
+  static async check_for_qr_code(file_info, file_bytes) {
+    let data_url;
+
+    // Check if jsQE is available for QR code detection.
+    if (typeof jsQR === 'function') {
+      // Use a canvas element to load the image.
+
+      if (file_info.file_format.toLowerCase() == "tiff") {
+        // Tiff images are not supported by canvas so we will convert to a BMP file.
+        let bmp_file_bytes = Tiff_Tools.convert_tiff_to_bmp(file_bytes);
+        let file_identifier = "image/bmp";
+        data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(bmp_file_bytes);
+      } else if (file_info.file_format.toLowerCase() == "bmp"  ||
+                 file_info.file_format.toLowerCase() == "gif"  ||
+                 file_info.file_format.toLowerCase() == "jpeg" ||
+                 file_info.file_format.toLowerCase() == "png"  ||
+                 file_info.file_format.toLowerCase() == "svg"  ||
+                 file_info.file_format.toLowerCase() == "webp") {
+
+        // Natively supported by canvas element.
+        file_identifier = "image/" + file_info.file_format;
+        data_url = "data:" + file_identifier + ";base64," + Static_File_Analyzer.base64_encode_array(file_bytes);
+      }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      try {
+        const img = await Static_File_Analyzer.load_image_from_data_url(file_info, canvas, ctx, data_url);
+        ctx.drawImage(img, 0, 0);
+      } catch (error) {
+        console.error('Failed to load image from data URL:', error);
+      }
+    }
+
+    return file_info;
   }
 
   /**
