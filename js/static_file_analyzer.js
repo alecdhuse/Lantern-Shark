@@ -351,6 +351,8 @@ class Static_File_Analyzer {
     file_info.file_format = "bmp";
     file_info.file_generic_type = "image";
 
+    file_info = Static_File_Analyzer.check_for_qr_code(file_info, file_bytes);
+
     return file_info;
   }
 
@@ -809,6 +811,8 @@ class Static_File_Analyzer {
     file_info.file_encrypted = "false";
     file_info.file_encryption_type = "none";
 
+    file_info = Static_File_Analyzer.check_for_qr_code(file_info, file_bytes);
+
     return file_info;
   }
 
@@ -1051,6 +1055,8 @@ class Static_File_Analyzer {
         let data_bytes = file_bytes.slice(i+4, i+(data_size-2));
       }
     }
+
+    file_info = Static_File_Analyzer.check_for_qr_code(file_info, file_bytes);
 
     return file_info;
   }
@@ -2282,6 +2288,8 @@ class Static_File_Analyzer {
       file_info.metadata.creation_date = metadata.creation_date;
       file_info.metadata.creation_application = metadata.creation_application;
     }
+
+    file_info = Static_File_Analyzer.check_for_qr_code(file_info, file_bytes);
 
     return file_info;
   }
