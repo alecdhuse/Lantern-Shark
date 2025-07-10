@@ -11072,6 +11072,26 @@ class PDF_Parser {
         });
       }
 
+      // Check for PDF encryption
+      if (object_array[i].object_dictionary.hasOwnProperty("Encrypt")) {
+        file_info.file_encrypted = "true";
+      } else if (object_array[i].object_dictionary.hasOwnProperty("CF")) {
+        file_info.file_encrypted = "true";
+
+        if (object_array[i].object_dictionary['CF'].hasOwnProperty("AESV2") || (object_array[i].object_dictionary['CF'].hasOwnProperty("V2")) {
+          file_info.file_encryption_type = "AESV2";
+        } else if (object_array[i].object_dictionary['CF'].hasOwnProperty("AESV3")) {
+          file_info.file_encryption_type = "AESV3";
+        }
+      } else if (object_array[i].object_dictionary.hasOwnProperty("CFM")) {
+        file_info.file_encrypted = "true";
+
+        if (object_array[i].object_dictionary['CFM'].hasOwnProperty("AESV2") || (object_array[i].object_dictionary['CFM'].hasOwnProperty("V2")) {
+          file_info.file_encryption_type = "AESV2";
+        } else if (object_array[i].object_dictionary['CFM'].hasOwnProperty("AESV3")) {
+          file_info.file_encryption_type = "AESV3";
+        }
+      }
     }
 
     return file_components;
@@ -11416,7 +11436,7 @@ class PDF_Parser {
           let sub_dictionary_key = "";
           for (let ii=dict_start_index-1; ii>0; ii--) {
             if (object_text.charAt(ii) != "/") {
-              sub_dictionary_key = object_text.charAt(ii) + sub_dictionary_key;
+              sub_dictionary_key = (object_text.charAt(ii) + sub_dictionary_key).trim();
             } else {
               break;
             }
