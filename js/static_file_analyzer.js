@@ -11078,7 +11078,7 @@ class PDF_Parser {
       } else if (object_array[i].object_dictionary.hasOwnProperty("CF")) {
         file_info.file_encrypted = "true";
 
-        if (object_array[i].object_dictionary['CF'].hasOwnProperty("AESV2") || (object_array[i].object_dictionary['CF'].hasOwnProperty("V2")) {
+        if (object_array[i].object_dictionary['CF'].hasOwnProperty("AESV2") || object_array[i].object_dictionary['CF'].hasOwnProperty("V2")) {
           file_info.file_encryption_type = "AESV2";
         } else if (object_array[i].object_dictionary['CF'].hasOwnProperty("AESV3")) {
           file_info.file_encryption_type = "AESV3";
@@ -11086,7 +11086,7 @@ class PDF_Parser {
       } else if (object_array[i].object_dictionary.hasOwnProperty("CFM")) {
         file_info.file_encrypted = "true";
 
-        if (object_array[i].object_dictionary['CFM'].hasOwnProperty("AESV2") || (object_array[i].object_dictionary['CFM'].hasOwnProperty("V2")) {
+        if (object_array[i].object_dictionary['CFM'].hasOwnProperty("AESV2") || object_array[i].object_dictionary['CFM'].hasOwnProperty("V2")) {
           file_info.file_encryption_type = "AESV2";
         } else if (object_array[i].object_dictionary['CFM'].hasOwnProperty("AESV3")) {
           file_info.file_encryption_type = "AESV3";
