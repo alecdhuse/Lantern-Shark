@@ -11025,7 +11025,11 @@ class PDF_Parser {
             let file_type = Static_File_Analyzer.is_valid_file(deflate_bytes);
 
             if (file_type.is_valid) {
-              let fc_filename =  "Object_" + object_array[i].object_number + "." + file_type.type;
+              let obj_identifier = "Object_";
+
+              if (file_type.type == "ttf") obj_identifier = "Font_";
+
+              let fc_filename =  obj_identifier + object_array[i].object_number + "." + file_type.type;
 
               file_components.push({
                 'name': fc_filename,
