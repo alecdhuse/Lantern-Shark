@@ -2135,10 +2135,12 @@ class Static_File_Analyzer {
       var meta_tag_text = file_text.substring(meta_tag_start, meta_tag_end+2);
 
       let producer_tag_text = "";
-      let producer_regex = /\<*\s*\/Producer(\([a-zA-Z0-9\:\/\.\?\=\-]+\)|[^\/\n\r]+)/gmi;
+      let producer_regex = /\<*\s*\/Producer\s*((?:\([^\)]+\))|[^\/\n\r]+)/gmi;
       let producer_matches = producer_regex.exec(meta_tag_text);
       if (producer_matches != null) {
         producer_tag_text = producer_matches[1].trim();
+        if (producer_tag_text.startsWith("(")) producer_tag_text = producer_tag_text.substring(1);
+        if (producer_tag_text.endsWith(")")) producer_tag_text = producer_tag_text.slice(0, -1);
 
         if (file_info.metadata.creation_application == "unknown") {
           file_info.metadata.creation_application = producer_tag_text;
@@ -11089,7 +11091,7 @@ class PDF_Parser {
       if (objects_matches[2] == "endobj" || objects_matches[2] == "trailer") {
         if (metadata_objs.some(v => objects_matches[1].toLowerCase().includes(v))) {
           // Found an object with metadata.
-          var metadata_regex = /\/(Author|CreationDate|Creator|ModDate|Producer|Subject|Title)(\([a-zA-Z0-9\:\/\.\?\=\-]+\)|[^\/\n\r]+)/gmi;
+          var metadata_regex = /\/(Author|CreationDate|Creator|ModDate|Producer|Subject|Title)\s*((?:\([^\)]+\))|[^\/\n\r]+)/gmi;
           var metadata_matches = metadata_regex.exec(objects_matches[1]);
 
           if (metadata_matches != null) {
