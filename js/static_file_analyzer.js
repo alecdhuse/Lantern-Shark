@@ -3923,7 +3923,6 @@ class Static_File_Analyzer {
           while (xml_type_match !== null) {
             if (!Static_File_Analyzer.XML_DOMAINS.includes(xml_type_match[2])) {
               file_info.analytic_findings.push("SUSPICIOUS - Unusual XML Schema Domain: " + xml_type_match[2]);
-              console.log(xml_text); // DEBUG
             }
 
             xml_type_match = xml_type_regex.exec(xml_text);
@@ -11077,19 +11076,57 @@ class PDF_Parser {
         file_info.file_encrypted = "true";
       } else if (object_array[i].object_dictionary.hasOwnProperty("CF")) {
         file_info.file_encrypted = "true";
+        let check_dict = object_array[i].object_dictionary['CF'];
 
-        if (object_array[i].object_dictionary['CF'].hasOwnProperty("AESV2") || object_array[i].object_dictionary['CF'].hasOwnProperty("V2")) {
-          file_info.file_encryption_type = "AESV2";
-        } else if (object_array[i].object_dictionary['CF'].hasOwnProperty("AESV3")) {
-          file_info.file_encryption_type = "AESV3";
+        if (object_array[i].object_dictionary['CF'].hasOwnProperty("StdCF")) {
+          check_dict = object_array[i].object_dictionary['CF']['StdCF'];
         }
+
+        if (check_dict.hasOwnProperty("AESV2") || check_dict.hasOwnProperty("V2")) {
+          file_info.file_encryption_type = "AESV2";
+        } else if (check_dict.hasOwnProperty("AESV3")) {
+          file_info.file_encryption_type = "AES256";
+        }
+
+        let pdf_encryption = {
+          'revision': 6,
+
+        };
+
+        // Get Encryption info
+        if (object_array[i].object_dictionary.hasOwnProperty("R")) {
+          // Revision Number
+          pdf_encryption.revision = parseInt(object_array[i].object_dictionary['R']);
+        }
+
+        if (object_array[i].object_dictionary.hasOwnProperty("O")) {
+          // Owner Encryption
+        }
+
+        if (object_array[i].object_dictionary.hasOwnProperty("U")) {
+          // User Encryption
+          const u_hex = object_array[i].object_dictionary['U'].slice(1,-1);
+          const u_bytes = atob(u_hex);
+
+          // PDF 2.0 AES-256: /U is 48 bytes
+          // - First 32 bytes: hash
+          // - Next 8 bytes: validation salt
+          // - Last 8 bytes: key salt
+
+          const saltValidation = u_bytes.slice(32, 40);
+          const saltKey = u_bytes.slice(40, 48);
+          console.log("Validation Salt:", Array.from(saltValidation).map(c => c.charCodeAt(0).toString(16)).join(" "));
+          console.log("Key Salt:", Array.from(saltKey).map(c => c.charCodeAt(0).toString(16)).join(" "));
+        }
+
+        file_info.pdf_encryption = pdf_encryption;
       } else if (object_array[i].object_dictionary.hasOwnProperty("CFM")) {
         file_info.file_encrypted = "true";
 
         if (object_array[i].object_dictionary['CFM'].hasOwnProperty("AESV2") || object_array[i].object_dictionary['CFM'].hasOwnProperty("V2")) {
           file_info.file_encryption_type = "AESV2";
         } else if (object_array[i].object_dictionary['CFM'].hasOwnProperty("AESV3")) {
-          file_info.file_encryption_type = "AESV3";
+          file_info.file_encryption_type = "AES256";
         }
       }
     }
@@ -11327,27 +11364,37 @@ class PDF_Parser {
             let sub_dict_str = match2.input.substring(sub_dict_start, sub_dict_end);
 
             let sub_dictionary = {};
-            let sub_dictionary_regex = /\/([^\s]+)\s+([^\/]*)?/gmi;
+            let sub_dictionary_regex = /\/([^\s]+)\s*([^\/]*)?/gmi;
             let match3;
 
-            while (match3 = sub_dictionary_regex.exec(match2[2])) {
-              if (match3[2] !== null && match3[2] !== undefined) {
-                if (match3[2].trim().endsWith(">>")) {
-                  sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
+            if (match2[2].trim() == "<<") {
+              // Another sub ditionary
+              let sub_dict_match_start = dictionary_text.indexOf(match2[0]);
+              let sub_dict_new_text = dictionary_text.substring((sub_dict_match_start + match2[0].length));
+              let new_dictionary_values = await PDF_Parser.get_object_dictionary_values(sub_dict_new_text);
+              object_dictionary[match2[1]] = new_dictionary_values;
+              dictionary_pair_regex.lastIndex = sub_dict_match_start + sub_dict_new_text.length;
+              let debug = 123;
+            } else {
+              while (match3 = sub_dictionary_regex.exec(match2[2])) {
+                if (match3[2] !== null && match3[2] !== undefined) {
+                  if (match3[2].trim().endsWith(">>")) {
+                    sub_dictionary[match3[1]] = match3[2].trim().substring(0,match3[2].trim().length - 2).trim();
+                  } else {
+                    sub_dictionary[match3[1]] = match3[2].trim();
+                  }
                 } else {
-                  sub_dictionary[match3[1]] = match3[2].trim();
+                  sub_dictionary[match3[1]] = "";
                 }
-              } else {
-                sub_dictionary[match3[1]] = "";
+
+                // Check for embedded URIs
+                if (/\/URI/gmi.test(match3[1])) {
+                  file_info = Static_File_Analyzer.search_for_iocs(match3[1], file_info);
+                }
               }
 
-              // Check for embedded URIs
-              if (/\/URI/gmi.test(match3[1])) {
-                file_info = Static_File_Analyzer.search_for_iocs(match3[1], file_info);
-              }
+              object_dictionary[match2[1]] = sub_dictionary;
             }
-
-            object_dictionary[match2[1]] = sub_dictionary;
           } else {
             let dictionary_val = "";
 
@@ -11453,6 +11500,13 @@ class PDF_Parser {
         }
 
         dictionary_text = object_text.substring(cur_obj_index, end_obj_index);
+
+        if (dictionary_text.trim() == ">>") {
+          cur_obj_index = end_obj_index;
+          end_obj_index = object_text.indexOf(">>", cur_obj_index) +2;
+          dictionary_text = object_text.substring(cur_obj_index, end_obj_index);
+        }
+
         let parsed_object_dict = await PDF_Parser.get_object_dictionary_values(dictionary_text);
         object_dictionary = Object.assign({}, object_dictionary, parsed_object_dict);
 
@@ -11496,7 +11550,6 @@ class PDF_Parser {
 
                   let decoder = new TextDecoder("utf-8");
                   stream_text = decoder.decode(deflate_bytes);
-                  //console.log(stream_text); // DEBUG
 
                   if (object_dictionary['Type'].toLowerCase() == "objstm") {
                     // Stream object, it might contain a URI / URL
