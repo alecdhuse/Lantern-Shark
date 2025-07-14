@@ -2014,7 +2014,7 @@ class Static_File_Analyzer {
     if (file_info.file_encrypted) {
       if (file_info.hasOwnProperty("pdf_encryption")) {
         if (pdf_trailer.hasOwnProperty("ID")) file_info.pdf_encryption.id = pdf_trailer['ID'];
-        //const encryption_key = await PDF_Parser.derive_encryption_key(password, file_info.pdf_encryption);        
+        //const encryption_key = await PDF_Parser.derive_encryption_key(password, file_info.pdf_encryption);
       }
     }
 
@@ -11415,8 +11415,10 @@ class PDF_Parser {
               let sub_dict_new_text = dictionary_text.substring((sub_dict_match_start + match2[0].length));
               let new_dictionary_values = await PDF_Parser.get_object_dictionary_values(sub_dict_new_text);
               object_dictionary[match2[1]] = new_dictionary_values;
-              dictionary_pair_regex.lastIndex = sub_dict_match_start + sub_dict_new_text.length;
-              let debug = 123;
+
+              if (sub_dict_match_start + sub_dict_new_text.length > dictionary_pair_regex.lastIndex) {
+                dictionary_pair_regex.lastIndex = sub_dict_match_start + sub_dict_new_text.length;
+              }
             } else {
               while (match3 = sub_dictionary_regex.exec(match2[2])) {
                 if (match3[2] !== null && match3[2] !== undefined) {
