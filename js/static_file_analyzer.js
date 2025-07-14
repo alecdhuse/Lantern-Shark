@@ -2002,11 +2002,20 @@ class Static_File_Analyzer {
     // Do an initial search for IoCs in the file text.
     file_info = Static_File_Analyzer.search_for_iocs(file_text, file_info);
 
+    // Get the trailer object
+    let pdf_trailer = await PDF_Parser.get_pdf_trailer(file_text);
+
     // Get an array of the embedded objects
     let embedded_objs = await PDF_Parser.get_objects(file_info, file_bytes, file_text);
 
     // Get any embedded files and components
     file_info.file_components = await PDF_Parser.get_file_components(file_info, embedded_objs);
+
+    if (file_info.file_encrypted) {
+      if (pdf_trailer.hasOwnProperty("ID")) file_info.pdf_encryption.id = pdf_trailer['ID'];
+      const encryption_key = await PDF_Parser.derive_encryption_key(password, file_info.pdf_encryption);
+
+    }
 
     // Push streams to file_components
     file_info.file_components.concat(file_info.file_components);
@@ -10744,6 +10753,17 @@ class PDF_Parser {
   }
 
   /**
+   * Derives the encryption key for a PDF document.
+   *
+   * @param {Object}  password - The PDF document password.
+   * @param {Object}  pdf_encryption - A custom object that contians data about the PDF encryption.
+   * @return {array}  The derived encryption key.
+   */
+  static async derive_encryption_key(password, pdf_encryption) {
+    // TODO
+  }
+
+  /**
    * Retrieves embedded files and components within the PDF.
    *
    * @param {Object}  file_info - The file_info object used file file parsing results.
@@ -11090,7 +11110,13 @@ class PDF_Parser {
 
         let pdf_encryption = {
           'revision': 6,
-
+          'permissions': new Uint8Array(),
+          'owner_hash': new Uint8Array(),
+          'owner_salt_key': new Uint8Array(),
+          'owner_salt_validation': new Uint8Array(),
+          'user_hash': new Uint8Array(),
+          'user_salt_key': new Uint8Array(),
+          'user_salt_validation': new Uint8Array(),
         };
 
         // Get Encryption info
@@ -11099,24 +11125,39 @@ class PDF_Parser {
           pdf_encryption.revision = parseInt(object_array[i].object_dictionary['R']);
         }
 
-        if (object_array[i].object_dictionary.hasOwnProperty("O")) {
-          // Owner Encryption
+        if (object_array[i].object_dictionary.hasOwnProperty("Perms")) {
+          // Permissions
+          const perms_hex = object_array[i].object_dictionary['Perms'].slice(1,-1);
+          const perms_bytes = Uint8Array.fromHex(perms_hex)
+          pdf_encryption.permissions = perms_bytes;
         }
 
-        if (object_array[i].object_dictionary.hasOwnProperty("U")) {
-          // User Encryption
-          const u_hex = object_array[i].object_dictionary['U'].slice(1,-1);
-          const u_bytes = atob(u_hex);
+        if (object_array[i].object_dictionary.hasOwnProperty("O")) {
+          // Owner Encryption
+          const o_hex = object_array[i].object_dictionary['O'].slice(1,-1);
+          const o_bytes = Uint8Array.fromHex(o_hex)
 
           // PDF 2.0 AES-256: /U is 48 bytes
           // - First 32 bytes: hash
           // - Next 8 bytes: validation salt
           // - Last 8 bytes: key salt
+          pdf_encryption.owner_hash = o_bytes.slice(0, 32);
+          pdf_encryption.owner_salt_validation = o_bytes.slice(32, 40);
+          pdf_encryption.owner_salt_key = o_bytes.slice(40, 48);
+        }
 
-          const saltValidation = u_bytes.slice(32, 40);
-          const saltKey = u_bytes.slice(40, 48);
-          console.log("Validation Salt:", Array.from(saltValidation).map(c => c.charCodeAt(0).toString(16)).join(" "));
-          console.log("Key Salt:", Array.from(saltKey).map(c => c.charCodeAt(0).toString(16)).join(" "));
+        if (object_array[i].object_dictionary.hasOwnProperty("U")) {
+          // User Encryption
+          const u_hex = object_array[i].object_dictionary['U'].slice(1,-1);
+          const u_bytes = Uint8Array.fromHex(u_hex)
+
+          // PDF 2.0 AES-256: /U is 48 bytes
+          // - First 32 bytes: hash
+          // - Next 8 bytes: validation salt
+          // - Last 8 bytes: key salt
+          pdf_encryption.user_hash = u_bytes.slice(0, 32);
+          pdf_encryption.user_salt_validation = u_bytes.slice(32, 40);
+          pdf_encryption.user_salt_key = u_bytes.slice(40, 48);
         }
 
         file_info.pdf_encryption = pdf_encryption;
@@ -11582,6 +11623,33 @@ class PDF_Parser {
 
     return embedded_objs;
   }
+
+  /**
+   * Parses the dictionary for the trailer object.
+   *
+   * @param {String}    file_text - The PDF file text.
+   * @return {Object}   The dictionary object for the trailer.
+   */
+  static async get_pdf_trailer(file_text) {
+    let trailer_start_regex = /trailer\s*<</gmi;
+    let trailer_start_match = trailer_start_regex.exec(file_text);
+    let trailer_end_index = file_text.indexOf(">>", trailer_start_match.index);
+    let trailer_text = file_text.substring(trailer_start_match.index + trailer_start_match[0].length, trailer_end_index);
+    let parsed_object_dict = await PDF_Parser.get_object_dictionary_values(trailer_text);
+
+    if (parsed_object_dict.hasOwnProperty("ID")) {
+      let ids_as_array = [];
+
+      for (let i=0; i<parsed_object_dict['ID'].length; i++) {
+        ids_as_array.push(Uint8Array.fromHex(parsed_object_dict['ID'][i].slice(1,-1)));
+      }
+
+      parsed_object_dict['ID'] = ids_as_array;
+    }
+
+    return parsed_object_dict;
+  }
+
 }
 
 class RAR_Parser {
