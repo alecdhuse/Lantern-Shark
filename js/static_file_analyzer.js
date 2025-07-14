@@ -2012,9 +2012,10 @@ class Static_File_Analyzer {
     file_info.file_components = await PDF_Parser.get_file_components(file_info, embedded_objs);
 
     if (file_info.file_encrypted) {
-      if (pdf_trailer.hasOwnProperty("ID")) file_info.pdf_encryption.id = pdf_trailer['ID'];
-      //const encryption_key = await PDF_Parser.derive_encryption_key(password, file_info.pdf_encryption);
-
+      if (file_info.hasOwnProperty("pdf_encryption")) {
+        if (pdf_trailer.hasOwnProperty("ID")) file_info.pdf_encryption.id = pdf_trailer['ID'];
+        //const encryption_key = await PDF_Parser.derive_encryption_key(password, file_info.pdf_encryption);        
+      }
     }
 
     // Push streams to file_components
