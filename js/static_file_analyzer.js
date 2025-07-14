@@ -11634,21 +11634,26 @@ class PDF_Parser {
     try {
       let trailer_start_regex = /trailer\s*<</gmi;
       let trailer_start_match = trailer_start_regex.exec(file_text);
-      let trailer_end_index = file_text.indexOf(">>", trailer_start_match.index);
-      let trailer_text = file_text.substring(trailer_start_match.index + trailer_start_match[0].length, trailer_end_index);
-      let parsed_object_dict = await PDF_Parser.get_object_dictionary_values(trailer_text);
 
-      if (parsed_object_dict.hasOwnProperty("ID")) {
-        let ids_as_array = [];
+      if (trailer_start_match) {
+        let trailer_end_index = file_text.indexOf(">>", trailer_start_match.index);
+        let trailer_text = file_text.substring(trailer_start_match.index + trailer_start_match[0].length, trailer_end_index);
+        let parsed_object_dict = await PDF_Parser.get_object_dictionary_values(trailer_text);
 
-        for (let i=0; i<parsed_object_dict['ID'].length; i++) {
-          ids_as_array.push(Uint8Array.fromHex(parsed_object_dict['ID'][i].slice(1,-1)));
+        if (parsed_object_dict.hasOwnProperty("ID")) {
+          let ids_as_array = [];
+
+          for (let i=0; i<parsed_object_dict['ID'].length; i++) {
+            ids_as_array.push(Uint8Array.fromHex(parsed_object_dict['ID'][i].slice(1,-1)));
+          }
+
+          parsed_object_dict['ID'] = ids_as_array;
         }
 
-        parsed_object_dict['ID'] = ids_as_array;
+        return parsed_object_dict;
+      } else {
+        return {};
       }
-
-      return parsed_object_dict;
     } catch(err) {
       return {};
     }
