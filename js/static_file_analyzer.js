@@ -123,6 +123,8 @@ class Static_File_Analyzer {
           file_info = Static_File_Analyzer.search_for_iocs(analyzer_results.iocs[i2], file_info);
         }
 
+        analyzer_results = await this.identify_threat(analyzer_results);
+
         for (let i2=0; i2<analyzer_results.analytic_findings.length; i2++) {
           file_info.analytic_findings.push(analyzer_results.analytic_findings[i2]);
         }
@@ -6918,6 +6920,7 @@ class Static_File_Analyzer {
 
   async identify_threat(file_info) {
     let filled_file_info = await file_info;
+    let finding_str;
 
     // Check to see if the threat identification data struction is loaded.
     if (threat_identification !== undefined && threat_identification !== null) {
@@ -6930,7 +6933,19 @@ class Static_File_Analyzer {
             let is_match = true;
 
             for (const [key, value] of Object.entries(file_format_threats[i])) {
-              if (key != "file_format" && key != "identification" && key != "probability") {
+              if (key == "sha256") {
+                if (file_info.file_hashes.sha256 == value) {
+                  if (file_format_threats[i].probability> 80) {
+                    finding_str = "MALICIOUS - " + file_format_threats[i].identification;
+                  } else {
+                    finding_str = "SUSPICIOUS - " + file_format_threats[i].identification;
+                  }
+
+                  if (!file_info.analytic_findings.includes(finding_str)) {
+                    file_info.analytic_findings.push(finding_str);
+                  }
+                }
+              } else if (key != "file_format" && key != "identification" && key != "probability") {
                 if (filled_file_info.metadata.hasOwnProperty(key)) {
                   if (filled_file_info.metadata[key] != value) {
                     is_match = false;
@@ -6946,15 +6961,15 @@ class Static_File_Analyzer {
             }
 
             if (is_match === true) {
-              let finding_str;
-
               if (file_format_threats[i].probability == 100) {
                 finding_str = "MALICIOUS - " + file_format_threats[i].identification;
               } else {
                 finding_str = "SUSPICIOUS - " + file_format_threats[i].identification;
               }
 
-              filled_file_info.analytic_findings.push(finding_str);
+              if (!file_info.analytic_findings.includes(finding_str)) {
+                file_info.analytic_findings.push(finding_str);
+              }
               break;
             }
           }

@@ -1,4 +1,12 @@
 var threat_identification = {
+  'jpeg': [
+    {
+      'file_format': "jpeg",
+      'identification': "ClickFix Malware Instructions",
+      'sha256': "c428b51d3f326c13ca4be69d02b68ce769983bd99adfaaee45ab6ade8357ec5d",
+      "probability": 100      
+    }
+  ],
   'lnk': [
     {
       'file_format': "lnk",
