@@ -1058,7 +1058,23 @@ class Static_File_Analyzer {
       }
     }
 
-    file_info = Static_File_Analyzer.check_for_qr_code(file_info, file_bytes);
+    file_info = await Static_File_Analyzer.check_for_qr_code(file_info, file_bytes);
+
+    // Check for hidden code
+    let code_regex = /#define\s+/gmi;
+    let code_matches = code_regex.exec(file_text);
+
+    if (code_matches != null) {
+      file_info.analytic_findings.push("MALICIOUS - Embeaded code found.");
+      let extracted_code = file_text.substring(code_matches.index, file_text.lastIndexOf("}") + 1);
+
+      this.add_extracted_script_obj({
+        'script_type':  "C++",
+        'script_text':  extracted_code,
+        'deobfuscated': false,
+        'file_info':    file_info
+      });
+    }
 
     return file_info;
   }
@@ -6944,6 +6960,8 @@ class Static_File_Analyzer {
                   if (!file_info.analytic_findings.includes(finding_str)) {
                     file_info.analytic_findings.push(finding_str);
                   }
+                } else {
+                  is_match = false;
                 }
               } else if (key != "file_format" && key != "identification" && key != "probability") {
                 if (filled_file_info.metadata.hasOwnProperty(key)) {
