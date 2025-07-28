@@ -4,7 +4,7 @@ var threat_identification = {
       'file_format': "jpeg",
       'identification': "ClickFix Malware Instructions",
       'sha256': "c428b51d3f326c13ca4be69d02b68ce769983bd99adfaaee45ab6ade8357ec5d",
-      "probability": 100      
+      "probability": 100
     }
   ],
   'lnk': [
@@ -14,6 +14,15 @@ var threat_identification = {
       'last_saved_location': "C:\\Users\\lamar\\Desktop",
       'identification': "IcedID",
       "probability": 100
+    }
+  ],
+  'pdf': [
+    {
+      'file_format': "pdf",
+      'author': "Raizo",
+      'identification': "Possible Kimsuky / APT43 Lure Document",
+      'creation_application': "Microsoft® Word 2013",
+      "probability": 90
     }
   ],
   'xls': [
