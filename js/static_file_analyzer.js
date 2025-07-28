@@ -11386,6 +11386,9 @@ class PDF_Parser {
     }
 
 
+    // Remove any null characters from meta data
+    file_info.metadata.creation_application = file_info.metadata.creation_application.replace(/\0/g, '');
+
     return file_info;
   }
 
