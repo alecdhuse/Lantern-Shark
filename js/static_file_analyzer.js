@@ -2143,11 +2143,12 @@ class Static_File_Analyzer {
 
     if (file_info.metadata.author == "unknown") {
       file_info.metadata.author = this.get_xml_tag_content(file_text, "dc:creator", 0);
-      file_info.metadata.author = file_info.metadata.author.replace(/\<\/?\w+\:?\w+\>/gm, "").trim(); //Remove XML tags from author string
+      file_info.metadata.author = file_info.metadata.author.replace(/\<[a-z\:\s\=\"\-\/]+\>/gmi, "").trim(); //Remove XML tags from author string
     }
 
     if (file_info.metadata.title == "unknown") {
       file_info.metadata.title = this.get_xml_tag_content(file_text, "dc:title", 0);
+      file_info.metadata.title = file_info.metadata.title.replace(/\<[a-z\:\s\=\"\-\/]+\>/gmi, "").trim(); //Remove XML tags from title string
     }
 
     if (file_info.metadata.title.indexOf("rdf:li") >= 0) {
