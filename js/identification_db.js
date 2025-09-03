@@ -23,6 +23,13 @@ var threat_identification = {
       'identification': "Possible Kimsuky / APT43 Lure Document",
       'creation_application': "Microsoft® Word 2013",
       "probability": 90
+    },
+    {
+      'file_format': "pdf",
+      'author': "Gorgon",
+      'identification': "Possible Kimsuky / APT43 Lure Document",
+      'creation_application': "Microsoft® PowerPoint® 2016",
+      "probability": 90
     }
   ],
   'xls': [
