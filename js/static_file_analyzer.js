@@ -2043,21 +2043,19 @@ class Static_File_Analyzer {
     file_info = PDF_Parser.get_metadate(file_info, file_text);
 
     // Look for embedded scripts
-    var script_regex = /\/(S|JavaScript|JS)\s*\([^\uFFF0-\uFFFF]/gmi;
+    var script_regex = /\/(S|JavaScript|JS)\s*\([^\uFFF0-\uFFFF\u0003]{13,}/gmi;
     var script_matches = script_regex.exec(file_text);
 
     while (script_matches != null) {
-      var script_start = script_matches.index + script_matches[0].length;
-      var next_object_start = file_text.indexOf("<<", script_start);
-      var script_end = file_text.indexOf(">>", script_start);
+      const script_start = script_matches.index + (script_matches[0].indexOf("(") + 1);
+      const next_object_start = file_text.indexOf("<<", script_start);
+      const script_end = file_text.indexOf(">>", script_start);
 
       if (next_object_start < 0 || next_object_start > script_end) {
         var script_text = file_text.substring(script_start, script_end).trim();
         var script_type = "unknown";
 
-        if (script_text.slice(-1) == ")") {
-          script_text = script_text.slice(0,-1);
-        }
+        if (script_text.slice(-1) == ")") script_text = script_text.slice(0,-1);
 
         this.add_extracted_script("JavaScript", script_text, file_info);
 
