@@ -62,7 +62,7 @@ Lantern Shark should be able to detect the following CVEs:
 # Dependencies
 Lantern Shark uses the following libraries:
 - jQuery - Included in this repository but also available from https://jquery.com/download/
-- jsQR - Included in this repository but also available from https://github.com/cozmo/jsQR
+- qr - Included in this repository but also available from https://github.com/paulmillr/qr
 - pako - Included in this repository but also available from https://github.com/nodeca/pako
 - Zip.js - Included in this repository but also available from https://gildas-lormeau.github.io/zip.js/core-api.html
 

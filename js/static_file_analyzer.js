@@ -4627,13 +4627,15 @@ class Static_File_Analyzer {
         // Draw image.
         ctx.drawImage(img, 0, 0);
 
-        const image_data = ctx.getImageData(0, 0, canvas.width, canvas.height); // get image data
-        const code = jsQR(image_data.data, image_data.width, image_data.height); // check for QR code
+        try {
+          const image_data = ctx.getImageData(0, 0, canvas.width, canvas.height); // get image data     
+                const code = qr.decodeQR(image_data);
 
-        if (code) {
-          file_info.analytic_findings.push("INFO - QR Code Found");
-          file_info = Static_File_Analyzer.search_for_iocs(code.data, file_info);
-        }
+                if (code) {
+                  file_info.analytic_findings.push("INFO - QR Code Found");
+                  file_info = Static_File_Analyzer.search_for_iocs(code, file_info);
+                }
+        } catch (error) {}
 
         resolve(img);
       };
@@ -4654,7 +4656,7 @@ class Static_File_Analyzer {
     let file_identifier;
 
     // Check if jsQE is available for QR code detection.
-    if (typeof jsQR === 'function') {
+    if (typeof qr.decodeQR === 'function') {
       // Use a canvas element to load the image.
 
       if (file_info.file_format.toLowerCase() == "tiff") {
