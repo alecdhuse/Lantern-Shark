@@ -2154,7 +2154,7 @@ class Static_File_Analyzer {
     }
 
     // Meta data tags
-    var tag_matches = /\<\<\s*\/(?:[Cc]reator|[Cc]reationDate|[Pp]roducer|[Mm]od[Dd]ate)/gm.exec(file_text);
+    let tag_matches = /\<\<\s*\/(?:[Cc]reator|[Cc]reationDate|[Pp]roducer|[Mm]od[Dd]ate|Title)/gm.exec(file_text);
 
     if (tag_matches != null) {
       var meta_tag_start = tag_matches.index;
@@ -2189,7 +2189,7 @@ class Static_File_Analyzer {
         // Check to see if any other tags were included
          var extra_tag_matches = /\/(?:[Pp]roducer|[Cc]reation[Dd]ate|[Mm]od[Dd]ate)/gm.exec(file_info.metadata.author);
          if (extra_tag_matches != null) {
-           file_info.metadata.author = file_info.metadata.author.substring(0,extra_tag_matches.index);
+             file_info.metadata.author = file_info.metadata.author.substring(0,extra_tag_matches.index);
          }
       } else {
         let producer_tag_text = "";
@@ -2208,11 +2208,11 @@ class Static_File_Analyzer {
       file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\(/gm, "(");
       file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\)/gm, ")");
 
-      var creation_date_tag_start = meta_tag_text.indexOf("/CreationDate");
-      var creation_date_tag_end = meta_tag_text.indexOf("/", creation_date_tag_start+13);
+      const creation_date_tag_start = meta_tag_text.indexOf("/CreationDate");
+      const creation_date_tag_end = meta_tag_text.indexOf("/", creation_date_tag_start+13);
       if (creation_date_tag_end < 0) creation_date_tag_end = meta_tag_text.indexOf(">>", creation_date_tag_start);
       var creation_date_tag_text = meta_tag_text.substring(creation_date_tag_start+13, creation_date_tag_end);
-      var date_parts = /\([Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z/gm.exec(creation_date_tag_text);
+      var date_parts = /\([Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z?/gm.exec(creation_date_tag_text);
 
       if (date_parts != null) {
           file_info.metadata.creation_date = date_parts[1] + "-" + date_parts[2] + "-" + date_parts[3] + " " + date_parts[4] + ":" + date_parts[5] + ":" + date_parts[6];
@@ -3954,6 +3954,15 @@ class Static_File_Analyzer {
 
             xml_type_match = xml_type_regex.exec(xml_text);
           }
+
+          // Check for creation applications / generators
+          let xml_create_app_regex = /<!--\s+Generated\s+by\s+(.+)\s+-->/gmi;
+          let xml_create_app_match = xml_create_app_regex.exec(xml_text);
+
+          if (xml_create_app_match !== null) {
+            file_info.metadata.creation_application = xml_create_app_match[1];
+          }
+
         } else if (/embeddings\//gmi.test(archive_files[i].file_name)) {
           // embedded OLE objects
           var arc_file_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
