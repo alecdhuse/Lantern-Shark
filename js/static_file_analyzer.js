@@ -2208,8 +2208,8 @@ class Static_File_Analyzer {
       file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\(/gm, "(");
       file_info.metadata.author = file_info.metadata.author.replaceAll(/\\\)/gm, ")");
 
-      const creation_date_tag_start = meta_tag_text.indexOf("/CreationDate");
-      const creation_date_tag_end = meta_tag_text.indexOf("/", creation_date_tag_start+13);
+      let creation_date_tag_start = meta_tag_text.indexOf("/CreationDate");
+      let creation_date_tag_end = meta_tag_text.indexOf("/", creation_date_tag_start+13);
       if (creation_date_tag_end < 0) creation_date_tag_end = meta_tag_text.indexOf(">>", creation_date_tag_start);
       var creation_date_tag_text = meta_tag_text.substring(creation_date_tag_start+13, creation_date_tag_end);
       var date_parts = /\([Dd]\:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z?/gm.exec(creation_date_tag_text);
