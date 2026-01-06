@@ -67,7 +67,8 @@ Lantern Shark uses the following libraries:
 - Zip.js - Included in this repository but also available from https://gildas-lormeau.github.io/zip.js/core-api.html
 
 
-# Credits
-- File Icon by Komkrit Noenpoempisut - https://thenounproject.com/icon/file-1876047/ (Purchased for this project)
-- Lightning Icon by Oh Rian - https://thenounproject.com/icon/lightning-4945896/ (Purchased for this project)
-- Unlock Icon by Andy M - https://thenounproject.com/icon/unlock-4584617/ (Purchased for this project)
+# Artwork (Purchased for this project)
+- API Icon by Shocho - https://thenounproject.com/icon/api-7755036/
+- File Icon by Komkrit Noenpoempisut - https://thenounproject.com/icon/file-1876047/
+- Lightning Icon by Oh Rian - https://thenounproject.com/icon/lightning-4945896/
+- Unlock Icon by Andy M - https://thenounproject.com/icon/unlock-4584617/
