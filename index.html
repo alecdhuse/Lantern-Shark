@@ -6,7 +6,7 @@
       <link rel="stylesheet" href="css/lantern_shark.css">
     </head>
 
-    <body id="main_body">
+    <body>
       <div id="toolbar">
         <div id="toolbar_buttons_left">
           <div id="toolbar_open" class="toolbar_button">
@@ -87,6 +87,7 @@
             <div id="tab_summary" class="tab_item tab_selected">Summary</div>
             <div id="tab_text" class="tab_item">Text</div>
             <div id="tab_parsed" class="tab_item">Parsed</div>
+            <div id="tab_report" class="tab_item">Report</div>
           </div>
 
           <div id="tab_body">
@@ -193,6 +194,42 @@
 
           <div id="tab_parsed_file">
             <textarea rows="40" cols="80" id="parsed_file_text" class="monospace_text" autocomplete="off"></textarea>
+          </div>
+
+          <div id="tab_report_file">
+            <table>
+              <tbody>
+                <tr>
+                  <td>Comment</td>
+                  <td><input type="text" id="report_comment" name="report_comment" class="report_text_field"></td>
+                </tr>
+                <tr>
+                  <td>Threat Actor</td>
+                  <td><input type="text" id="report_threat_actor" name="report_threat_actor" class="report_text_field"></td>
+                </tr>
+                <tr>
+                  <td>Threat Tool</td>
+                  <td><input type="text" id="report_threat_tool" name="report_threat_tool" class="report_text_field"></td>
+                </tr>
+                <tr>
+                  <td>Reference URL</td>
+                  <td><input type="text" id="report_reference_url" name="report_reference_url" class="report_text_field"></td>
+                </tr>
+                <tr>
+                  <td>Malicious</td>
+                  <td>
+                    <input type="radio" id="report_is_malicious_true" name="report_is_malicious_true" value="true" checked>
+                    <label for="email">Yes</label>
+                    <input type="radio" id="report_is_malicious_false" name="report_is_malicious_true" value="false">
+                    <label for="email">No</label>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div id="report_button_div">
+              <button type="button" id="report_file_button">Report File</button>
+              <div id="report_file_result"></div>
+            </div>
           </div>
         </div>
 

@@ -117,6 +117,16 @@ body {
   margin-left: 8px;
 }
 
+#report_button_div {
+  display: grid;
+  grid-template-columns: 0.5fr 1fr;
+  margin-top: 18px;
+}
+
+.report_text_field {
+  width: 400px;
+}
+
 #right_col_div {
   flex: 2;
   max-width: 740px;
@@ -174,6 +184,14 @@ body {
 }
 
 #tab_parsed_file {
+  display: none;
+}
+
+#tab_report {
+  display: none;
+}
+
+#tab_report_file {
   display: none;
 }
 

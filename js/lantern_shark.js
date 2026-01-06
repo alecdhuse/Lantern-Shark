@@ -1,3 +1,5 @@
+var FILENAME = "";
+
 var analyzer_results = {};
 var file_byte_array = [];
 var file_password = null;
@@ -9,6 +11,7 @@ window.addEventListener('load', (event) => {
   document.getElementById('tab_summary').addEventListener('click', change_tab, false);
   document.getElementById('tab_text').addEventListener('click', change_tab, false);
   document.getElementById('tab_parsed').addEventListener('click', change_tab, false);
+  document.getElementById('tab_report').addEventListener('click', change_tab, false);
   document.getElementById('summary_file_encrypted_password_img').addEventListener('click', decrypt_file, false);
   document.getElementById('summary_file_encrypted_password_force_img').addEventListener('click', brute_force_zip, false);
   document.getElementById('summary_file_encrypted_password_txt').addEventListener('keydown', password_field_keydown, false);
@@ -18,10 +21,16 @@ window.addEventListener('load', (event) => {
   document.getElementById('toolbar_save').addEventListener('click', save_selected_file, false);
   document.getElementById('toolbar_integrations').addEventListener('click', toggle_show_integrations, false);
   document.getElementById('main_div').addEventListener('click', hide_api_integrations_div, false);
+  document.getElementById('report_file_button').addEventListener('click', report_file, false);
+
 
   // Load integration keys
-  document.getElementById('api_integration_field_scarlet_shark').value(localStorage.getItem('api_scarlet_shark'));
-  document.getElementById('api_integration_field_virustotal').value(localStorage.getItem('api_virustotal'));
+  if (localStorage.getItem('api_scarlet_shark').trim().length > 0) {
+    document.getElementById('tab_report').style.display = "inline-block";
+    document.getElementById('api_integration_field_scarlet_shark').value = (localStorage.getItem('api_scarlet_shark'));
+  }
+
+  document.getElementById('api_integration_field_virustotal').value = (localStorage.getItem('api_virustotal'));
 });
 
 /**
@@ -119,10 +128,12 @@ function change_tab(e) {
   $("#tab_body_summary").hide();
   $("#tab_body_text").hide();
   $("#tab_parsed_file").hide();
+  $("#tab_report_file").hide();
 
   $("#tab_summary").removeClass("tab_selected");
   $("#tab_text").removeClass("tab_selected");
   $("#tab_parsed").removeClass("tab_selected");
+  $("#tab_report").removeClass("tab_selected");
 
   if (tab_id == "tab_summary") {
     $("#tab_body_summary").show();
@@ -133,6 +144,9 @@ function change_tab(e) {
   } else if (tab_id == "tab_parsed" || tab_id == "additional_metadata_div") {
     $("#tab_parsed_file").show();
     $("#tab_parsed").addClass("tab_selected");
+  } else if (tab_id == "tab_report") {
+    $("#tab_report_file").show();
+    $("#tab_report").addClass("tab_selected");
   }
 }
 
@@ -415,6 +429,7 @@ function password_field_keydown(e) {
 function read_file(e) {
   var file = e.target.files[0];
   file_byte_array = [];
+  FILENAME = file.name;
 
   if (!file) {
     return;
@@ -500,6 +515,34 @@ async function display_sub_components(analyzer_results, parent_element_id) {
         }
       }
     }
+  }
+}
+
+/**
+ * Report the top level file to the Scarlet Shark platform.
+ *
+ * @return {void}
+ */
+function report_file() {
+  if (localStorage.getItem('api_scarlet_shark').trim().length > 0) {
+    const file_name = FILENAME;
+    const comment = document.getElementById('report_comment').value.trim();
+    const sha256 = file_analyzer_results.file_hashes.sha256;
+    const is_malicious = (document.getElementById('report_is_malicious_true').checked) ? "true" : "false";
+    const ref_url = document.getElementById('report_reference_url').value.trim();
+    const threat_actor_id = 0;
+    const threat_tool_id = 0;
+    const creation_application = file_analyzer_results.metadata.creation_application;
+    const creation_os = file_analyzer_results.metadata.creation_os;
+    const creation_date = file_analyzer_results.metadata.creation_date;
+    const author = file_analyzer_results.metadata.author;
+    const encrypted = file_analyzer_results.file_encrypted;
+    const encryption_type = file_analyzer_results.file_encryption_type;
+    const file_format = file_analyzer_results.file_format;
+    const file_format_ver = file_analyzer_results.file_format_ver;
+    const file_generic_type = file_analyzer_results.file_generic_type;
+  } else {
+    document.getElementById('report_file_result').innerHTML = "No Scarlet Shark API Given.";
   }
 }
 
@@ -679,6 +722,7 @@ function hide_api_integrations_div() {
   // Save API keys
   if (scarlet_shark_api_key.length > 0) {
     localStorage.setItem('api_scarlet_shark', scarlet_shark_api_key);
+    document.getElementById('tab_report').style.display = "inline-block";
   }
 
   if (virustotal_api_key.length > 0) {
