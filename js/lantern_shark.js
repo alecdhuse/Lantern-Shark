@@ -16,6 +16,12 @@ window.addEventListener('load', (event) => {
   document.getElementById('open_file').addEventListener('change', read_file, false);
   document.getElementById('toolbar_open').addEventListener('click', function(){document.getElementById('open_file').click()}, false);
   document.getElementById('toolbar_save').addEventListener('click', save_selected_file, false);
+  document.getElementById('toolbar_integrations').addEventListener('click', toggle_show_integrations, false);
+  document.getElementById('main_div').addEventListener('click', hide_api_integrations_div, false);
+
+  // Load integration keys
+  document.getElementById('api_integration_field_scarlet_shark').value(localStorage.getItem('api_scarlet_shark'));
+  document.getElementById('api_integration_field_virustotal').value(localStorage.getItem('api_virustotal'));
 });
 
 /**
@@ -641,4 +647,41 @@ async function select_top_level_file(e) {
   display_file_summary(analyzer_results, file_byte_array);
   $("#file_text").val(get_file_text(file_byte_array));
   $("#parsed_file_text").val(analyzer_results.parsed);
+}
+
+/**
+ * Toggles showing the API integrations window.
+ * @return {void}
+ */
+function toggle_show_integrations() {
+  const integrations_div = document.getElementById('integrations_div');
+
+  if (integrations_div.style.display === "none" || integrations_div.style.display == "") {
+    // If currently hidden, show it
+    integrations_div.style.display = "grid";
+  } else {
+    // Otherwise, hide it
+    hide_api_integrations_div();
+  }
+}
+
+/**
+ * Hides the API integrations window and saves the settings.
+ * @return {void}
+ */
+function hide_api_integrations_div() {
+  const integrations_div = document.getElementById('integrations_div');
+  integrations_div.style.display = "none";
+
+  let scarlet_shark_api_key = document.getElementById('api_integration_field_scarlet_shark').value.trim();
+  let virustotal_api_key = document.getElementById('api_integration_field_virustotal').value.trim();
+
+  // Save API keys
+  if (scarlet_shark_api_key.length > 0) {
+    localStorage.setItem('api_scarlet_shark', scarlet_shark_api_key);
+  }
+
+  if (virustotal_api_key.length > 0) {
+    localStorage.setItem('api_virustotal', virustotal_api_key);
+  }
 }

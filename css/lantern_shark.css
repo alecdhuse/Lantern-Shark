@@ -5,6 +5,22 @@ body {
   margin: 0px;
 }
 
+.api_integration_field {
+  width: 96%;
+}
+
+.api_integration_grid {
+  margin-top: 12px;
+}
+
+#api_integration_warning {
+  background-color: #fff4b9;
+  border-style: solid;
+  border-width: 1px;
+  margin-top: 22px;
+  padding: 4px;
+}
+
 .capitalize {
   text-transform: capitalize;
 }
@@ -50,6 +66,21 @@ body {
   font-weight: bold;
 }
 
+#integrations_div {
+  background-color: white;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 1px;
+  box-shadow: 5px 5px 5px #21212177;
+  color: #333;
+  display: none;
+  right: 0px;
+  top: 72px;
+  padding: 8px;
+  width: 320px;
+  position: fixed;
+}
+
 #left_col_div {
   border: 1px solid #ccc;
   flex: 1;
@@ -62,7 +93,6 @@ body {
 #main_div {
   display: flex;
   height: 100%;
-  width: 100%;
   padding: 8px;
 }
 
@@ -176,13 +206,13 @@ body {
 
 #toolbar {
   background-color: #eee;
+  display: grid;
   font-size: 11px;
+  grid-template-columns: 1fr 1fr;
   height: 64px;
   width: 100%;
-  padding-left: 8px;
   padding-top: 8px;
   text-align: center;
-  top: 0px;
 }
 
 .toolbar_button {
@@ -200,6 +230,15 @@ body {
   stroke-width: 0.025;
 }
 
+.toolbar_button_right {
+
+}
+
+#toolbar_integrations {
+  cursor: pointer;
+  float: right;
+}
+
 #toolbar_open {
 
 }
@@ -215,6 +254,15 @@ body {
 
 #toolbar_save_caption {
   color: #999;
+}
+
+#toolbar_buttons_left {
+  padding-left: 8px;
+
+}
+
+#toolbar_buttons_right {
+  padding-right: 16px;
 }
 
 .top_space {
