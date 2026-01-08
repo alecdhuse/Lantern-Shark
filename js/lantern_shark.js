@@ -524,23 +524,50 @@ async function display_sub_components(analyzer_results, parent_element_id) {
  * @return {void}
  */
 function report_file() {
-  if (localStorage.getItem('api_scarlet_shark').trim().length > 0) {
-    const file_name = FILENAME;
-    const comment = document.getElementById('report_comment').value.trim();
-    const sha256 = file_analyzer_results.file_hashes.sha256;
-    const is_malicious = (document.getElementById('report_is_malicious_true').checked) ? "true" : "false";
-    const ref_url = document.getElementById('report_reference_url').value.trim();
+  const api_scarlet_shark = localStorage.getItem('api_scarlet_shark').trim();
+
+  if (api_scarlet_shark.length > 0) {
     const threat_actor_id = 0;
     const threat_tool_id = 0;
-    const creation_application = file_analyzer_results.metadata.creation_application;
-    const creation_os = file_analyzer_results.metadata.creation_os;
-    const creation_date = file_analyzer_results.metadata.creation_date;
-    const author = file_analyzer_results.metadata.author;
-    const encrypted = file_analyzer_results.file_encrypted;
-    const encryption_type = file_analyzer_results.file_encryption_type;
-    const file_format = file_analyzer_results.file_format;
-    const file_format_ver = file_analyzer_results.file_format_ver;
-    const file_generic_type = file_analyzer_results.file_generic_type;
+
+    const data = {
+      'file_name':            FILENAME,
+      'comment':              document.getElementById('report_comment').value.trim(),
+      'sha256':               analyzer_results.file_hashes.sha256,
+      'is_malicious':         ((document.getElementById('report_is_malicious_true').checked) ? "true" : "false"),
+      'ref_url':              document.getElementById('report_reference_url').value.trim(),
+      'threat_actor_id':      threat_actor_id,
+      'threat_tool_id':       threat_tool_id,
+      'creation_application': analyzer_results.metadata.creation_application,
+      'creation_os':          analyzer_results.metadata.creation_os,
+      'creation_date':        analyzer_results.metadata.creation_date,
+      'author':               analyzer_results.metadata.author,
+      'encrypted':            analyzer_results.file_encrypted,
+      'encryption_type':      analyzer_results.file_encryption_type,
+      'file_format':          analyzer_results.file_format,
+      'file_format_ver':      analyzer_results.file_format_ver,
+      'file_generic_type':    analyzer_results.file_generic_type
+    };
+
+    const headers = { "Authorization": ("Bearer " + api_scarlet_shark) };
+
+    $.ajax({
+       type:         'POST',
+       url:          'https://api.scarletshark.com/v1.0/report_hash.php',
+       dataType:     'json',
+       headers:      headers,
+       data:         data,
+       success: function(response) {
+          if (response.result_code > 0) {
+            document.getElementById('report_file_result').innerHTML = "File Reported Successfully.";
+          } else {
+            document.getElementById('report_file_result').innerHTML = response.result.message;
+          }
+       },
+       error: function (req, status, error) {
+         document.getElementById('report_file_result').innerHTML = "Error Reporting File.";
+       }
+    });
   } else {
     document.getElementById('report_file_result').innerHTML = "No Scarlet Shark API Given.";
   }
