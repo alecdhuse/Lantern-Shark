@@ -2667,7 +2667,7 @@ class Static_File_Analyzer {
     let font_style = "";
 
     const byte_array = file_bytes instanceof Uint8Array ? file_bytes : new Uint8Array(file_bytes);
-    const file_data = new DataView(byte_array.buffer);
+    const file_data = new DataView(byte_array.buffer, byte_array.byteOffset, byte_array.byteLength);
     const tabe_count = file_data.getUint16(4);
 
     // Offset vals
@@ -2711,6 +2711,43 @@ class Static_File_Analyzer {
       } else {
         font_style = "Regular";
       }
+
+      // Get created and modified dates
+
+      // Helper to format Date to "yyyy-mm-dd hh:mm:ss"
+      const format_date = (date) => {
+          if (isNaN(date.getTime())) return "0000-00-00 00:00:00";
+
+          const pad = (num) => String(num).padStart(2, '0');
+
+          const yyyy = date.getFullYear();
+          const mm = pad(date.getMonth() + 1);
+          const dd = pad(date.getDate());
+          const hh = pad(date.getHours());
+          const min = pad(date.getMinutes());
+          const ss = pad(date.getSeconds());
+
+          return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+      };
+
+      // Define the difference between 1904 and 1970 in seconds as a BigInt
+      const epoch_diff = 2082844800n;
+
+      // Extract the BigInt64 value
+      const created_seconds_1904 = file_data.getBigInt64(head_table_offset + 18); // Offset 18 - creation date (8 bytes / BigInt64)
+      const modified_seconds_1904 = file_data.getBigInt64(head_table_offset + 26); // Offset 26 - modified date  (8 bytes / BigInt64)
+
+      // Subtract the epoch difference (MUST stay in BigInt)
+      const created_seconds_1970 = created_seconds_1904 - epoch_diff;
+      const modified_seconds_1970 = modified_seconds_1904 - epoch_diff;
+
+      // Convert to milliseconds for the Date constructor
+      file_info.metadata.creation_date = format_date(new Date(Number(created_seconds_1970) * 1000));
+      file_info.metadata.last_modified_date = format_date(new Date(Number(modified_seconds_1970) * 1000));
+
+      let a=0;
+
+
     }
 
     if (name_table_offset !== -1) {
