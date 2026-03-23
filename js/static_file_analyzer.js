@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2025 Alec Dhuse. All rights reserved.
+ Copyright (c) 2026 Alec Dhuse. All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -86,7 +86,7 @@ class Static_File_Analyzer {
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [0x78,0x9f,0x3e,0x22])) {
       file_info = this.analyze_tnef(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [0,1,0,0,0])) {
-      file_info = this.analyze_ttf(file_bytes); // TTF True Type Font
+      file_info = Static_File_Analyzer.analyze_ttf(file_bytes); // TTF True Type Font
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,5), [60,63,120,109,108]) || Static_File_Analyzer.array_equals(file_bytes.slice(0,9), [0x3c,0x00,0x3F,0x00,0x78,0x00,0x6d,0x00,0x6c])) {
       file_info = this.analyze_xml(file_bytes);
     } else if (Static_File_Analyzer.array_equals(file_bytes.slice(0,4), [80,75,3,4])) {
@@ -2652,8 +2652,8 @@ class Static_File_Analyzer {
    * @param {Uint8Array}  file_bytes   Array with int values 0-255 representing the bytes of the file to be analyzed.
    * @return {Object}     file_info    A Javascript object representing the extracted information from this file. See get_default_file_json() for the format.
    */
-  analyze_ttf(file_bytes) {
-    var file_info = Static_File_Analyzer.get_default_file_json();
+  static analyze_ttf(file_bytes) {
+    let file_info = Static_File_Analyzer.get_default_file_json();
 
     file_info.file_format = "ttf";
     file_info.file_generic_type = "Font";
@@ -2661,6 +2661,111 @@ class Static_File_Analyzer {
     // This format does not support encryption
     file_info.file_encrypted = "false";
     file_info.file_encryption_type = "none";
+
+    let font_name = "Unknown Font";
+    let font_family = "Unknown";
+    let font_style = "";
+
+    const byte_array = file_bytes instanceof Uint8Array ? file_bytes : new Uint8Array(file_bytes);
+    const file_data = new DataView(byte_array.buffer);
+    const tabe_count = file_data.getUint16(4);
+
+    // Offset vals
+    let name_table_offset = -1;
+    let head_table_offset = -1;
+
+    // Iterate through Table Directory to find the 'name' table
+    for (let i = 0; i < tabe_count; i++) {
+        const offset = 12 + i * 16;
+        const tag = String.fromCharCode(
+            file_data.getUint8(offset),
+            file_data.getUint8(offset + 1),
+            file_data.getUint8(offset + 2),
+            file_data.getUint8(offset + 3)
+        );
+
+        if (tag === 'name') {
+          name_table_offset = file_data.getUint32(offset + 8);
+        } else if (tag === 'head') {
+          head_table_offset = file_data.getUint32(offset + 8);
+        }
+    }
+
+    if (head_table_offset !== -1) {
+      /**
+       * The 'head' table contains 'macStyle' at offset 44 (Uint16)
+       * Bit 0: Bold
+       * Bit 1: Italic
+       */
+      const mac_style = file_data.getUint16(head_table_offset + 44);
+
+      const is_bold = (mac_style & 0x01) !== 0;
+      const is_italic = (mac_style & 0x02) !== 0;
+
+      if (is_bold && is_italic) {
+        font_style = "Bold Italic";
+      } else if (is_bold) {
+        font_style = "Bold";
+      } else if (is_italic) {
+        font_style = "Italic";
+      } else {
+        font_style = "Regular";
+      }
+    }
+
+    if (name_table_offset !== -1) {
+      // Name table header found, now parse it.
+      const count = file_data.getUint16(name_table_offset + 2);
+      const string_offset = file_data.getUint16(name_table_offset + 4);
+
+      // Iterate through Name Records
+      for (let i = 0; i < count; i++) {
+          const record_offset = name_table_offset + 6 + i * 12;
+          const platform_id = file_data.getUint16(record_offset);
+          const name_id = file_data.getUint16(record_offset + 6);
+          const length = file_data.getUint16(record_offset + 8);
+          const offset = file_data.getUint16(record_offset + 10);
+          const start = name_table_offset + string_offset + offset;
+          const bytes = new Uint8Array(byte_array.buffer, byte_array.byteOffset + start, length);
+
+          if (name_id === 0) {
+            // Copyright
+          } else if (name_id === 4 || name_id === 1) {
+            // Name ID 4 is "Full font name", Name ID 1 is "Font Family"
+            let font_value = "";
+
+            // Handle Encoding: Platform 3 (Windows) uses UTF-16BE
+            if (platform_id === 3) {
+              font_value = new TextDecoder('utf-16be').decode(bytes).replace(/\0/g, '').trim();
+            } else {
+              font_value = new TextDecoder('utf-8').decode(bytes).replace(/\0/g, '').trim();
+            }
+
+            if (name_id === 4) {
+              font_name = font_value;
+            } else if (name_id === 1) {
+              font_family = font_value;
+            }
+          } else if (name_id === 9) {
+            // The designer(s) of the typeface.
+            // Decode based on Platform (3 = Windows/UTF-16BE, 1 = Mac/UTF-8)
+            const decoder = (platform_id === 3) ? new TextDecoder('utf-16be') : new TextDecoder('utf-8');
+            file_info.metadata.author = decoder.decode(bytes).replace(/\0/g, '').trim();
+          } else if (name_id === 10) {
+            // TTF decoding
+            const decoder = (platform_id === 3) ? new TextDecoder('utf-16be') : new TextDecoder('utf-8');
+            const description = decoder.decode(bytes);
+            file_info.metadata.description = description.replace(/\0/g, '').trim();
+          }
+      }
+    }
+
+    if (font_name == "Unknown Font" && font_family != "Unknown") {
+      font_name = font_family;
+      if (font_style != "") font_name = font_name + " " + font_style;
+    }
+
+    file_info.metadata.title = font_name;
 
     return file_info;
   }
@@ -9193,7 +9298,7 @@ class CFB_Parser {
     let file_type = "cfb";
     let sector_names = CFB_Parser.parse_directory_sector_names(file_bytes);
 
-    if (sector_names[1].toLowerCase() == "__nameid_version1.0") {
+    if (sector_names[1].toLowerCase() == "__name_id_version1.0") {
       file_type = "msg";
     } else if (sector_names[1].toLowerCase() == "__properties_version1.0") {
       file_type = "msg";
@@ -11089,10 +11194,18 @@ class PDF_Parser {
 
             if (file_type.is_valid) {
               let obj_identifier = "Object_";
-
-              if (file_type.type == "ttf") obj_identifier = "Font_";
-
               let fc_filename =  obj_identifier + object_array[i].object_number + "." + file_type.type;
+
+              if (file_type.type == "ttf") {
+                let file_info = Static_File_Analyzer.analyze_ttf(deflate_bytes);
+                obj_identifier = file_info.metadata.title;
+
+                if (file_info.metadata.title.startsWith("Unknown Font")) {
+                  obj_identifier += "_" + object_array[i].object_number;
+                }
+
+                fc_filename =  obj_identifier + ".ttf";
+              }
 
               file_components.push({
                 'name': fc_filename,
