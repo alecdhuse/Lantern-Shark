@@ -4468,8 +4468,8 @@ class Static_File_Analyzer {
 
         if (/docProps\/core\.xml/gmi.test(archive_files[i].file_name)) {
           // Meta data file
-          var meta_data_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
-          var meta_data_xml = Static_File_Analyzer.get_string_from_array(meta_data_xml_bytes);
+          const meta_data_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
+          const meta_data_xml = Static_File_Analyzer.get_string_from_array(meta_data_xml_bytes);
 
           file_info.metadata.author = this.get_xml_tag_content(meta_data_xml, "dc:creator", 0);
           if (file_info.metadata.author == "") file_info.metadata.author = this.get_xml_tag_content(meta_data_xml, "cp:lastModifiedBy", 0);
@@ -4483,6 +4483,23 @@ class Static_File_Analyzer {
 
           file_info.metadata.creation_date = this.get_xml_tag_content(meta_data_xml, "dcterms:created", 0);
           file_info.metadata.last_modified_date = this.get_xml_tag_content(meta_data_xml, "dcterms:modified", 0);
+        }
+
+        if (/docMetadata\/LabelInfo\.xml/gmi.test(archive_files[i].file_name)) {
+          // Sensitivity and labeling
+          const data_xml_bytes = await Static_File_Analyzer.get_zipped_file_bytes(file_bytes, i);
+          const data_xml = Static_File_Analyzer.get_string_from_array(data_xml_bytes);
+          const label_regex = /(clbl\:label\s.+\/>)/gmi;
+          const result = label_regex.exec(data_xml);
+
+          if (result !== null) {
+            const label_id_regex = /id\s*\=\s*[\"\'](?:\{([^\"\']+)\}|[^\"\'])[\"\']/gmi;
+            const result2 = label_id_regex.exec(data_xml);
+
+            if (result2 !== null) {
+              file_info.metadata.label = result2[1];
+            }
+          }
         }
       }
 
@@ -6293,6 +6310,7 @@ class Static_File_Analyzer {
         last_modified_date: "0000-00-00 00:00:00",
         last_saved_location: "unknown",
         title: "unknown",
+        label: "",
         additional_metadata: {type: "none", data: {}}
       },
       scripts: {
