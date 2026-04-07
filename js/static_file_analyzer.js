@@ -2154,12 +2154,24 @@ class Static_File_Analyzer {
     }
 
     // Meta data tags
-    let tag_matches = /\<\<\s*\/(?:[Cc]reator|[Cc]reationDate|[Pp]roducer|[Mm]od[Dd]ate|Title)/gm.exec(file_text);
+    let tag_matches = /\<\<\s*\/(?:[Aa]uthor|[Cc]reator|[Cc]reationDate|[Pp]roducer|[Mm]od[Dd]ate|[Tt]itle)/gm.exec(file_text);
 
     if (tag_matches != null) {
       var meta_tag_start = tag_matches.index;
       var meta_tag_end = file_text.indexOf(">>", meta_tag_start);
       var meta_tag_text = file_text.substring(meta_tag_start, meta_tag_end+2);
+
+      // Author tag
+      let author_tag_text = "";
+      let author_regex = /\<*\s*\/[Aa]uthor\s*((?:\([^\)]+\))|[^\/\n\r]+)/gm;
+      let author_matches = author_regex.exec(meta_tag_text);
+      if (author_matches != null) {
+        author_tag_text = author_matches[1].trim();
+
+        if (file_info.metadata.author == "unknown") {
+          file_info.metadata.author = PDF_Parser.standardize_metadata_text(author_tag_text);
+        }
+      }
 
       let producer_tag_text = "";
       let producer_regex = /\<*\s*\/Producer\s*((?:\([^\)]+\))|[^\/\n\r]+)/gmi;
@@ -2170,26 +2182,26 @@ class Static_File_Analyzer {
         if (producer_tag_text.endsWith(")")) producer_tag_text = producer_tag_text.slice(0, -1);
 
         if (file_info.metadata.creation_application == "unknown") {
-          file_info.metadata.creation_application = producer_tag_text;
+          file_info.metadata.creation_application = PDF_Parser.standardize_metadata_text(producer_tag_text);
         }
       }
 
       var creation_os_match = producer_tag_text.match(/(\w+\s+\w+\s+\d+\.\d+\.\d+\s+(?:Build\s[0-9-a-zA-Z]+)?)/gm);
       if (creation_os_match != null) {
         file_info.metadata.creation_os = creation_os_match[0];
-        file_info.metadata.creation_application = producer_tag_text.split("/")[0].trim();
+        file_info.metadata.creation_application = PDF_Parser.standardize_metadata_text(producer_tag_text.split("/")[0].trim());
       }
 
       var creator_tag_matches = /\/[Cc]reator(.+)\n?\/(?:[Pp]roducer|[Cc]reation[Dd]ate|[Mm]odDate|\>\>)/gm.exec(meta_tag_text);
       if (creator_tag_matches != null) {
         if (file_info.metadata.author == "unknown") {
-          file_info.metadata.author = creator_tag_matches[1].trim();
+          file_info.metadata.author = PDF_Parser.standardize_metadata_text(creator_tag_matches[1].trim());
         }
 
         // Check to see if any other tags were included
          var extra_tag_matches = /\/(?:[Pp]roducer|[Cc]reation[Dd]ate|[Mm]od[Dd]ate)/gm.exec(file_info.metadata.author);
          if (extra_tag_matches != null) {
-             file_info.metadata.author = file_info.metadata.author.substring(0,extra_tag_matches.index);
+             file_info.metadata.author = PDF_Parser.standardize_metadata_text(file_info.metadata.author.substring(0,extra_tag_matches.index));
          }
       } else {
         let producer_tag_text = "";
@@ -2200,7 +2212,7 @@ class Static_File_Analyzer {
           producer_tag_text = producer_matches[1].trim();
 
           if (file_info.metadata.author == "unknown") {
-            file_info.metadata.author = producer_tag_text;
+            file_info.metadata.author = PDF_Parser.standardize_metadata_text(producer_tag_text);
           }
         }
       }
@@ -11874,6 +11886,27 @@ class PDF_Parser {
     } catch(err) {
       return {};
     }
+  }
+
+  /**
+   * Converts metadata fields to standardized, human readable text.
+   *
+   * @param {String}    metadata_text - The text of the metadata entry.
+   * @return {Object}   The standardized, human readable text
+   */
+  static standardize_metadata_text(metadata_text) {
+    let return_text = metadata_text;
+    let hex_regex = /\<([a-fA-F0-9]+)\>/gm;
+    let hex_matches = hex_regex.exec(metadata_text);
+
+    if (hex_matches !== null) {
+      if (hex_matches.length > 1) {
+        const bytes = new Uint8Array(hex_matches[1].match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+        return_text = new TextDecoder().decode(bytes);
+      }
+    }
+
+    return return_text;
   }
 
 }
