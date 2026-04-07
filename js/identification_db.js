@@ -32,6 +32,14 @@ var threat_identification = {
       "probability": 90
     }
   ],
+  'tiff': [
+    {
+      'file_format': "tiff",
+      'identification': "M365 OAuth Authentication Workflow Phishing",
+      'sha256': "231fa5a91473aa58616ea38c9c2f8e0d8c99c55eb1a9fb20ae8074a2a9ae1894",
+      "probability": 100
+    }
+  ],
   'xls': [
     {
       'file_format': "xls",
