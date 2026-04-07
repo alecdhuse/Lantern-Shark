@@ -25,7 +25,7 @@ window.addEventListener('load', (event) => {
 
 
   // Load integration keys
-  if (localStorage.getItem('api_scarlet_shark').trim().length > 0) {
+  if (localStorage.getItem('api_scarlet_shark') !== null) {
     document.getElementById('tab_report').style.display = "inline-block";
     document.getElementById('api_integration_field_scarlet_shark').value = (localStorage.getItem('api_scarlet_shark'));
   }
@@ -275,6 +275,16 @@ function display_file_summary(file_analyzer_results, file_bytes=[]) {
     $("#summary_detected_script").html("");
   }
 
+  // Intel Lookups
+  if (localStorage.getItem('api_scarlet_shark') !== null) {
+    // Scarlet Shark Lookup
+  }
+
+  if (localStorage.getItem('api_virustotal') !== null) {
+    // VirusTotal lookup - Currently throwing a CORS error.
+    //search_virustotal_hash(file_analyzer_results.file_hashes.sha256);
+  }
+
   // Preview
   const canvas = document.getElementById('file_preview');
   const ctx = canvas.getContext('2d');
@@ -404,6 +414,28 @@ function get_file_text(byte_array) {
     file_text = Static_File_Analyzer.get_ascii(byte_array);
 
   return file_text;
+}
+
+/**
+ * Hides the API integrations window and saves the settings.
+ * @return {void}
+ */
+function hide_api_integrations_div() {
+  const integrations_div = document.getElementById('integrations_div');
+  integrations_div.style.display = "none";
+
+  let scarlet_shark_api_key = document.getElementById('api_integration_field_scarlet_shark').value.trim();
+  let virustotal_api_key = document.getElementById('api_integration_field_virustotal').value.trim();
+
+  // Save API keys
+  if (scarlet_shark_api_key.length > 0) {
+    localStorage.setItem('api_scarlet_shark', scarlet_shark_api_key);
+    document.getElementById('tab_report').style.display = "inline-block";
+  }
+
+  if (virustotal_api_key.length > 0) {
+    localStorage.setItem('api_virustotal', virustotal_api_key);
+  }
 }
 
 /**
@@ -618,6 +650,50 @@ async function save_selected_file(e) {
 }
 
 /**
+ * Searches VirusTotal for a file's hash.
+ *
+ * @param  {String} hash A file's hash.
+ * @return {void}
+ */
+async function search_virustotal_hash(hash) {
+  const vt_api_key = await localStorage.getItem('api_virustotal').trim();
+  const url = `https://www.virustotal.com/api/v3/files/${hash}`;
+
+  const options = {
+    method: 'GET',
+    headers: {
+      'accept': 'application/json',
+      'x-apikey': vt_api_key
+    }
+  };
+
+  try {
+      const response = await fetch(url, options);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log('Hash not found in VirusTotal database.');
+        } else {
+          throw new Error(`Error: ${response.status} ${response.statusText}`);
+        }
+        return;
+      }
+
+      const data = await response.json();
+
+      // Extracting key information
+      const stats = data.data.attributes.last_analysis_stats;
+      console.log(`Report for Hash: ${hash}`);
+      console.log(`Malicious: ${stats.malicious}`);
+      console.log(`Suspicious: ${stats.suspicious}`);
+      console.log(`Undetected: ${stats.undetected}`);
+
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    }
+}
+
+/**
  * Event triggered when the user clicks a file component from the file tree.
  * @async
  * @param {Event}   e The event triggered from the user click.
@@ -732,27 +808,5 @@ function toggle_show_integrations() {
   } else {
     // Otherwise, hide it
     hide_api_integrations_div();
-  }
-}
-
-/**
- * Hides the API integrations window and saves the settings.
- * @return {void}
- */
-function hide_api_integrations_div() {
-  const integrations_div = document.getElementById('integrations_div');
-  integrations_div.style.display = "none";
-
-  let scarlet_shark_api_key = document.getElementById('api_integration_field_scarlet_shark').value.trim();
-  let virustotal_api_key = document.getElementById('api_integration_field_virustotal').value.trim();
-
-  // Save API keys
-  if (scarlet_shark_api_key.length > 0) {
-    localStorage.setItem('api_scarlet_shark', scarlet_shark_api_key);
-    document.getElementById('tab_report').style.display = "inline-block";
-  }
-
-  if (virustotal_api_key.length > 0) {
-    localStorage.setItem('api_virustotal', virustotal_api_key);
   }
 }
