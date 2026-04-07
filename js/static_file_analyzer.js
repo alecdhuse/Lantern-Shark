@@ -11896,7 +11896,7 @@ class PDF_Parser {
    */
   static standardize_metadata_text(metadata_text) {
     let return_text = metadata_text;
-    let hex_regex = /\<([a-fA-F0-9]+)\>/gm;
+    let hex_regex = /\<FEFF?([a-fA-F0-9]+)\>/gm;
     let hex_matches = hex_regex.exec(metadata_text);
 
     if (hex_matches !== null) {
