@@ -7132,15 +7132,15 @@ class Static_File_Analyzer {
 
             for (const [key, value] of Object.entries(file_format_threats[i])) {
               if (key == "sha256") {
-                if (file_info.file_hashes.sha256 == value) {
+                if (filled_file_info.file_hashes.sha256 == value) {
                   if (file_format_threats[i].probability> 80) {
                     finding_str = "MALICIOUS - " + file_format_threats[i].identification;
                   } else {
                     finding_str = "SUSPICIOUS - " + file_format_threats[i].identification;
                   }
 
-                  if (!file_info.analytic_findings.includes(finding_str)) {
-                    file_info.analytic_findings.push(finding_str);
+                  if (!filled_file_info.analytic_findings.includes(finding_str)) {
+                    filled_file_info.analytic_findings.push(finding_str);
                   }
                 } else {
                   is_match = false;
@@ -7167,8 +7167,8 @@ class Static_File_Analyzer {
                 finding_str = "SUSPICIOUS - " + file_format_threats[i].identification;
               }
 
-              if (!file_info.analytic_findings.includes(finding_str)) {
-                file_info.analytic_findings.push(finding_str);
+              if (!filled_file_info.analytic_findings.includes(finding_str)) {
+                filled_file_info.analytic_findings.push(finding_str);
               }
               break;
             }
