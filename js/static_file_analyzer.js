@@ -2057,11 +2057,24 @@ class Static_File_Analyzer {
 
         if (script_text.slice(-1) == ")") script_text = script_text.slice(0,-1);
 
-        this.add_extracted_script("JavaScript", script_text, file_info);
-
         if (script_matches[1].toLowerCase() == "js" || script_matches[1].toLowerCase() == "javascript") {
           file_info.scripts.script_type = "JavaScript";
+
+          // Check for JavaScript obfuscation
+          const obfuscation_regex = /(?:[\{\}\[\]\+\!\\\)\(]+)/;
+          if (obfuscation_regex.test(script_text)) {
+            file_info.analytic_findings.push("MALICIOUS - JavaScript Obfuscation Found")
+
+            let deobf_script_text = script_text;
+            deobf_script_text = Decode_Tools.deobfuscate_js(deobf_script_text);
+
+            if (script_text != deobf_script_text) {
+              script_text = script_text + "\n\n\/\/🦈 Deobfuscated Code\n" + deobf_script_text;
+            }
+          }
         }
+
+        this.add_extracted_script("JavaScript", script_text, file_info);
       }
 
       script_matches = script_regex.exec(file_text);
@@ -9487,6 +9500,88 @@ class CFB_Parser {
 
     return guid;
   }
+}
+
+class Decode_Tools {
+  /**
+   * Deobfuscates JSFuck strings by iteratively evaluating
+   * small valid fragments of the code.
+   * * @param {string} obfuscated_text - The raw JSFuck or obfuscated script.
+   * @returns {string} The simplified, readable code.
+   */
+   static deobfuscate_js(deobf_script_text) {
+
+     let previous_str;
+
+     do {
+       previous_str = deobf_script_text;
+
+       // Numbers
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\+\!\+\[\]\+\[\]\\?\)/g, "\"1\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\[\]\\?\)\\?\)\\?\)/g, "\"4\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\[\]\\?\)/g, "\"6\"");
+
+       //
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\]\+\\?\(\!\!\[\]\+\[\]\\?\)\[\+\[\]\]\+\\?\(\[\]\[\[\]\]\+\[\]\\?\)\[\+\!\+\[\]\]/g, "\"Text\"");
+
+       // NaN
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\+\{\}\+\[\]\\?\)\[\[\+\[\]\]/g, "\"N\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\+\{\}\+\[\]\\?\)\[\+\!\+\[\]\]/g, "\"a\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\+\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\]/g, "\"N\"");
+
+       // true
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\[\+\[\]\]/g, "\"t\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\+\!\+\[\]\]/g, "\"r\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\]/g, "\"u\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"e\"");
+
+       // true
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\[\+\[\]\]/g, "\"t\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\+\!\+\[\]\]/g, "\"r\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\]/g, "\"u\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\!\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"e\"");
+
+       deobf_script_text = deobf_script_text.replaceAll(/\\\(\!\!\[\]\+\[\]\\\)\[\+\[\]\]\+\\\(\[\]\[\[\]\]/g, "\"t\"");
+
+       // false
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\[\]\+\[\]\\?\)\[\[\+\[\]\]/g, "\"f\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\[\]\+\[\]\\?\)\[\+\!\+\[\]\]/g, "\"a\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\]/g, "\"l\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"s\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"e\"");
+
+       // Infinity
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\[\+\[\]\]/g, "\"I\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\+\!\+\[\]\]/g, "\"n\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\]/g, "\"f\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"i\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"n\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"i\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"t\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\!\+\[\]\/\+\[\]\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"y\"");
+
+       // [object Object]
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\[\+\[\]\]/g, "\"[\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\+\!\+\[\]\]/g, "\"o\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\]/g, "\"b\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"j\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"e\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"c\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"t\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\" \"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"O\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]/g, "\"b\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\[\+\!\+\[\]\]\+\[\+\[\]\]\]/g, "\"j\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\[\+\!\+\[\]\]\+\[\+\!\+\[\]\]\]/g, "\"e\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\[\+\!\+\[\]\]\+\[\!\+\[\]\+\!\+\[\]\]\]/g, "\"c\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\[\+\!\+\[\]\]\+\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]\]/g, "\"t\"");
+       deobf_script_text = deobf_script_text.replaceAll(/\\?\(\{\}\+\[\]\\?\)\[\[\+\!\+\[\]\]\+\[\!\+\[\]\+\!\+\[\]\+\!\+\[\]\+\!\+\[\]\]\]/g, "\"]\"");
+     } while (deobf_script_text !== previous_str);
+
+     deobf_script_text = deobf_script_text.replaceAll(/(?:[\"\']\+?[\"\']|[\"\']\\[\"\'])/g, "");
+
+     return deobf_script_text;
+   }
 }
 
 class Email_Tools {
