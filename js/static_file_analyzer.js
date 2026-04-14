@@ -2066,7 +2066,7 @@ class Static_File_Analyzer {
             file_info.analytic_findings.push("MALICIOUS - JavaScript Obfuscation Found")
 
             let deobf_script_text = script_text;
-            deobf_script_text = Decode_Tools.deobfuscate_js(deobf_script_text);
+            deobf_script_text = Decode_Tools.deobfuscate_js(file_info, deobf_script_text);
 
             if (script_text != deobf_script_text) {
               script_text = script_text + "\n\n\/\/🦈 Deobfuscated Code\n" + deobf_script_text;
@@ -2075,6 +2075,16 @@ class Static_File_Analyzer {
         }
 
         this.add_extracted_script("JavaScript", script_text, file_info);
+      }
+
+      // Check for references to field data
+      const fd_regex = /getField[\\\s]*\([\"\'\`]([^\"\'\`]+)[\"\'\`][\\\s]*\)\s*(?:\[\s*[\"\'\`][^\"\'\`]+[\"\'\`]\s*\][\\\s]*\))?[\,\s]*(?:[\"\'\`]?([^\"\'\`]+)?[\"\'\`])?/gi;
+      const fd_matches = script_text.matchAll(fd_regex);
+
+      for (const match of fd_matches) {
+        break;
+        // TODO: find reference and analyze it.
+        //console.log(`Found ID: ${match[1]} at index ${match.index}`);
       }
 
       script_matches = script_regex.exec(file_text);
@@ -9509,8 +9519,9 @@ class Decode_Tools {
    * * @param {string} obfuscated_text - The raw JSFuck or obfuscated script.
    * @returns {string} The simplified, readable code.
    */
-   static deobfuscate_js(deobf_script_text) {
+   static deobfuscate_js(file_info, deobf_script_text) {
 
+     const original_script = deobf_script_text;
      let previous_str;
 
      do {
@@ -9579,6 +9590,10 @@ class Decode_Tools {
      } while (deobf_script_text !== previous_str);
 
      deobf_script_text = deobf_script_text.replaceAll(/(?:[\"\']\+?[\"\']|[\"\']\\[\"\'])/g, "");
+
+     if (original_script !== deobf_script_text) {
+       file_info = Static_File_Analyzer.add_ttp("T1027", "Defense Evasion", "JavaScript code employs obfuscation to make its code more difficult to analyze.", file_info);
+     }
 
      return deobf_script_text;
    }
@@ -11670,6 +11685,14 @@ class PDF_Parser {
       objects_matches = objects_regex.exec(file_text);
     }
 
+    // Last checks for meta data
+    if (file_info.metadata.creation_application == "unknown") {
+      const ca_matches = /\/\s*[Cc]reator\s*\(([^\)]+)\)/g.exec(file_text);
+
+      if (ca_matches) {
+        file_info.metadata.creation_application = ca_matches[1];
+      }
+    }
 
     // Remove any null characters from meta data
     file_info.metadata.creation_application = file_info.metadata.creation_application.replace(/\0/g, '');
