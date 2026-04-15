@@ -33,6 +33,7 @@ See the table below for a list of supported file types and types of data extract
 | RTF            | X            | X               |                 | X        |                               |
 | SVG            | X            |                 |                 | X        | X                             |
 | TIFF           | X            |                 |                 |          |                               |
+| TTF            | X            | Partial         |                 | Partial  |                               |
 | XLS            | X            | X               |                 | X        | X                             |
 | XLSB           | X            | X               | X               | X        | X                             |
 | XLSX           | X            | X               | X               | X        | X                             |
